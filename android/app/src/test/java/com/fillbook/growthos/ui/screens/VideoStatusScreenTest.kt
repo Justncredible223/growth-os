@@ -297,19 +297,18 @@ class VideoStatusScreenCreateVideoStructureTest {
     }
 
     @Test
-    fun `Continue is disabled until a topic is typed, an opportunity is selected, or a motion concept is picked`() {
+    fun `Continue is disabled until a motion concept is picked, and there is no custom-topic or Radar path`() {
         val source = screenSource()
-        val dialogIndex = source.indexOf("Create Fillbook Video")
-        check(dialogIndex >= 0) { "Expected a 'Create Fillbook Video' entry dialog title." }
-        val canContinueIndex = source.indexOf("val canContinue =")
-        check(canContinueIndex >= 0) { "Expected a canContinue gate controlling the Continue button." }
-        val window = source.substring(canContinueIndex, minOf(canContinueIndex + 300, source.length))
-        check(
-            window.contains("selectedOpportunityId != null") &&
-                window.contains("videoTopicInput.trim().length >= 3") &&
-                window.contains("selectedMotionConceptId != null"),
-        ) {
-            "Expected canContinue to require a selected opportunity, a real (non-trivial) typed topic, or a picked motion concept."
+        check(source.contains("Create Fillbook Video")) { "Expected a 'Create Fillbook Video' entry dialog title." }
+        val confirmIndex = source.indexOf("TextButton(\n                    onClick = { showCreateVideoDialog = false; showVideoConfirmDialog = true },")
+        check(confirmIndex >= 0) { "Expected the entry dialog's Continue button." }
+        val window = source.substring(confirmIndex, minOf(confirmIndex + 200, source.length))
+        check(window.contains("enabled = selectedMotionConceptId != null")) {
+            "Expected Continue to require a picked motion concept."
+        }
+        // Owner decision 2026-10-03: Motion render is the only way to make a video; the backend refuses the other two.
+        for (gone in listOf("videoTopicInput", "useExistingOpportunity", "selectedOpportunityId", "Custom topic", "Existing Radar opportunity", "getSuggestedTopics")) {
+            check(!source.contains(gone)) { "Expected the removed custom-topic/Radar path to be gone, but found '$gone' in VideoStatusScreen." }
         }
     }
 

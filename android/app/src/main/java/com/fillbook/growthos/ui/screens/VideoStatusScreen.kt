@@ -11,7 +11,6 @@ import android.os.Environment
 import androidx.core.content.FileProvider
 import java.io.File
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,7 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.fillbook.growthos.data.GrowthOsRepository
-import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.data.VideoRenderMetadata
 import com.fillbook.growthos.data.VideoRenderStatus
 import com.fillbook.growthos.data.authErrorMessage
@@ -129,31 +127,13 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // handles.
     var downloadingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    // "Create Fillbook Video" (2026-09-08): a fresh, real video_script
-    // request for either a custom topic or an existing Radar opportunity.
-    // Two-step flow -- the entry dialog collects the topic/opportunity
-    // choice, the confirmation dialog is the one place the required
-    // real-draft/LLM-budget/no-auto-post/approval-starts-render disclosure
-    // lives, separately from the entry step so it can never be skipped by
-    // habit (e.g. auto-filling remembered field values).
+    // "Create Fillbook Video": a fresh video_script request for one of the 30 daily motion concepts. Motion render is the only way
+    // to make a video now (owner decision, 2026-10-03), so the custom-topic and Radar-opportunity choices are gone. Two-step
+    // flow -- the entry dialog picks the concept, the confirmation dialog is the one place the required real-draft/LLM-budget/
+    // no-auto-post/approval-starts-render disclosure lives, separately from the entry step so it can never be skipped by habit.
     var showCreateVideoDialog by remember { mutableStateOf(false) }
     var showVideoConfirmDialog by remember { mutableStateOf(false) }
-    var videoTopicInput by rememberSaveable { mutableStateOf("") }
-    // false = custom topic, true = pick an existing opportunity. A plain
-    // Boolean survives rotation fine via rememberSaveable.
-    var useExistingOpportunity by rememberSaveable { mutableStateOf(false) }
-    // Only the id is saved/tracked here, not the Opportunity object itself
-    // -- same reasoning as PartnershipsScreen's pilotDialogProspectId: a
-    // network/domain object is never a candidate for persisted UI state.
-    var selectedOpportunityId by rememberSaveable { mutableStateOf<String?>(null) }
-    var eligibleOpportunities by remember { mutableStateOf<List<Opportunity>>(emptyList()) }
-    var loadingOpportunities by remember { mutableStateOf(false) }
-    // Third mode alongside custom-topic/existing-opportunity: a small, fixed
-    // list of concepts that have REAL verified product-motion footage (see
-    // backend's motionCatalog.ts) instead of stock footage/screenshots.
-    // Mutually exclusive with the other two -- selecting this clears
-    // useExistingOpportunity, and vice versa (see the RadioButtons below).
-    var useMotionConcept by rememberSaveable { mutableStateOf(false) }
+    // The concepts offered are the backend's fixed daily list (motionCatalog.ts / dailyConcepts.ts), in day order.
     var selectedMotionConceptId by rememberSaveable { mutableStateOf<String?>(null) }
     var motionConcepts by remember { mutableStateOf<List<com.fillbook.growthos.data.MotionConcept>>(emptyList()) }
     var loadingMotionConcepts by remember { mutableStateOf(false) }
@@ -162,10 +142,6 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // button is disabled the instant the first tap sets this true.
     var creatingVideoScript by remember { mutableStateOf(false) }
     var createVideoResultMessage by remember { mutableStateOf<String?>(null) }
-    // Keyed on dialog visibility (not a one-time remember) so reopening
-    // "Create Fillbook Video" reshuffles a fresh 5 from the full pool
-    // instead of showing the same static set for the whole session.
-    val suggestedVideoTopics = remember(showCreateVideoDialog) { getSuggestedTopics() }
 
     // Today's posting plan (Posting.kt). Loaded alongside the renders but separately: if it fails (e.g. migration 0043
     // not applied yet) the card just doesn't show, and the render list still works.
@@ -380,21 +356,6 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
 
-    fun loadEligibleOpportunities() {
-        scope.launch {
-            loadingOpportunities = true
-            eligibleOpportunities = try {
-                // Engagement (reply-worthy) opportunities are never a fit for
-                // a shootable video production package -- same real
-                // discriminator RadarScreen already uses, not a new concept.
-                repo.getOpportunities().filter { !it.isEngagementOpportunity }
-            } catch (e: Exception) {
-                emptyList()
-            }
-            loadingOpportunities = false
-        }
-    }
-
     fun loadMotionConcepts() {
         scope.launch {
             loadingMotionConcepts = true
@@ -412,17 +373,11 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         // this is true, but a second tap can still land in the same frame
         // before recomposition disables it.
         if (creatingVideoScript) return
-        val topic = videoTopicInput.trim()
-        val opportunityId = selectedOpportunityId
-        val motionConceptId = selectedMotionConceptId
+        val motionConceptId = selectedMotionConceptId ?: return
         scope.launch {
             creatingVideoScript = true
             try {
-                val result = repo.requestVideoScript(
-                    topic = if (!useExistingOpportunity && !useMotionConcept) topic else null,
-                    opportunityId = if (useExistingOpportunity) opportunityId else null,
-                    motionConceptId = if (useMotionConcept) motionConceptId else null,
-                )
+                val result = repo.requestVideoScript(motionConceptId)
                 createVideoResultMessage = if (result.finalStage == "ready_for_owner") {
                     "Video script sent to Approvals for your review."
                 } else {
@@ -431,14 +386,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 }
                 showVideoConfirmDialog = false
                 showCreateVideoDialog = false
-                videoTopicInput = ""
-                selectedOpportunityId = null
                 // A concept is used up once requested (owner rule 2026-09-25): drop it now, and the next open reloads
                 // the list from the server, which also leaves out anything queued, waiting, made or rejected.
-                if (motionConceptId != null) motionConcepts = motionConcepts.filterNot { it.id == motionConceptId }
+                motionConcepts = motionConcepts.filterNot { it.id == motionConceptId }
                 selectedMotionConceptId = null
-                useExistingOpportunity = false
-                useMotionConcept = false
                 refresh()
             } catch (e: com.fillbook.growthos.data.NetworkException) {
                 createVideoResultMessage = extractVideoScriptRequestErrorMessage(e.httpCode, e.message)
@@ -467,14 +418,11 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 SecondaryButton(
                     text = "+ Create Fillbook Video",
                     onClick = {
-                        videoTopicInput = ""
-                        selectedOpportunityId = null
                         selectedMotionConceptId = null
                         // Always fetch a fresh concept list: the server hides concepts used since the last load.
                         motionConcepts = emptyList()
-                        useExistingOpportunity = false
-                        useMotionConcept = false
                         showCreateVideoDialog = true
+                        loadMotionConcepts()
                     },
                 )
             }
@@ -590,137 +538,36 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
     if (showCreateVideoDialog) {
-        val canContinue = when {
-            useMotionConcept -> selectedMotionConceptId != null
-            useExistingOpportunity -> selectedOpportunityId != null
-            else -> videoTopicInput.trim().length >= 3
-        }
         AlertDialog(
             onDismissRequest = { showCreateVideoDialog = false },
             title = { Text("Create Fillbook Video") },
             text = {
                 Column {
-                    // Verified motion concept -- listed FIRST and clearly
-                    // labeled as the one option that gets a real, verified
-                    // product recording, so the owner never assumes a custom
-                    // topic below will get the same treatment (it uses stock
-                    // footage/screenshots, same as before this existed).
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = useMotionConcept,
-                            onClick = {
-                                useMotionConcept = true
-                                useExistingOpportunity = false
-                                if (motionConcepts.isEmpty() && !loadingMotionConcepts) loadMotionConcepts()
-                            },
-                        )
-                        Text("Verified motion concept", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    if (useMotionConcept) {
-                        Text(
-                            "Uses a REAL recorded Fillbook product interaction, not stock footage.",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
-                        )
-                        if (loadingMotionConcepts) {
-                            CircularProgressIndicator(modifier = Modifier.height(18.dp))
-                        } else if (motionConcepts.isEmpty()) {
-                            Text("No verified motion concepts available right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxWidth().height(140.dp)) {
-                                items(motionConcepts, key = { it.id }) { concept ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        RadioButton(
-                                            selected = selectedMotionConceptId == concept.id,
-                                            onClick = { selectedMotionConceptId = concept.id },
-                                        )
-                                        Column {
-                                            Text(concept.title, style = MaterialTheme.typography.bodySmall)
-                                            Text(concept.topic, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = !useExistingOpportunity && !useMotionConcept, onClick = { useExistingOpportunity = false; useMotionConcept = false })
-                        Text("Custom topic", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    if (!useExistingOpportunity && !useMotionConcept) {
-                        Text(
-                            "Uses stock footage/app screenshots, not a custom recording of this exact topic.",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
-                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
-                        )
-                        Text(
-                            "This week's topics — tap to use:",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-                        )
-                        LazyColumn(modifier = Modifier.fillMaxWidth().height(160.dp)) {
-                            items(suggestedVideoTopics) { topic ->
-                                Text(
-                                    topic,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Accent,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { videoTopicInput = topic }
-                                        .padding(vertical = 5.dp),
-                                )
-                            }
-                        }
-                        OutlinedTextField(
-                            value = videoTopicInput,
-                            onValueChange = { videoTopicInput = it },
-                            label = { Text("Futures/prop-firm/trading-discipline topic") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            "Must be about futures trading, prop firms, or trading discipline -- an unrelated topic is rejected before anything is generated.",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextTertiary,
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = useExistingOpportunity,
-                            onClick = {
-                                useExistingOpportunity = true
-                                useMotionConcept = false
-                                if (eligibleOpportunities.isEmpty() && !loadingOpportunities) loadEligibleOpportunities()
-                            },
-                        )
-                        Text("Existing Radar opportunity", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    if (useExistingOpportunity) {
-                        if (loadingOpportunities) {
-                            CircularProgressIndicator(modifier = Modifier.height(18.dp))
-                        } else if (eligibleOpportunities.isEmpty()) {
-                            Text("No eligible opportunities right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-                                items(eligibleOpportunities, key = { it.id }) { opp ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        RadioButton(
-                                            selected = selectedOpportunityId == opp.id,
-                                            onClick = { selectedOpportunityId = opp.id },
-                                        )
-                                        Text(opp.title, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                    Text("Motion render", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Uses a REAL recorded Fillbook product interaction, not stock footage. One new video can be requested per day.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextTertiary,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                    )
+                    if (loadingMotionConcepts) {
+                        CircularProgressIndicator(modifier = Modifier.height(18.dp))
+                    } else if (motionConcepts.isEmpty()) {
+                        Text("No motion concepts available right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxWidth().height(320.dp)) {
+                            items(motionConcepts, key = { it.id }) { concept ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = selectedMotionConceptId == concept.id,
+                                        onClick = { selectedMotionConceptId = concept.id },
+                                    )
+                                    Column {
+                                        Text(concept.title, style = MaterialTheme.typography.bodySmall)
+                                        Text(concept.topic, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
                                     }
                                 }
                             }
@@ -731,7 +578,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             confirmButton = {
                 TextButton(
                     onClick = { showCreateVideoDialog = false; showVideoConfirmDialog = true },
-                    enabled = canContinue,
+                    enabled = selectedMotionConceptId != null,
                 ) { Text("Continue") }
             },
             dismissButton = {
@@ -741,11 +588,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
     if (showVideoConfirmDialog) {
-        val topicSummary = when {
-            useMotionConcept -> motionConcepts.firstOrNull { it.id == selectedMotionConceptId }?.title ?: "the selected motion concept"
-            useExistingOpportunity -> eligibleOpportunities.firstOrNull { it.id == selectedOpportunityId }?.title ?: "the selected opportunity"
-            else -> "\"${videoTopicInput.trim()}\""
-        }
+        val topicSummary = motionConcepts.firstOrNull { it.id == selectedMotionConceptId }?.title ?: "the selected motion concept"
         AlertDialog(
             onDismissRequest = { if (!creatingVideoScript) showVideoConfirmDialog = false },
             title = { Text("Create a real video draft?") },
@@ -756,9 +599,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(8.dp))
-                    if (useMotionConcept) {
-                        Text("• It will use a REAL recorded Fillbook product interaction, not stock footage.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                    }
+                    Text("• It will use a REAL recorded Fillbook product interaction, not stock footage.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Text("• It will render on the video worker once approved.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Text("• It will NOT post anywhere automatically.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Text("• It lands in Approvals first -- approving it there is what starts the render.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
@@ -962,98 +803,3 @@ private fun VideoMetadataSection(label: String, copyLabel: String, body: String)
         Text(body, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
     }
 }
-
-/**
- * Grouped only for readability when editing -- getSuggestedTopics() below
- * flattens every group into one pool and samples from across all of them,
- * so these are no longer "week N's topics" in any functional sense (that
- * fixed weekly-indexed rotation was the reason the same 5 kept showing on
- * every visit within a week -- confirmed by the owner).
- */
-private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
-    // Week set 0
-    listOf(
-        "why funded traders who journal outperform those who don't",
-        "how to build a morning trading routine that sets up winning trades",
-        "what revenge trading really costs funded account holders",
-        "how to calculate position sizing without blowing your daily loss limit",
-        "how to track your drawdown before it tracks you out of funding",
-    ),
-    // Week set 1
-    listOf(
-        "the one thing consistent prop firm traders do that others skip",
-        "how to use your trading journal to find your best setups",
-        "why your losing streak isn't random and what your trade journal reveals",
-        "how to handle a losing streak without blowing the account",
-        "what a trading plan actually needs to work for funded traders",
-    ),
-    // Week set 2
-    listOf(
-        "why most traders break their rules and how a trading journal fixes it",
-        "how to build trading habits that survive a funded account",
-        "the trading psychology mistake that kills most evaluation accounts",
-        "why your trading routine matters more than your entry strategy",
-        "how to stop strategy hopping and commit to one edge",
-    ),
-    // Week set 3
-    listOf(
-        "what separates funded traders from those who blow their accounts",
-        "how to use a trade review to build real consistency as a funded trader",
-        "what every funded trader needs to know about drawdown rules",
-        "how to create a trading plan that you'll actually follow",
-        "why your best trading days tell you more than your worst",
-    ),
-    // Week set 4
-    listOf(
-        "why prop firm traders who track their trades get funded faster",
-        "how to avoid revenge trading after a tough loss",
-        "why prop firm traders should track emotions, not just trades",
-        "how to pass a trading combine on your next attempt",
-        "how to set daily loss limits you won't break under pressure",
-    ),
-    // Week set 5
-    listOf(
-        "how a trading journal helps you stop making the same mistakes",
-        "what your trading routine should look like before the market opens",
-        "why most prop firm traders fail their second evaluation",
-        "how to identify your trading edge using historical trade data",
-        "what the best-performing funded traders have in common",
-    ),
-    // Week set 6
-    listOf(
-        "why traders who skip journaling keep repeating the same costly mistakes",
-        "how to stay consistent when your prop firm account hits max drawdown",
-        "what stop-loss discipline actually looks like for funded traders",
-        "how to use backtesting to validate your trading strategy",
-        "how to do a trade review that actually improves your win rate",
-    ),
-    // Week set 7
-    listOf(
-        "how reviewing your trading journal daily can cut your losing streak in half",
-        "what position sizing mistakes cost prop firm traders the most",
-        "how to manage risk when trading futures near your daily loss limit",
-        "why funded traders who track their psychology outperform those who don't",
-        "how to build a consistent trading routine from scratch",
-    ),
-    // Fillbook feature / how-to-use topics (added 2026-09-21, owner direction: videos should be
-    // mainly about Fillbook itself -- what it does, how it helps, how to use it -- not just general
-    // trading education with an incidental mention. Every set above named zero Fillbook features by
-    // name; these do, and are written to stay inside the writer's grounding rules (draws only on
-    // features already in the verified-knowledge summary: broker-agnostic import, prop-firm
-    // drawdown/rule tracking, the AI coach, revenge/oversized trade flags, the by-setup breakdown).
-    listOf(
-        "how fillbook flags a revenge trade before it costs you the account",
-        "how to see which trading setup is actually losing you money in fillbook",
-        "how fillbook tracks your prop firm's trailing drawdown for you",
-        "how to import your trades into fillbook from any broker or platform",
-        "how fillbook's ai coach finds the pattern you keep missing",
-        "a real look at how fillbook breaks your month down by setup",
-        "how to set up fillbook to track your daily loss limit automatically",
-        "how fillbook tags oversized and revenge trades before you notice the pattern yourself",
-    ),
-)
-
-private val ALL_SUGGESTED_TOPICS: List<String> = WEEKLY_TOPIC_SETS.flatten()
-
-/** A fresh random sample of [count] topics from the full pool -- called with a `remember` key tied to dialog visibility (see VideoStatusScreen) so every time "Create Fillbook Video" is opened, the suggestions are shuffled again instead of staying fixed for a whole calendar week. */
-internal fun getSuggestedTopics(count: Int = 5): List<String> = ALL_SUGGESTED_TOPICS.shuffled().take(count)
