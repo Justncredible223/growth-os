@@ -331,7 +331,7 @@ private fun ApprovalCard(
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(approvalHeading(asset), style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
@@ -415,3 +415,9 @@ internal fun approvalSnackbarMessage(approve: Boolean, outcome: VideoRenderOutco
 
 /** The quick reasons offered when rejecting a draft; saved with the rejection (migration 0048). */
 internal val REJECT_REASONS = listOf("Wrong figure or claim", "Wrong tone", "Weak topic", "Too similar to another video")
+
+/** "Day 5 · 5 contracts against a plan of 3" for a motion concept draft; the campaign title for anything else. */
+internal fun approvalHeading(asset: ApprovalAsset): String {
+    val concept = asset.conceptTitle ?: return asset.campaignTitle
+    return if (asset.conceptDay != null) "Day ${asset.conceptDay} · $concept" else concept
+}

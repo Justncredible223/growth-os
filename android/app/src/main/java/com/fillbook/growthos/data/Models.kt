@@ -83,6 +83,9 @@ data class ApprovalAsset(
      * to read that back). See backend/src/attribution/utmBuilder.ts.
      */
     val trackingQuery: String,
+    /** The daily concept behind a motion video draft and its day (1-30); null for any other draft. */
+    val conceptTitle: String? = null,
+    val conceptDay: Int? = null,
 )
 
 data class HealthItem(

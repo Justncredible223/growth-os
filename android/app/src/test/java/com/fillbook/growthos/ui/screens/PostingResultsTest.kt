@@ -124,3 +124,16 @@ class RejectReasonsTest {
         assertTrue(REJECT_REASONS.all { it.length <= 40 })
     }
 }
+
+class ApprovalHeadingTest {
+    private fun asset(title: String, concept: String?, day: Int?) = com.fillbook.growthos.data.ApprovalAsset(
+        "i", title, "p", "video_script", "x", com.fillbook.growthos.data.AssetStage.READY_FOR_OWNER, false, null, null, 0, 0, "", concept, day,
+    )
+
+    @Test
+    fun showsTheDayAndConceptForAMotionDraft() {
+        assertEquals("Day 5 · Five contracts", approvalHeading(asset("Motion concept request: Five contracts", "Five contracts", 5)))
+        assertEquals("Five contracts", approvalHeading(asset("Motion concept request: Five contracts", "Five contracts", null)))
+        assertEquals("Plain title", approvalHeading(asset("Plain title", null, null)))
+    }
+}

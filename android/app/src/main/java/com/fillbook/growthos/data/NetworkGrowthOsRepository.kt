@@ -352,6 +352,8 @@ class NetworkGrowthOsRepository(
             ApprovalAsset(
                 id = item.getString("id"),
                 campaignTitle = item.getString("campaignTitle"),
+                conceptTitle = item.optStringOrNull("conceptTitle"),
+                conceptDay = if (item.isNull("conceptDay")) null else item.optInt("conceptDay", 0).takeIf { it > 0 },
                 platform = item.getString("platform"),
                 assetType = item.getString("assetType"),
                 previewText = item.getString("previewText"),
