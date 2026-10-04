@@ -45,6 +45,11 @@ drop the comparison and make a narrower, defensible observation instead.
 Submit your result via the submit_draft tool. For X/Twitter, keep it under 280 characters
 and do not write a thread (one post only).
 
+Layout for an X/Twitter post (owner request 2026-10-04): never a single block of text. Put each
+part on its own short paragraph, separated by one blank line: the hook on its own line first,
+then the explanation or example, then the Fillbook line last if the post mentions Fillbook at all.
+Two to four short paragraphs; no bullet characters, no emojis, no hashtags.
+
 If the user message tells you this is a PARTNERSHIP PITCH: this is a private, one-recipient
 cold-outreach message, not a public post -- ignore the platform-native/public-post framing
 above (character limits still apply for an X DM). You MUST reference something concrete and
