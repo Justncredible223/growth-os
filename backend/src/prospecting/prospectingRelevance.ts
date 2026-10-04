@@ -187,7 +187,32 @@ const CRYPTO_EXCLUSION_PATTERNS: RegExp[] = [
   /\bairdrop\b/i,
   /\bKYC\b/i,
   /\bmemecoin\b/i,
+  // Added 2026-10-04 (owner: most of the queue was crypto and got rejected). The posts that still got through used none of
+  // the words above: coin names, exchange names and on-chain slang.
+  /\b(solana|SOL|XRP|DOGE|PEPE|BNB|ADA|AVAX|LINK|SUI|TON|HYPE|WIF|BONK)\b/,
+  /\b(binance|bybit|okx|coinbase|kraken|hyperliquid|bitget|mexc|kucoin|phantom|metamask|uniswap|raydium)\b/i,
+  /\bperps?\b/i,
+  /\b(on-?chain|web3|dex|degen|rug ?pull|pump\.fun|shitcoin|tokenomics|hodl|halving|whale wallet)\b/i,
+  /\btokens?\b/i,
+  /\bwallets?\b/i,
 ];
+
+/** Cashtags that are futures or index tickers, not coins ($ES, $NQ, $SPY ...). Any other cashtag counts as a crypto signal. */
+const FUTURES_CASHTAGS = new Set(["ES", "NQ", "MES", "MNQ", "YM", "MYM", "RTY", "M2K", "CL", "MCL", "GC", "MGC", "SI", "NG", "ZB", "ZN", "ZC", "ZS", "ZW", "6E", "6J", "SPX", "SPY", "QQQ", "VIX", "DXY", "DJI", "IWM"]);
+
+function hasCoinCashtag(postText: string): boolean {
+  const tags = postText.match(/\$[A-Za-z][A-Za-z0-9]{1,9}\b/g) ?? [];
+  return tags.some((t) => !FUTURES_CASHTAGS.has(t.slice(1).toUpperCase()));
+}
+
+/**
+ * X search exclusions appended to every discovery query: asking X not to return crypto posts at all, so they never cost a read
+ * or reach the filter. The query is wrapped in parentheses so an OR inside a topic query is excluded as a whole.
+ */
+export const CRYPTO_QUERY_EXCLUSIONS = "-crypto -bitcoin -btc -ethereum -solana -memecoin -altcoin -airdrop -defi -nft";
+export function withCryptoExclusions(query: string): string {
+  return `(${query}) ${CRYPTO_QUERY_EXCLUSIONS}`;
+}
 
 /**
  * Deliberately a NARROWER, futures/prop-firm-SPECIFIC override list than
@@ -224,7 +249,7 @@ export function isPlausiblyTradingRelated(postText: string): boolean {
     const hasManualDisciplineOverride = MANUAL_DISCIPLINE_OVERRIDE_PATTERNS.some((p) => p.test(postText));
     if (!hasManualDisciplineOverride) return false;
   }
-  if (CRYPTO_EXCLUSION_PATTERNS.some((p) => p.test(postText))) {
+  if (CRYPTO_EXCLUSION_PATTERNS.some((p) => p.test(postText)) || hasCoinCashtag(postText)) {
     const hasFuturesSpecificOverride = FUTURES_SPECIFIC_OVERRIDE_PATTERNS.some((p) => p.test(postText));
     if (!hasFuturesSpecificOverride) return false;
   }
