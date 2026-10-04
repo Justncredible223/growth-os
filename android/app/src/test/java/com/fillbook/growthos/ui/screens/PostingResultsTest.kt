@@ -15,8 +15,8 @@ import java.time.ZonedDateTime
 class PostingResultsTest {
     @Test
     fun slotLabelsUseTwelveHourTime() {
-        assertEquals("6:30 AM", slotLabel("06:30"))
         assertEquals("12:00 PM", slotLabel("12:00"))
+        assertEquals("6:30 AM", slotLabel("06:30"))
         assertEquals("5:30 PM", slotLabel("17:30"))
     }
 
@@ -51,10 +51,11 @@ class PostingResultsTest {
         val az = ZoneId.of("America/Phoenix")
         val (at1, slot1) = PostingReminders.nextSlot(ZonedDateTime.of(2026, 9, 25, 10, 0, 0, 0, az))
         assertEquals(12 to 0, at1.hour to at1.minute)
-        assertEquals(2, slot1)
+        assertEquals(1, slot1)
+        // After the one daily slot has passed, the next is tomorrow's.
         val (at2, slot2) = PostingReminders.nextSlot(ZonedDateTime.of(2026, 9, 25, 20, 0, 0, 0, az))
         assertEquals(26, at2.dayOfMonth)
-        assertEquals(6 to 30, at2.hour to at2.minute)
+        assertEquals(12 to 0, at2.hour to at2.minute)
         assertEquals(1, slot2)
         // A phone in another zone still gets Arizona slot times.
         val (at3, _) = PostingReminders.nextSlot(ZonedDateTime.of(2026, 9, 25, 12, 0, 0, 0, ZoneId.of("America/New_York")))

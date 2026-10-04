@@ -18,15 +18,15 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
- * Local reminders for the daily posting plan (owner request 2026-09-25): 6:30am, 12pm and 5:30pm Arizona time, the same
- * slots the server's plan uses (backend/src/posting/postingPlan.ts). Exact alarms (USE_EXACT_ALARM, granted at install
+ * Local reminder for the daily posting plan (owner request 2026-09-25; one a day, 12pm Arizona, from 2026-10-04), the same
+ * slot the server's plan uses (backend/src/posting/postingPlan.ts). Exact alarms (USE_EXACT_ALARM, granted at install
  * for this sideloaded app): an inexact alarm was given a 1-hour window on the owner's phone, too loose for a posting
  * slot. If exact alarms are ever unavailable it falls back to a 10-minute window. Only the next slot is ever armed: it
  * re-arms after firing, on app start and after a reboot.
  */
 object PostingReminders {
     const val CHANNEL_ID = "posting_reminders"
-    val SLOT_TIMES: List<LocalTime> = listOf(LocalTime.of(6, 30), LocalTime.of(12, 0), LocalTime.of(17, 30))
+    val SLOT_TIMES: List<LocalTime> = listOf(LocalTime.of(12, 0))
     val ZONE: ZoneId = ZoneId.of("America/Phoenix")
     private const val REQUEST_CODE = 6300
     private const val NOTIFICATION_ID = 6301
@@ -43,12 +43,12 @@ object PostingReminders {
     }
 
     fun reminderText(slotNumber: Int): Pair<String, String> =
-        "Posting slot $slotNumber of ${SLOT_TIMES.size}" to "Time to post the next video to TikTok, YouTube and Instagram. Add each link in Video Status."
+        "Time to post today's video" to "If today's video is ready, post it to TikTok, YouTube and Instagram. Add each link in Video Status."
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(CHANNEL_ID, "Posting reminders", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Reminders at your 3 daily posting times"
+            description = "A reminder at your daily posting time"
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
