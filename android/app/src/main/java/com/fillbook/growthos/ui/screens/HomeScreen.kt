@@ -355,14 +355,14 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     }
 }
 
-/** Over this a normal X account cannot post. A Premium (blue check) account can post longer, so going over only warns. */
+/** Where X cuts a long post in the feed behind "Show more". The account has Premium, so longer posts are allowed; this is only the fold. */
 internal const val X_POST_NORMAL_LIMIT = 280
 
-/** The counter line under the draft, and whether it is over the normal limit ("412 / 280 - too long unless your account allows long posts"). */
+/** The counter line under the draft, and whether the post runs past the feed fold ("412 / 280 - readers tap Show more to see the rest"). */
 internal fun xPostCounter(text: String): Pair<String, Boolean> {
     val length = text.trim().length
     return if (length > X_POST_NORMAL_LIMIT) {
-        "$length / $X_POST_NORMAL_LIMIT - over the normal limit; fine only if your account allows long posts" to true
+        "$length / $X_POST_NORMAL_LIMIT - past the fold, readers tap Show more to see the rest" to true
     } else {
         "$length / $X_POST_NORMAL_LIMIT" to false
     }
