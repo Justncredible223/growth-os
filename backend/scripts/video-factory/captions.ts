@@ -1,14 +1,11 @@
 import type { CaptionCue, WordCue } from "./types.js";
 
 /**
- * voiceover.ts now sends "Fillbook" to TTS as one word, so the WordBoundary
- * stream normally reports one cue and this is a no-op. It stays for word-cue
- * files produced when the name was spoken as the two words "Fill book": it
- * merges any such adjacent pair back into one
- * "Fillbook" cue (spanning both words' combined time range) before caption
- * phrases are built, so it still displays and highlights as a single word
- * on screen, matching what it actually is. Matches on bare letters only
- * (strips punctuation) so a "Fill book." at a sentence end still merges.
+ * voiceover.ts sends "Fillbook" to TTS as "Fill-book", which the WordBoundary stream reports as one cue ("Fill-book",
+ * "Fill-book's"); this turns it back into "Fillbook" so it displays and highlights as the brand name. It also merges an
+ * adjacent "Fill" + "book" pair (word-cue files made when the name was spoken as two words) into one cue spanning both
+ * words' combined time range. Matches on bare letters only (strips punctuation) so a "Fill book." at a sentence end
+ * still merges.
  */
 export function mergeBrandNameWordCues(wordCues: WordCue[]): WordCue[] {
   const merged: WordCue[] = [];
@@ -20,6 +17,8 @@ export function mergeBrandNameWordCues(wordCues: WordCue[]): WordCue[] {
     if (next && currentBare === "fill" && nextBare === "book") {
       merged.push({ text: "Fillbook", startSeconds: current.startSeconds, endSeconds: next.endSeconds });
       i++;
+    } else if (/fill-book/i.test(current.text)) {
+      merged.push({ ...current, text: current.text.replace(/fill-book/gi, "Fillbook") });
     } else {
       merged.push(current);
     }

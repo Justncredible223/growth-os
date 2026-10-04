@@ -364,7 +364,7 @@ Locally, set `MOCK_CHROMIUM_PATH` or run the same command. Preview a concept wit
 `npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-sized-up`.
 
 **Length and detail.** Each concept runs five beats; the spoken length sets the video length
-(about 12-16 s). The detail beat's claim is a `product_capability` claim, so wording must
+(about 9-12 s). The detail beat's claim is a `product_capability` claim, so wording must
 stay within the guardrails (synced, closed trades; no "live"; behaviour labels framed as
 flags). Because a mock draws windows that carry every figure, each beat cites all of the
 concept's facts.
@@ -388,9 +388,9 @@ Offered product-mock concepts are narrated (`voiceover: "narrated"`): `en-US-And
 `MOCK_SPEECH_RATE` (+8%, not the faster +18% payoff pace), one edge-tts call per beat. Each beat's
 `narration` is both the spoken line and the text the claim checks read, so a spoken sentence carries
 at most two figures (`test/narratedMocks.test.ts`). A beat's audio is padded with silence to
-`MOCK_MIN_BEAT_SECONDS` (1.8 s) so a one-line beat still holds after its 1 s entrance. The slide
+`MOCK_MIN_BEAT_SECONDS` (1.5 s) so a one-line beat still holds after its 1 s entrance. The slide
 already carries its own text, so no word-by-word subtitles are burned over a mock. The older drawn
-bar charts stay silent. Spoken lines are 11 words or fewer, whole dollars only (a voice reads cents slowly), and a rendered concept runs about 12-16 s.
+bar charts stay silent. Spoken lines are 7 words or fewer, whole dollars only (a voice reads cents slowly), with the silence the voice leaves around each line trimmed (`trimSilence`), so most beats run 1.5-2.5 s and a concept about 9-12 s. A figure in the thousands ("$3,822") alone takes about 2 s to say. The name is sent to the voice as "Fill-book" (the plain spelling reads as "fill bewk").
 
 ## Music rotation
 

@@ -29,7 +29,7 @@ import { ASSETS_DIR, validateScenePlan } from "../../src/shortform/scenePlan.js"
 import type { CaptionCue } from "./types.js";
 import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../../src/shortform/types.js";
 import { synthesizeOfflineNarration } from "./localTts.js";
-import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
+import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE } from "./voiceover.js";
 import { CARD_SHADOW_SPREAD, PLATFORM_OVERLAY_ZONES, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
 import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLayout.js";
 import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./payoffCues.js";
@@ -331,6 +331,9 @@ export interface RealNarrationResult {
 }
 
 const MIN_SILENT_SCENE_SECONDS = 1.5;
+/** Silence kept before and after a trimmed line (seconds): enough to breathe, short enough to cut on. */
+const TRIM_LEAD_SECONDS = 0.06;
+const TRIM_TAIL_SECONDS = 0.14;
 
 /**
  * Synthesizes one part per scene (via `synthesizeOne`, which returns its
@@ -410,6 +413,8 @@ export async function synthesizeProductionNarrationAudio(
     rate?: string;
     /** Pads a scene's audio with silence up to this length, so a one-line beat still holds long enough to read after its entrance animation. */
     minSceneSeconds?: number;
+    /** Cuts the silence the voice leaves before and after each line (down to a short lead and tail), so beats follow the speech instead of its pauses. */
+    trimSilence?: boolean;
   } = {},
 ): Promise<RealNarrationResult> {
   const wordCuesBySceneId: Record<string, WordCue[]> = {};
@@ -423,15 +428,25 @@ export async function synthesizeProductionNarrationAudio(
       const result = await generateVoiceover(text, sceneOutDir, runner, DEFAULT_VOICE, options.rate);
       copyFileSync(result.mp3Path, partPath);
       wordCuesBySceneId[sceneId] = result.wordCues;
+      let spoken = result.durationSeconds;
+      if (options.trimSilence) {
+        const trimmedPath = partPath.replace(/\.mp3$/, ".trimmed.mp3");
+        // Leading silence is removed, then the audio is reversed so the same filter removes the trailing silence, then flipped back.
+        const filter = `silenceremove=start_periods=1:start_silence=${TRIM_LEAD_SECONDS}:start_threshold=-42dB,areverse,silenceremove=start_periods=1:start_silence=${TRIM_TAIL_SECONDS}:start_threshold=-42dB,areverse`;
+        const trimmed = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", filter, "-c:a", "libmp3lame", trimmedPath], {});
+        if (trimmed.exitCode !== 0) throw new VideoFactoryError(`Failed to trim narration for scene "${sceneId}": ${trimmed.stderr || trimmed.stdout}`);
+        copyFileSync(trimmedPath, partPath);
+        spoken = await measureAudioDuration(partPath, runner);
+      }
       const min = options.minSceneSeconds;
-      if (min !== undefined && result.durationSeconds < min) {
+      if (min !== undefined && spoken < min) {
         const paddedPath = partPath.replace(/\.mp3$/, ".padded.mp3");
         const padded = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", `apad=whole_dur=${min.toFixed(3)}`, "-t", min.toFixed(3), "-c:a", "libmp3lame", paddedPath], {});
         if (padded.exitCode !== 0) throw new VideoFactoryError(`Failed to pad narration for scene "${sceneId}": ${padded.stderr || padded.stdout}`);
         copyFileSync(paddedPath, partPath);
         return min;
       }
-      return result.durationSeconds;
+      return spoken;
     },
     "voiceover-production-narration.mp3",
   );

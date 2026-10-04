@@ -13,7 +13,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { MOTION_SCENE_PLANS, isPayoffPlan, isNarratedMockPlan, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../../src/shortform/motionPlans.js";
+import { MOTION_SCENE_PLANS, isPayoffPlan, isNarratedMockPlan, MOCK_NARRATION } from "../../src/shortform/motionPlans.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "./scenePlanAdapter.js";
 import { buildAssFile } from "./captions.js";
@@ -47,7 +47,7 @@ async function main() {
         ? await synthesizeSilentNarration(plan, outDir, runner)
         : voice === "offline"
           ? await synthesizeRealNarrationAudio(plan, outDir, runner)
-          : await synthesizeProductionNarrationAudio(plan, outDir, runner, isNarratedMockPlan(plan) ? { rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MIN_BEAT_SECONDS } : { rate: PAYOFF_SPEECH_RATE });
+          : await synthesizeProductionNarrationAudio(plan, outDir, runner, isNarratedMockPlan(plan) ? MOCK_NARRATION : { rate: PAYOFF_SPEECH_RATE });
     const adjusted = applyRealDurations(plan, narration.durationsBySceneId);
     const adapted = await buildRenderPlanScenes(adjusted, manifest, outDir, runner, narration.wordCuesBySceneId);
     const assPath = join(outDir, "captions.ass");

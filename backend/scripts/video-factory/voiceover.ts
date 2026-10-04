@@ -51,18 +51,17 @@ export const TTS_RETRY_DELAYS_MS: readonly number[] = [2000, 5000];
 const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_tts_words.py");
 
 /**
- * "Fillbook" is sent to TTS as the single word, exactly as written: the owner
- * compared the voice's reading of "Fillbook", "Fill book", "Fill-book" and
- * "Filbook" by ear (2026-09-30) and picked the plain one-word spelling. The
- * earlier two-word respelling made the brand name sound stressed and halting.
+ * "Fillbook" is sent to TTS as "Fill-book". Spelled as one word, the voice reads the second half like "bewk"
+ * (the owner heard this in the narrated mock samples, 2026-10-03, after choosing the one-word spelling by ear on
+ * 2026-09-30). The owner listened to six spellings in the same voice and pace ("Fillbook", "Fill book", "Fill-book",
+ * "Fillbuk", "Fil book", "Fill, book") and picked the hyphenated one as the best reading.
  *
- * "FillbookHQ" is still split into "Fillbook HQ": run together, the voice
- * reads "HQ" as part of the word. Captions and on-screen text are unaffected
- * (mergeBrandNameWordCues only acts on a spoken "Fill" + "book" pair, which
- * no longer occurs, so it is a harmless no-op kept for older word-cue files).
+ * "FillbookHQ" becomes "Fill-book HQ": run together, the voice reads "HQ" as part of the word. Captions and on-screen
+ * text are unaffected: the word-timing stream reports the hyphenated word as one cue, and mergeBrandNameWordCues turns
+ * it back into "Fillbook" for display.
  */
 export function respellFillbookForTts(text: string): string {
-  return text.replace(/\b(Fillbook)HQ\b/gi, "$1 HQ");
+  return text.replace(/\b(fill)(book)(hq)?\b/gi, (_m, fill: string, book: string, hq?: string) => `${fill}-${book}${hq ? " HQ" : ""}`);
 }
 
 /**

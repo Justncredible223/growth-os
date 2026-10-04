@@ -52,7 +52,7 @@ describe("generateVoiceover", () => {
     expect(result.wordCues[0]).toEqual({ text: "Hello", startSeconds: 0.05, endSeconds: 0.4 });
   });
 
-  it("sends Fillbook to TTS as one word (the owner chose that reading by ear)", async () => {
+  it("sends Fillbook to TTS as Fill-book (the owner chose that reading by ear, 2026-10-03)", async () => {
     const dir = tempDir();
     const run = vi.fn(async (command: string, args: string[]) => {
       if (command === "python3") {
@@ -66,7 +66,7 @@ describe("generateVoiceover", () => {
 
     await generateVoiceover("Fillbook tracks your drawdown.", dir, runner);
 
-    expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Fillbook tracks your drawdown.");
+    expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Fill-book tracks your drawdown.");
   });
 
   it("keeps the verified standard voice (Multilingual voices mispronounce \"book\") at a modestly faster pace", () => {
@@ -201,11 +201,12 @@ describe("measureAudioDuration", () => {
 });
 
 describe("respellFillbookForTts", () => {
-  it("leaves Fillbook as one word, in any case (the owner chose this reading by ear)", () => {
-    expect(respellFillbookForTts("Fillbook tracks trades.")).toBe("Fillbook tracks trades.");
-    expect(respellFillbookForTts("FILLBOOK IS FREE.")).toBe("FILLBOOK IS FREE.");
-    expect(respellFillbookForTts("check out fillbook today.")).toBe("check out fillbook today.");
-    expect(respellFillbookForTts("Log both accounts in Fillbook, and Fillbook shows it.")).toBe("Log both accounts in Fillbook, and Fillbook shows it.");
+  it("sends Fillbook as Fill-book, in any case (the owner chose this reading by ear, 2026-10-03)", () => {
+    expect(respellFillbookForTts("Fillbook tracks trades.")).toBe("Fill-book tracks trades.");
+    expect(respellFillbookForTts("FILLBOOK IS FREE.")).toBe("FILL-BOOK IS FREE.");
+    expect(respellFillbookForTts("check out fillbook today.")).toBe("check out fill-book today.");
+    expect(respellFillbookForTts("Log both accounts in Fillbook, and Fillbook shows it.")).toBe("Log both accounts in Fill-book, and Fill-book shows it.");
+    expect(respellFillbookForTts("Fillbook's calendar.")).toBe("Fill-book's calendar.");
   });
 
   it("does not affect text with no mention of Fillbook", () => {
@@ -217,8 +218,8 @@ describe("respellFillbookForTts", () => {
   });
 
   it("still separates HQ from FillbookHQ so the voice reads it as its own letters", () => {
-    expect(respellFillbookForTts("head to fillbookhq.com today.")).toBe("head to fillbook HQ.com today.");
-    expect(respellFillbookForTts("Visit FillbookHQ now.")).toBe("Visit Fillbook HQ now.");
-    expect(respellFillbookForTts("FOLLOW FILLBOOKHQ TODAY.")).toBe("FOLLOW FILLBOOK HQ TODAY.");
+    expect(respellFillbookForTts("head to fillbookhq.com today.")).toBe("head to fill-book HQ.com today.");
+    expect(respellFillbookForTts("Visit FillbookHQ now.")).toBe("Visit Fill-book HQ now.");
+    expect(respellFillbookForTts("FOLLOW FILLBOOKHQ TODAY.")).toBe("FOLLOW FILL-BOOK HQ TODAY.");
   });
 });

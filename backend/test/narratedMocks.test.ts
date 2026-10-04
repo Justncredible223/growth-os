@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MOTION_SCENE_PLANS, isOfferedPlan, isNarratedMockPlan, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, isOfferedPlan, isNarratedMockPlan, MOCK_NARRATION, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../src/shortform/motionPlans";
 import { DEFAULT_VOICE } from "../scripts/video-factory/voiceover";
 
 const offered = MOTION_SCENE_PLANS.filter(isOfferedPlan);
@@ -31,11 +31,11 @@ describe("narrated product mocks", () => {
     }
   });
 
-  it("keep every beat short (11 words or fewer, about three seconds spoken)", () => {
+  it("keep every beat short (7 words or fewer, about two seconds spoken)", () => {
     for (const p of offered) {
       for (const s of p.scenes) {
         const words = s.narration.split(/\s+/).length;
-        expect(words, `${p.planId}: "${s.narration}"`).toBeLessThanOrEqual(11);
+        expect(words, `${p.planId}: "${s.narration}"`).toBeLessThanOrEqual(7);
       }
     }
   });
@@ -46,5 +46,10 @@ describe("narrated product mocks", () => {
 
   it("hold each beat long enough to read after the one-second entrance", () => {
     expect(MOCK_MIN_BEAT_SECONDS).toBeGreaterThanOrEqual(1.5);
+    expect(MOCK_MIN_BEAT_SECONDS).toBeLessThanOrEqual(2);
+  });
+
+  it("trim the silence the voice leaves around each line, so beats follow the speech", () => {
+    expect(MOCK_NARRATION).toEqual({ rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MIN_BEAT_SECONDS, trimSilence: true });
   });
 });
