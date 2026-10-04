@@ -105,6 +105,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     // config change should not silently lose the owner's place mid-review.
     var reviewingXPost by rememberSaveable { mutableStateOf(false) }
     var handingOff by remember { mutableStateOf(false) }
+    var confirmNewXDraft by remember { mutableStateOf(false) }
     var xPostActionBusy by remember { mutableStateOf(false) } // Regenerate / Mark posted -- distinct from the review dialog's own handingOff
     // Owner edits before copy -- keyed by campaignAssetId so a genuinely
     // NEW post (a fresh Regenerate result) starts from its own draft
@@ -160,6 +161,23 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Couldn't regenerate today's post. Check your connection and try again.")
             }
+            xPostActionBusy = false
+        }
+    }
+
+    // "New draft": the server only replaces a draft that was rejected (it never regenerates over a good post), so this
+    // rejects the current one, then asks for the new one. The reject reason is saved with it.
+    fun replaceXPostDraft(assetId: String) {
+        scope.launch {
+            xPostActionBusy = true
+            try {
+                repo.decideApproval(assetId, approve = false, reason = "Wanted a different draft")
+                summary = summary?.copy(todayXPost = repo.regenerateTodayXPost())
+                errorMessage = null
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't write a new draft. Check your connection and try again.")
+            }
+            refresh()
             xPostActionBusy = false
         }
     }
@@ -300,6 +318,21 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
+    if (confirmNewXDraft) {
+        AlertDialog(
+            onDismissRequest = { confirmNewXDraft = false },
+            title = { Text("Replace this draft?") },
+            text = { Text("The current draft is discarded and a new one is written. Copy it first if you want to keep it. A new draft uses one of today's attempts.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmNewXDraft = false
+                    summary?.todayXPost?.campaignAssetId?.let { replaceXPostDraft(it) }
+                }) { Text("Replace") }
+            },
+            dismissButton = { TextButton(onClick = { confirmNewXDraft = false }) { Text("Cancel") } },
+        )
+    }
+
     if (reviewingXPost) {
         val post = summary?.todayXPost
         val counter = xPostCounter(editedXPostText)
@@ -333,8 +366,8 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                             enabled = !handingOff && editedXPostText.isNotBlank(),
                         ) { Text("Copy only") }
                         TextButton(
-                            onClick = { regenerateXPost() },
-                            enabled = !handingOff && !xPostActionBusy && post?.canRegenerate == true,
+                            onClick = { confirmNewXDraft = true },
+                            enabled = !handingOff && !xPostActionBusy && canReplaceXDraft(post),
                         ) { Text(if (xPostActionBusy) "Writing..." else "New draft") }
                     }
                 }
@@ -354,6 +387,9 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
         )
     }
 }
+
+/** A draft can be replaced while it is ready, before it is handed to X. */
+internal fun canReplaceXDraft(post: TodayXPost?): Boolean = post != null && post.state == TodayXPostState.READY && post.campaignAssetId != null
 
 /** Where X cuts a long post in the feed behind "Show more". The account has Premium, so longer posts are allowed; this is only the fold. */
 internal const val X_POST_NORMAL_LIMIT = 280
