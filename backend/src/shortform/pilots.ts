@@ -1520,7 +1520,7 @@ const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: strin
 for (const plan of HIGHSTAKES_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...HIGHSTAKES_COPY[plan.planId]! };
 
 /* ---------------------------------------------------------------------------------------------- */
-/* Angles (2026-09-25): the owner now posts 3 videos a day. Each angle re-cuts one verified concept  */
+/* Angles (2026-09-25): the owner posted 3 videos a day then (one a day since 2026-10-04). Each angle re-cuts one verified concept  */
 /* with a new hook and narration over the SAME footage, crops, clip windows and fact citations, so   */
 /* every number stays checked against its recording. Numbers in narration must come from the facts  */
 /* the scene already cites; validateScenePlan enforces that for every plan in PILOTS.               */

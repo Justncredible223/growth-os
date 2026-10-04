@@ -28,7 +28,7 @@ data class PlanVideo(
 )
 
 data class PlanSlot(
-    /** "06:30", "12:00" or "17:30", Arizona time. */
+    /** The slot time, "12:00" now (Arizona time); the server decides, the app just formats it. */
     val time: String,
     /** "done", "due", "upcoming" or "empty". */
     val status: String,
