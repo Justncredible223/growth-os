@@ -67,7 +67,7 @@ describe("notifyRenderFailed", () => {
     const sendPush = vi.fn().mockResolvedValue({ ok: true, isRevokedToken: false });
     await notifyRenderFailed(client, "render-1", "x".repeat(300), sendPush);
     expect(sendPush).toHaveBeenCalledTimes(2);
-    const [token, payload] = sendPush.mock.calls[0];
+    const [token, payload] = sendPush.mock.calls[0] as [string, { error: string }];
     expect(token).toBe("t1");
     expect(payload).toMatchObject({ videoRenderId: "render-1", kind: "failed", campaignTitle: "5 contracts against a plan of 3" });
     expect(payload.error.length).toBe(120);
