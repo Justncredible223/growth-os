@@ -66,7 +66,7 @@ import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
 import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary } from "../video-factory/motionCatalog.js";
 import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "../video-factory/scenePlanAdapter.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
-import { isPayoffPlan } from "../../src/shortform/motionPlans.js";
+import { isPayoffPlan, isNarratedMockPlan, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../../src/shortform/motionPlans.js";
 import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
 import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "../video-factory/payoffCues.js";
 import type { ScenePlan } from "../../src/shortform/types.js";
@@ -138,12 +138,12 @@ async function buildVerifiedMotionPlan(
   // calls, for a local proof render. Every caller must still report
   // `narrationProvenance` honestly (see RenderRunResult) rather than
   // implying the real edge-tts voice was used.
-  // A plan with voiceover "none" (the chart cards) has no speech: a silent track under the music bed, scenes as authored.
+  // A plan with voiceover "none" has no speech: a silent track under the music bed, scenes as authored. Product mocks are narrated (MOCK_SPEECH_RATE, beats padded to MOCK_MIN_BEAT_SECONDS).
   const narration = scenePlan.voiceover === "none"
     ? await synthesizeSilentNarration(scenePlan, outDir, runner)
     : process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
       ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
-      : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
+      : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, isNarratedMockPlan(scenePlan) ? { rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MIN_BEAT_SECONDS } : payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
   const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId);
 

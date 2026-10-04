@@ -34,6 +34,16 @@ export function isOfferedPlan(plan: ScenePlan): boolean {
   return plan.scenes.length > 0 && plan.scenes.every((s) => s.layout === "chart" && s.chart?.kind === "mock");
 }
 
+/** Spoken pace for a narrated product mock: the project voice (en-US-AndrewNeural) at +8%, brisk but not rushed. */
+export const MOCK_SPEECH_RATE = "+8%";
+/** A narrated mock beat holds at least this long: the 1 s entrance animation plus time to read the figure. */
+export const MOCK_MIN_BEAT_SECONDS = 1.8;
+
+/** True when this is an offered product-mock plan that is narrated (not the silent music-only form). */
+export function isNarratedMockPlan(plan: ScenePlan): boolean {
+  return isOfferedPlan(plan) && plan.voiceover !== "none";
+}
+
 /** True when this plan uses the payoff layout and therefore needs the payoff render settings (voice rate, crossfade). */
 export function isPayoffPlan(plan: ScenePlan): boolean {
   return plan.scenes.some((s) => s.layout === "payoff" || s.layout === "chart");

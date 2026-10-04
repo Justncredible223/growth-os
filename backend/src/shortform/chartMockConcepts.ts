@@ -54,9 +54,9 @@ export function mockPayoutGapPlan(): ScenePlan {
     },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["calendar.green_days"], narration: "17 of 18 days were green.", takeaway: "Almost every day was green.", caption: "17 of 18 days green." },
-      { stage: 2, seconds: 3.2, facts: ["payouts.to_go"], narration: "The payout target is $9,000, and the account is $1,484 short.", takeaway: "How far from the target.", caption: "$7,516 of the $9,000 target." },
+      { stage: 2, seconds: 3.2, facts: ["payouts.to_go"], narration: "The payout target is $9,000. The account is $1,484 short.", takeaway: "How far from the target.", caption: "$7,516 of the $9,000 target." },
       { stage: 3, seconds: 3.4, facts: ["calendar.worst_day", "payouts.to_go"], narration: "But one red day, -$1,504, is about the size of the gap.", takeaway: "One red day is the size of the gap.", caption: "One red day: -$1,504." },
-      { stage: 4, seconds: 4.6, facts: ["calendar.overview"], capability: true, narration: "Fillbook's calendar lists your best day, worst day and average per trading day, from your synced trades.", takeaway: "The calendar shows each day's result.", caption: "Best, worst and average day." },
+      { stage: 4, seconds: 4.6, facts: ["calendar.overview"], capability: true, narration: "Fillbook's calendar lists your best and worst day, from your synced trades.", takeaway: "The calendar shows each day's result.", caption: "Best, worst and average day." },
       { stage: 5, seconds: 3.2, facts: ["payouts.to_go"], closing: true, narration: "17 green days. $1,484 short. Check your target against your worst day.", takeaway: "Check the target against the worst day.", caption: "Check your worst day." },
     ],
   });
@@ -104,9 +104,9 @@ export function mockFinalDayPlan(): ScenePlan {
     },
     beats: [
       { stage: 1, seconds: 2.8, facts: ["dashboard.green_days"], narration: "10 of 10 days were green.", takeaway: "Every day was green.", caption: "10 of 10 days green." },
-      { stage: 2, seconds: 3.2, facts: ["rules.target_progress"], narration: "The profit target is $3,000, and the account is at $2,940.", takeaway: "How close to the target.", caption: "$2,940 of the $3,000 target." },
+      { stage: 2, seconds: 3.2, facts: ["rules.target_progress"], narration: "The profit target is $3,000. The account is at $2,940.", takeaway: "How close to the target.", caption: "$2,940 of the $3,000 target." },
       { stage: 3, seconds: 3.0, facts: ["rules.target_progress"], narration: "But 10 for 10 is still not at the target.", takeaway: "Ten for ten is still short.", caption: "10 for 10. Still short." },
-      { stage: 4, seconds: 4.6, facts: ["dashboard.finalday_summary"], capability: true, narration: "Fillbook's dashboard lists your best day, worst day and average per trading day, from your synced trades.", takeaway: "The dashboard shows each day's result.", caption: "Best, worst and average day." },
+      { stage: 4, seconds: 4.6, facts: ["dashboard.finalday_summary"], capability: true, narration: "Fillbook's dashboard lists your best and worst day, from your synced trades.", takeaway: "The dashboard shows each day's result.", caption: "Best, worst and average day." },
       { stage: 5, seconds: 3.2, facts: ["rules.target_progress"], closing: true, narration: "10 green days. Still not done. Know your target before the next session.", takeaway: "Know the target before the next session.", caption: "Know your target." },
     ],
   });
