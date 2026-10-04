@@ -77,9 +77,13 @@ object VideoNotifications {
 
     /** Null when [intent] didn't come from tapping one of this app's own video-render notifications (a normal launcher tap, or any other intent) -- MainActivity treats null as "nothing to deep-link, proceed normally." Thin Android-facing wrapper -- see deepLinkRouteForExtra for the actual (pure, unit-tested) decision. */
     fun deepLinkRouteFor(intent: Intent): String? =
-        deepLinkRouteForExtra(intent.getStringExtra(EXTRA_VIDEO_RENDER_ID))
+        deepLinkRouteForExtra(intent.getStringExtra(EXTRA_VIDEO_RENDER_ID), intent.getStringExtra(EXTRA_KIND))
 
     /** Pure decision extracted from deepLinkRouteFor so it's unit-testable without a real android.content.Intent (unmocked in this project's plain-JVM tests -- see NetworkGrowthOsRepository's own comment on the same constraint). */
-    internal fun deepLinkRouteForExtra(videoRenderIdExtra: String?): String? =
-        if (videoRenderIdExtra != null) "video_status" else null
+    internal fun deepLinkRouteForExtra(videoRenderIdExtra: String?, kindExtra: String? = null): String? = when {
+        videoRenderIdExtra == null -> null
+        // A draft waiting for approval opens Approvals; everything else about a video lives in Video Status.
+        kindExtra == "script_ready" -> "approvals"
+        else -> "video_status"
+    }
 }

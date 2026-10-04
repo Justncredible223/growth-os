@@ -41,6 +41,25 @@ export interface RenderNotificationPayload {
   error?: string | null;
 }
 
+/**
+ * "A script is waiting in Approvals" (owner request 2026-10-04). Same transport as the render pushes; the data block carries
+ * kind "script_ready", which the Android app routes to Approvals instead of Video Status. videoRenderId is a fixed marker
+ * because the app's message handler keys on it.
+ */
+export async function sendScriptReadyNotification(fcmToken: string, campaignTitle: string): Promise<PushSendResult> {
+  try {
+    await getMessaging(getApp()).send({
+      token: fcmToken,
+      notification: { title: "Script ready to approve", body: `"${campaignTitle}" passed review. Read it in Approvals; approving starts the render.` },
+      data: { videoRenderId: "script-ready", kind: "script_ready" },
+    });
+    return { ok: true, isRevokedToken: false };
+  } catch (err) {
+    const code = (err as { code?: string })?.code ?? "";
+    return { ok: false, isRevokedToken: REVOKED_TOKEN_ERROR_CODES.has(code), error: (err as Error).message ?? String(err) };
+  }
+}
+
 /** Sends one data+notification push for a render outcome, deep-linkable by the Android app via the `videoRenderId` data field into its Video Status screen. */
 export async function sendRenderNotification(fcmToken: string, payload: RenderNotificationPayload): Promise<PushSendResult> {
   const title = payload.kind === "ready" ? "Video ready" : "Video render failed";
