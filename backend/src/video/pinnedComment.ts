@@ -15,7 +15,7 @@ export const PINNED_COMMENT_LINK = "fillbookhq.com/sample";
  * link at the end would never show in it), then says plainly that this is a sample account rather than a real trader's
  * data, which the caption's own "Demo data" line already backs up.
  */
-export const PINNED_COMMENT = `${PINNED_COMMENT_LINK}: open this same screen with the demo data yourself. Sample account, not a real trader's data.`;
+export const PINNED_COMMENT = `${PINNED_COMMENT_LINK} - open this same screen with the demo data yourself. Sample account, not a real trader's data.`;
 
 /**
  * The link's tag for one video (owner approval 2026-10-04): the same wording, but the link carries the video's own id so the
@@ -23,7 +23,7 @@ export const PINNED_COMMENT = `${PINNED_COMMENT_LINK}: open this same screen wit
  */
 export function trackedSampleLink(campaignAssetId: string): string {
   const id = campaignAssetId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase();
-  return `${PINNED_COMMENT_LINK}?utm_source=video&utm_medium=organic_social&utm_content=${id}`;
+  return `${PINNED_COMMENT_LINK}?utm_source=video&utm_content=${id}`;
 }
 
 /** The comment to pin under a video. With the video's asset id the link is tagged to that video; without one it is the plain link. */
