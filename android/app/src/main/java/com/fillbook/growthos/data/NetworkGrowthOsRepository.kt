@@ -311,13 +311,8 @@ class NetworkGrowthOsRepository(
     override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult =
         enqueueAndAwaitCampaignRun(JSONObject().put("opportunityId", opportunityId))
 
-    override suspend fun requestVideoScript(topic: String?, opportunityId: String?, motionConceptId: String?): CampaignRunResult {
-        val body = JSONObject().put("assetType", "video_script")
-        if (topic != null) body.put("topic", topic)
-        if (opportunityId != null) body.put("opportunityId", opportunityId)
-        if (motionConceptId != null) body.put("motionConceptId", motionConceptId)
-        return enqueueAndAwaitCampaignRun(body)
-    }
+    override suspend fun requestVideoScript(motionConceptId: String): CampaignRunResult =
+        enqueueAndAwaitCampaignRun(JSONObject().put("assetType", "video_script").put("motionConceptId", motionConceptId))
 
     override suspend fun getMotionConcepts(): List<MotionConcept> {
         val json = get("/api/run-campaign")

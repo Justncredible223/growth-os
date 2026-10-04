@@ -37,7 +37,7 @@ interface GrowthOsRepository {
      * duplicate/invalid request surfaces as a plain [NetworkException]
      * with a real message from the backend's own 400/409 body.
      */
-    suspend fun requestVideoScript(topic: String?, opportunityId: String?, motionConceptId: String? = null): CampaignRunResult
+    suspend fun requestVideoScript(motionConceptId: String): CampaignRunResult
     /**
      * The small, fixed catalog of concepts that have REAL verified
      * product-motion footage (backend's src/shortform/pilots.ts +
@@ -392,7 +392,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         costUsd = 0.03,
     )
 
-    override suspend fun requestVideoScript(topic: String?, opportunityId: String?, motionConceptId: String?) = CampaignRunResult(
+    override suspend fun requestVideoScript(motionConceptId: String) = CampaignRunResult(
         finalStage = "ready_for_owner",
         blockReasons = emptyList(),
         costUsd = 0.09,
