@@ -9,18 +9,21 @@ describe("Arizona time helpers", () => {
   it("uses Arizona's fixed UTC-7 for the date and slot instants", () => {
     expect(phoenixDate(new Date("2026-09-26T05:30:00Z"))).toBe("2026-09-25"); // 22:30 Arizona, still the 25th
     expect(phoenixInstant("2026-09-25", "06:30").toISOString()).toBe("2026-09-25T13:30:00.000Z");
-    expect(phoenixInstant("2026-09-25", "17:30").toISOString()).toBe("2026-09-26T00:30:00.000Z");
+    expect(phoenixInstant("2026-09-25", "12:00").toISOString()).toBe("2026-09-25T19:00:00.000Z");
   });
 });
 
-describe("buildPostingPlan (3 videos a day at 6:30am, 12pm, 5:30pm Arizona)", () => {
-  it("fills slots with unposted videos, oldest first, and marks passed slots as due", () => {
+describe("buildPostingPlan (one video a day at 12pm Arizona)", () => {
+  it("fills the slot with the oldest unposted video, due once the time has passed, and counts the rest as backlog", () => {
     const plan = buildPostingPlan([video("b", "2026-09-24T02:00:00Z"), video("a", "2026-09-23T02:00:00Z"), video("c", "2026-09-25T02:00:00Z"), video("d", "2026-09-25T03:00:00Z")], NOW);
     expect(plan.date).toBe("2026-09-25");
-    expect(plan.slots.map((s) => s.video?.campaignAssetId)).toEqual(["a", "b", "c"]);
-    expect(plan.slots.map((s) => s.status)).toEqual(["due", "upcoming", "upcoming"]);
+    expect(plan.slots.map((s) => s.video?.campaignAssetId)).toEqual(["a"]);
+    // 10:00 Arizona is before the 12:00 slot.
+    expect(plan.slots.map((s) => s.status)).toEqual(["upcoming"]);
     expect(plan.slots[0]!.remaining).toEqual(["tiktok", "youtube_shorts", "instagram"]);
-    expect(plan.backlog).toBe(1);
+    expect(plan.backlog).toBe(3);
+    const afterNoon = buildPostingPlan([video("a", "2026-09-23T02:00:00Z")], new Date("2026-09-25T20:00:00Z"));
+    expect(afterNoon.slots[0]!.status).toBe("due");
   });
 
   it("keeps a video posted today in its slot, done once all three platforms are in", () => {
@@ -32,12 +35,13 @@ describe("buildPostingPlan (3 videos a day at 6:30am, 12pm, 5:30pm Arizona)", ()
     const plan = buildPostingPlan([video("new", "2026-09-25T01:00:00Z"), video("posted", "2026-09-24T01:00:00Z", posts)], NOW);
     expect(plan.slots[0]).toMatchObject({ status: "done", remaining: [] });
     expect(plan.slots[0]!.video?.campaignAssetId).toBe("posted");
-    expect(plan.slots[1]!.video?.campaignAssetId).toBe("new");
+    // The one slot is taken by the video posted today; the new one waits for tomorrow.
+    expect(plan.backlog).toBe(1);
   });
 
   it("shows what's left for a partly posted video", () => {
     const plan = buildPostingPlan([video("p", "2026-09-24T01:00:00Z", [{ platform: "tiktok", url: "https://tiktok.com/x", postedAt: "2026-09-25T13:40:00Z" }])], NOW);
-    expect(plan.slots[0]).toMatchObject({ status: "due", remaining: ["youtube_shorts", "instagram"] });
+    expect(plan.slots[0]).toMatchObject({ status: "upcoming", remaining: ["youtube_shorts", "instagram"] });
   });
 
   it("never brings back a video first posted on an earlier day, and leaves slots empty when nothing is ready", () => {

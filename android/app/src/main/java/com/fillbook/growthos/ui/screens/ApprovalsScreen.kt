@@ -279,8 +279,8 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             title = { Text("Render this video?") },
             text = {
                 Text(
-                    "\"${asset.campaignTitle}\" will queue on the render server now, unless today's video limit (3) " +
-                        "is already used (then it waits and renders automatically after the midnight reset). " +
+                    "\"${asset.campaignTitle}\" will queue on the render server now, unless today's render limit (3, " +
+                        "which leaves room to retry a failed render) is already used (then it waits and renders automatically after the midnight reset). " +
                         "Once it renders you'll get a notification and can download it from Video Status. " +
                         "This never posts anywhere on its own; you still choose to share it yourself.",
                 )

@@ -51,7 +51,7 @@ internal fun slotStatusLabel(slot: PlanSlot): Pair<String, StatusTone> = when (s
 }
 
 /**
- * Today's 3 posting slots, at the top of Video Status (owner request 2026-09-25). Each slot's video shows one chip per
+ * Today's posting slot, at the top of Video Status (owner request 2026-09-25). Each slot's video shows one chip per
  * platform: a check when its link is saved, otherwise a tap to add the link after posting.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -59,7 +59,7 @@ internal fun slotStatusLabel(slot: PlanSlot): Pair<String, StatusTone> = when (s
 fun PostingPlanCard(plan: PostingPlan, onAddLink: (PlanVideo, PostingPlatform) -> Unit) {
     GrowthCard(accentBar = Accent) {
         Text("Today's posting plan", style = MaterialTheme.typography.titleMedium)
-        Text("3 videos a day, Arizona time. Add each link after you post.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+        Text("One video a day, Arizona time. Add each link after you post.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
         Spacer(Modifier.height(10.dp))
         plan.slots.forEachIndexed { i, slot ->
             if (i > 0) Spacer(Modifier.height(12.dp))
@@ -83,7 +83,7 @@ fun PostingPlanCard(plan: PostingPlan, onAddLink: (PlanVideo, PostingPlatform) -
         }
         if (plan.backlog > 0) {
             Spacer(Modifier.height(8.dp))
-            Text("${plan.backlog} more ready video${if (plan.backlog == 1) "" else "s"} waiting for tomorrow's slots.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            Text("${plan.backlog} more ready video${if (plan.backlog == 1) "" else "s"} waiting for the next days.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
         }
     }
 }

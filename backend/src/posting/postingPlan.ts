@@ -2,15 +2,15 @@
  * The daily posting plan and the X reply-visibility check (owner request 2026-09-25). Pure functions: no I/O, so the
  * slot assignment and the alert threshold are fully testable. Data loading lives in postingRepository.ts.
  *
- * The owner posts 3 rendered videos a day, each to TikTok, YouTube Shorts and Instagram Reels, at fixed Arizona times
- * picked for a futures-trader audience: around the US open (9:30 ET), the midday lull, and after the close.
+ * The owner posts one rendered video a day (2026-10-04, matching the one-new-video-a-day limit in dailyLimit.ts) to TikTok,
+ * YouTube Shorts and Instagram Reels, at one fixed Arizona time. It was 3 a day at 6:30am, 12pm and 5:30pm until then.
  */
 
 export const POSTING_PLATFORMS = ["tiktok", "youtube_shorts", "instagram"] as const;
 export type PostingPlatform = (typeof POSTING_PLATFORMS)[number];
 
 /** Slot times, America/Phoenix (no daylight saving, so a fixed UTC-7 offset is exact all year). */
-export const POSTING_SLOT_TIMES = ["06:30", "12:00", "17:30"] as const;
+export const POSTING_SLOT_TIMES = ["12:00"] as const;
 const PHOENIX_OFFSET_MS = -7 * 60 * 60 * 1000;
 
 export interface PlanPost {
@@ -62,7 +62,7 @@ function remainingPlatforms(video: PlanVideo): PostingPlatform[] {
 }
 
 /**
- * Fills today's three slots. Videos first posted today keep the slots, in the order they went out; the rest go to
+ * Fills today's slot(s) (one a day now). Videos first posted today keep the slots, in the order they went out; the rest go to
  * ready videos that aren't fully posted yet, oldest first. A video posted before today never returns to the plan.
  */
 export function buildPostingPlan(videos: PlanVideo[], now: Date = new Date()): PostingPlan {

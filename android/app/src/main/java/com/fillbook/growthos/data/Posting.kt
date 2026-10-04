@@ -4,8 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The daily posting plan and results (backend/src/posting, 2026-09-25). The owner posts 3 videos a day at 6:30am,
- * 12pm and 5:30pm Arizona time, each to TikTok, YouTube Shorts and Instagram Reels. YouTube stats and X reply views
+ * The daily posting plan and results (backend/src/posting, 2026-09-25). The owner posts one video a day (from 2026-10-04) at
+ * 12pm Arizona time, to TikTok, YouTube Shorts and Instagram Reels. YouTube stats and X reply views
  * are pulled by the server; TikTok and Instagram numbers are typed in, since neither can be read automatically.
  */
 enum class PostingPlatform(val apiName: String, val label: String) {

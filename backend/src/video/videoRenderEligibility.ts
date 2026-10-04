@@ -35,7 +35,7 @@ export const MAX_VIDEO_RENDERS_PER_MONTH = 100;
  * "Day" is the owner's calendar day in America/Phoenix (migration 0037), so
  * the cap resets at local midnight; it was the UTC day (5 PM Phoenix time)
  * until 2026-09-20, when an afternoon approval was silently blocked.
- * Raised from 1 to 3 on 2026-09-25: the owner's posting plan is now 3 videos a day.
+ * Raised from 1 to 3 on 2026-09-25 for a 3-a-day posting plan. The plan is one a day now (2026-10-04); 3 stays so a failed render can be retried.
  */
 export const MAX_VIDEO_RENDERS_PER_DAY = 3;
 
