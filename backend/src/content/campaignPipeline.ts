@@ -250,7 +250,9 @@ export async function runCampaignPipeline(
   // purpose ("Check your target against...", "Same signal. Same loss."), so measuring it against OTHER catalog scripts
   // blocked every motion video after the first as "too similar". It is still checked against everything else.
   const recentForGate = motionConceptId ? context.recentTextsForSameTopic.filter((text) => !isCatalogMotionScript(text)) : context.recentTextsForSameTopic;
-  const mechanical = await factory.submitDraft("draft", draftText, recentForGate, { isVideo: isVideoAsset });
+  // An X post is laid out in short paragraphs (owner request 2026-10-04), so a long single block is sent back for a rewrite.
+  const requireParagraphs = platform === "x" && !isVideoAsset && context.assetTypeOverride !== "research";
+  const mechanical = await factory.submitDraft("draft", draftText, recentForGate, { isVideo: isVideoAsset, requireParagraphs });
   await campaignRepo.updateAssetStage(campaignAssetId, mechanical.newStage);
 
   if (!mechanical.advanced) {
