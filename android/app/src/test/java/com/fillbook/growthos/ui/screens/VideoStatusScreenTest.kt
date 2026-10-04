@@ -241,7 +241,8 @@ class VideoStatusScreenCreateVideoStructureTest {
         val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/VideoStatusScreen.kt")
             .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/VideoStatusScreen.kt") }
         check(file.exists()) { "Could not locate VideoStatusScreen.kt from working directory ${java.io.File(".").absolutePath}." }
-        return file.readText()
+        // A Windows checkout can have CRLF line endings; the searches below use LF.
+        return file.readText().replace("\r\n", "\n")
     }
 
     @Test

@@ -182,6 +182,7 @@ class NetworkGrowthOsRepository(
                 },
             ),
             todayXPost = json.optJSONObject("todayXPost").toTodayXPost(),
+            video = parseTodaysVideo(json.optJSONObject("video")),
             attribution = json.optJSONObject("attribution")?.let { attr ->
                 AttributionSummary(
                     signupsLast7Days = attr.optInt("signupsLast7Days", 0),
@@ -1246,5 +1247,20 @@ internal fun parseMotionConceptCatalog(json: JSONObject): MotionConceptCatalog {
             nextRequestAt = limit?.optString("nextRequestAt", "")?.takeIf { it.isNotBlank() && it != "null" },
         ),
         nextConceptId = json.optString("nextConceptId", "").takeIf { it.isNotBlank() && it != "null" },
+    )
+}
+
+
+/** Reads GET /api/summary's `video` block (null stays null: the card is simply not shown). */
+internal fun parseTodaysVideo(json: JSONObject?): TodaysVideo? {
+    if (json == null) return null
+    val state = runCatching { TodaysVideoState.valueOf(json.getString("state").uppercase()) }.getOrNull() ?: return null
+    return TodaysVideo(
+        state = state,
+        title = json.optString("title", "").takeIf { it.isNotBlank() && it != "null" },
+        day = json.optInt("day", 0).takeIf { it > 0 },
+        headline = json.optString("headline", ""),
+        detail = json.optString("detail", ""),
+        platformsPosted = json.optJSONArray("platformsPosted")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
     )
 }

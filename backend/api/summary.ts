@@ -1,3 +1,4 @@
+import { loadTodaysVideo } from "../src/video/todaysVideo.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
@@ -621,6 +622,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       monthAutoDraftSpendUsd,
       todayXPost,
       todaySpendUsd,
+      todaysVideo,
       recentConversions,
       recentPublications,
       recentLinkClicks,
@@ -651,6 +653,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         autoDraftRunRepo.getMonthSpendUsd(yearMonth),
         computeTodayXPostView(client, now),
         getTodaySpendUsd(client),
+        // The daily video's state for the Home card. A failure here must not break Home, so it resolves to null.
+        loadTodaysVideo(client, now).catch(() => null),
         // Attribution loop this session closed (see backend/src/attribution/):
         // FillbookHQ's signup webhook writes here. Surfaced on Home so the
         // loop is actually visible instead of a table nobody queries.
@@ -721,6 +725,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(200).json({
       todayXPost,
+      video: todaysVideo,
       signalsAnalyzedToday: signalsToday.count ?? 0,
       opportunitiesFound: openOpportunities.count ?? 0,
       assetsReady: readyAssetsAwaitingDecision.count ?? 0,
