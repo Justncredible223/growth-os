@@ -20,11 +20,11 @@ class CreateVideoDialogLabelsTest {
     }
 
     @Test
-    fun `the one-a-day message names today's concept and when the next request opens in Eastern time`() {
-        // 04:00 UTC on Oct 5 2026 is midnight Eastern (EDT), the start of Monday.
-        val message = dailyLimitMessage("Chased price: 10 trades, lost ${'$'}630", "2026-10-05T04:00:00.000Z")
+    fun `the one-a-day message names today's concept and when the next request opens in Arizona time`() {
+        // 07:00 UTC on Oct 5 2026 is midnight Arizona, the start of Monday.
+        val message = dailyLimitMessage("Chased price: 10 trades, lost ${'$'}630", "2026-10-05T07:00:00.000Z")
         assertTrue(message, message.contains("Today's video is already requested: \"Chased price: 10 trades, lost ${'$'}630\"."))
-        assertTrue(message, message.contains("The next request opens Mon 12:00 AM Eastern."))
+        assertTrue(message, message.contains("The next request opens Mon 12:00 AM Arizona time."))
     }
 
     @Test

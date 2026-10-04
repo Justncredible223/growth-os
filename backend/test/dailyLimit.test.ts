@@ -4,31 +4,25 @@ import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../src/opportunities/manualM
 
 const T = (name: string) => `${MANUAL_MOTION_CONCEPT_TITLE_PREFIX}${name}`;
 
-describe("a day is a calendar day in US Eastern", () => {
-  it("is the Eastern zone", () => {
-    expect(ONE_PER_DAY_ZONE).toBe("America/New_York");
+describe("a day is a calendar day in Arizona", () => {
+  it("is the Arizona zone, the same day the render cap and posting plan use", () => {
+    expect(ONE_PER_DAY_ZONE).toBe("America/Phoenix");
   });
 
-  it("starts at midnight Eastern: 04:00 UTC in summer (EDT), 05:00 UTC in winter (EST)", () => {
-    expect(startOfDay(new Date("2026-10-03T15:30:00Z")).toISOString()).toBe("2026-10-03T04:00:00.000Z");
-    expect(startOfDay(new Date("2026-12-15T15:30:00Z")).toISOString()).toBe("2026-12-15T05:00:00.000Z");
+  it("starts at midnight Arizona: 07:00 UTC all year (Arizona has no daylight saving)", () => {
+    expect(startOfDay(new Date("2026-10-03T15:30:00Z")).toISOString()).toBe("2026-10-03T07:00:00.000Z");
+    expect(startOfDay(new Date("2026-12-15T15:30:00Z")).toISOString()).toBe("2026-12-15T07:00:00.000Z");
   });
 
-  it("belongs to the previous Eastern day just after midnight UTC", () => {
-    // 01:00 UTC on Oct 4 is 9 pm Eastern on Oct 3.
-    expect(startOfDay(new Date("2026-10-04T01:00:00Z")).toISOString()).toBe("2026-10-03T04:00:00.000Z");
+  it("belongs to the previous Arizona day just after 07:00 UTC's midnight", () => {
+    // 06:00 UTC on Oct 4 is 11 pm Arizona on Oct 3.
+    expect(startOfDay(new Date("2026-10-04T06:00:00Z")).toISOString()).toBe("2026-10-03T07:00:00.000Z");
   });
 
-  it("lifts at the next Eastern midnight", () => {
-    expect(nextDayStart(new Date("2026-10-03T15:30:00Z")).toISOString()).toBe("2026-10-04T04:00:00.000Z");
-  });
-
-  it("handles the fall daylight-saving change: the day of Nov 1 2026 is 25 hours long", () => {
+  it("lifts at the next Arizona midnight, and every day is 24 hours (no clock change)", () => {
+    expect(nextDayStart(new Date("2026-10-03T15:30:00Z")).toISOString()).toBe("2026-10-04T07:00:00.000Z");
     const start = startOfDay(new Date("2026-11-01T12:00:00Z"));
-    const next = nextDayStart(new Date("2026-11-01T12:00:00Z"));
-    expect(start.toISOString()).toBe("2026-11-01T04:00:00.000Z");
-    expect(next.toISOString()).toBe("2026-11-02T05:00:00.000Z");
-    expect((next.getTime() - start.getTime()) / 3_600_000).toBe(25);
+    expect((nextDayStart(new Date("2026-11-01T12:00:00Z")).getTime() - start.getTime()) / 3_600_000).toBe(24);
   });
 });
 
@@ -52,11 +46,11 @@ describe("what counts as today's request", () => {
 });
 
 describe("the refusal message", () => {
-  it("names today's concept and when the next request opens, in Eastern time", () => {
+  it("names today's concept and when the next request opens, in Arizona time", () => {
     const msg = oneADayMessage(T("5 contracts against a plan of 3"), new Date("2026-10-03T15:30:00Z"));
     expect(msg).toContain("One video a day");
     expect(msg).toContain('"5 contracts against a plan of 3"');
-    expect(msg).toMatch(/Sun.*12:00 AM Eastern/);
+    expect(msg).toMatch(/Sun.*12:00 AM Arizona/);
     expect(msg).toMatch(/Reject that draft/);
   });
 });
