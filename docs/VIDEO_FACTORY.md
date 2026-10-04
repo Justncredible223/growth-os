@@ -386,7 +386,7 @@ Offered product-mock concepts are narrated (`voiceover: "narrated"`): `en-US-And
 at most two figures (`test/narratedMocks.test.ts`). A beat's audio is padded with silence to
 `MOCK_MIN_BEAT_SECONDS` (1.8 s) so a one-line beat still holds after its 1 s entrance. The slide
 already carries its own text, so no word-by-word subtitles are burned over a mock. The older drawn
-bar charts stay silent. Spoken length is roughly 16-25 s per concept at this pace.
+bar charts stay silent. Spoken lines are 11 words or fewer, whole dollars only (a voice reads cents slowly), and a rendered concept runs about 12-16 s.
 
 ## Music rotation
 

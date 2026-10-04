@@ -31,13 +31,17 @@ describe("narrated product mocks", () => {
     }
   });
 
-  it("keep every beat short enough to say in about three seconds", () => {
+  it("keep every beat short (11 words or fewer, about three seconds spoken)", () => {
     for (const p of offered) {
       for (const s of p.scenes) {
         const words = s.narration.split(/\s+/).length;
-        expect(words, `${p.planId}: "${s.narration}"`).toBeLessThanOrEqual(15);
+        expect(words, `${p.planId}: "${s.narration}"`).toBeLessThanOrEqual(11);
       }
     }
+  });
+
+  it("say whole dollars, never cents, which a voice reads out slowly", () => {
+    for (const p of offered) for (const s of p.scenes) expect(s.narration, p.planId).not.toMatch(/\$[\d,]+\.\d/);
   });
 
   it("hold each beat long enough to read after the one-second entrance", () => {
