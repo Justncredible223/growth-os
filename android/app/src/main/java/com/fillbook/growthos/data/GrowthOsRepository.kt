@@ -223,6 +223,9 @@ interface GrowthOsRepository {
     /** Deletes a failed or canceled render from the list so the owner can clear stuck items. */
     suspend fun dismissVideoRender(videoRenderId: String)
 
+    /** Re-queues a failed render. Returns null when queued, or the reason it was refused (a render cap). */
+    suspend fun retryVideoRender(videoRenderId: String): String?
+
     /**
      * Records the real external URL the owner pasted in after manually
      * posting a 'ready' video (TikTok/YouTube/Instagram). This is what
@@ -1336,6 +1339,8 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun dismissVideoRender(videoRenderId: String) {
         // No-op in fake mode.
     }
+
+    override suspend fun retryVideoRender(videoRenderId: String): String? = null
 
     override suspend fun setVideoPublishedUrl(videoRenderId: String, publishedUrl: String) {
         // No-op in fake mode.

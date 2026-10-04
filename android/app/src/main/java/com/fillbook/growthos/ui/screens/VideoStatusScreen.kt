@@ -361,6 +361,22 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
 
+    fun retry(render: VideoRenderStatus) {
+        scope.launch {
+            try {
+                val refusal = repo.retryVideoRender(render.id)
+                if (refusal == null) {
+                    snackbarHostState.showSnackbar("Render queued again. You get a push when it is ready.")
+                    renders = repo.getVideoRenderStatuses()
+                } else {
+                    snackbarHostState.showSnackbar("Not retried: $refusal")
+                }
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't retry — try again.")
+            }
+        }
+    }
+
     fun loadMotionConcepts() {
         scope.launch {
             loadingMotionConcepts = true
@@ -516,6 +532,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     onShare = { share(render) },
                                     onDownloadThumbnail = { downloadThumbnail(render) },
                                     onDismiss = { dismiss(render) },
+                                    onRetry = { retry(render) },
                                 )
                             }
                         }
@@ -711,6 +728,7 @@ private fun VideoRenderCard(
     onShare: () -> Unit,
     onDownloadThumbnail: () -> Unit,
     onDismiss: (() -> Unit)? = null,
+    onRetry: (() -> Unit)? = null,
 ) {
     val tone = statusTone(render.status)
     GrowthCard(accentBar = statusToneColor(tone)) {
@@ -746,6 +764,9 @@ private fun VideoRenderCard(
         render.error?.let { error ->
             Text(error, style = MaterialTheme.typography.bodySmall, color = Danger, maxLines = 4)
             Spacer(Modifier.height(6.dp))
+        }
+        if (render.status == "failed" && onRetry != null) {
+            TextButton(onClick = onRetry) { Text("Retry render") }
         }
         if (render.status == "queued" || render.status == "rendering") {
             Text(

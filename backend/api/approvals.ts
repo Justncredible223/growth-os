@@ -53,7 +53,7 @@ import {
 import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
-import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
+import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, retryFailedRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
@@ -471,6 +471,22 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
       res.status(200).json({ dismissed: true });
       return;
     }
+    if (body?.action === "retry-render") {
+      if (!body.videoRenderId) {
+        res.status(400).json({ error: "Body must include { action: 'retry-render', videoRenderId: string }" });
+        return;
+      }
+      try {
+        res.status(200).json(await retryFailedRender(client, body.videoRenderId));
+      } catch (err) {
+        if (err instanceof VideoStatusActionError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      return;
+    }
     if (body?.action === "set-published-url") {
       if (!body.videoRenderId || !body.publishedUrl) {
         res.status(400).json({ error: "Body must include { action: 'set-published-url', videoRenderId: string, publishedUrl: string }" });
@@ -492,7 +508,7 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
       res.status(400).json({
         error:
           "Body must be { action: 'register-device', fcmToken: string }, { action: 'dismiss', videoRenderId: string }, " +
-          "or { action: 'set-published-url', videoRenderId: string, publishedUrl: string }",
+          "{ action: 'retry-render', videoRenderId: string }, or { action: 'set-published-url', videoRenderId: string, publishedUrl: string }",
       });
       return;
     }

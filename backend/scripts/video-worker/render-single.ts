@@ -461,6 +461,31 @@ export async function runRender(videoRenderId: string, campaignAssetId: string, 
   return { storagePath, thumbnailPath, durationSeconds, motionSelection };
 }
 
+/**
+ * Pushes "render failed" to every registered device (owner request, 2026-10-04: a failed render was silent until the owner opened the
+ * app). Best effort: a push problem must never mask the real failure, so it never throws.
+ */
+export async function notifyRenderFailed(
+  client: SupabaseClient,
+  videoRenderId: string,
+  message: string,
+  sendPush: typeof sendRenderNotification,
+): Promise<void> {
+  try {
+    const [{ data: devices }, { data: render }] = await Promise.all([
+      client.from("device_push_tokens").select("fcm_token").is("revoked_at", null),
+      client.from("video_renders").select("campaign_assets(campaigns(thesis))").eq("id", videoRenderId).maybeSingle(),
+    ]);
+    const campaignTitle =
+      (render as { campaign_assets?: { campaigns?: { thesis?: string } } } | null)?.campaign_assets?.campaigns?.thesis ?? "Your video";
+    for (const device of (devices ?? []) as Array<{ fcm_token: string }>) {
+      await sendPush(device.fcm_token, { videoRenderId, kind: "failed", campaignTitle, error: message.slice(0, 120) });
+    }
+  } catch (err) {
+    console.error("[render-single] failure push could not be sent:", (err as Error).message ?? err);
+  }
+}
+
 async function main(): Promise<void> {
   const videoRenderId = requireEnv("VIDEO_RENDER_ID");
   const campaignAssetId = requireEnv("CAMPAIGN_ASSET_ID");
@@ -503,6 +528,7 @@ if (isMainModule) {
           .from("video_renders")
           .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
           .eq("id", videoRenderId);
+        await notifyRenderFailed(client, videoRenderId, message, sendRenderNotification);
       }
     } catch (dbErr) {
       console.error("[render-single] also failed to write failure to DB:", (dbErr as Error).message ?? dbErr);

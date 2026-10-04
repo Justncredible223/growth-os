@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import { extractYoutubeVideoId } from "./youtubeUrl.js";
 import { buildPinnedComment } from "./pinnedComment.js";
+import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "./videoRenderEligibility.js";
 
 /**
  * The platform-specific publishing metadata generated alongside the video
@@ -235,6 +236,44 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
 }
 
 export class VideoStatusActionError extends Error {}
+
+export interface RetryRenderResult {
+  queued: boolean;
+  /** Why nothing was queued (a render cap), shown to the owner. Null when queued. */
+  reason: string | null;
+}
+
+/**
+ * Re-queues a render that failed (owner tapped Retry, 2026-10-04). Goes through the same atomic enqueue_video_render RPC as approval,
+ * so the monthly/daily caps and the one-live-render-per-asset guard still apply. Only a failed render can be retried. The failed row
+ * is removed once the new one exists, so the list shows one card for the video, not a failure beside its retry.
+ */
+export async function retryFailedRender(client: SupabaseClient, videoRenderId: string): Promise<RetryRenderResult> {
+  const { data, error } = await client.from("video_renders").select("campaign_asset_id, status").eq("id", videoRenderId).maybeSingle();
+  if (error) throw new Error(`retryFailedRender fetch failed: ${error.message}`);
+  if (!data) throw new VideoStatusActionError(`video render not found: ${videoRenderId}`);
+  const { campaign_asset_id: campaignAssetId, status } = data as { campaign_asset_id: string; status: string };
+  if (status !== "failed") throw new VideoStatusActionError("Only a failed render can be retried.");
+
+  const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
+    p_campaign_asset_id: campaignAssetId,
+    p_monthly_cap: MAX_VIDEO_RENDERS_PER_MONTH,
+    p_daily_cap: MAX_VIDEO_RENDERS_PER_DAY,
+  });
+  if (enqueueError) throw new Error(`retryFailedRender enqueue failed: ${enqueueError.message}`);
+  const row = (Array.isArray(enqueueData) ? enqueueData[0] : enqueueData) as { eligible?: boolean; reason?: string | null } | undefined;
+  if (!row?.eligible) return { queued: false, reason: row?.reason ?? "The render could not be queued." };
+
+  // The failed row's children first (they reference it without ON DELETE CASCADE), then the row itself.
+  const { error: notifError } = await client.from("video_render_notifications").delete().eq("video_render_id", videoRenderId);
+  if (notifError) throw new Error(`retryFailedRender notif delete failed: ${notifError.message}`);
+  const { error: reserveError } = await client.from("video_storage_reservations").delete().eq("video_render_id", videoRenderId);
+  if (reserveError) throw new Error(`retryFailedRender reservation delete failed: ${reserveError.message}`);
+  const { error: deleteError } = await client.from("video_renders").delete().eq("id", videoRenderId);
+  if (deleteError) throw new Error(`retryFailedRender delete failed: ${deleteError.message}`);
+  return { queued: true, reason: null };
+}
+
 
 /**
  * Records the real external URL the owner pasted in after manually
