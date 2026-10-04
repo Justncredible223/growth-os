@@ -86,3 +86,32 @@ class PostingResultsTest {
         assertEquals(12 to 0, at3.withZoneSameInstant(az).let { it.hour to it.minute })
     }
 }
+
+/** Video Status polish (2026-10-04): auto-refresh, dismiss confirmation and the concept heading. */
+class VideoStatusPolishTest {
+    private fun render(status: String) = com.fillbook.growthos.data.VideoRenderStatus(
+        id = "r", campaignAssetId = "a", status = status, downloadUrl = null, thumbnailDownloadUrl = null,
+        durationSeconds = null, error = null, createdAt = "t", updatedAt = "t", videoMetadata = null,
+    )
+
+    @Test
+    fun refreshesOnlyWhileSomethingIsInProgress() {
+        assertEquals(true, shouldAutoRefresh("queued"))
+        assertEquals(true, shouldAutoRefresh("rendering"))
+        assertEquals(false, shouldAutoRefresh("ready"))
+        assertEquals(false, shouldAutoRefresh("failed"))
+    }
+
+    @Test
+    fun onlyAFinishedVideoAsksBeforeItIsDeleted() {
+        assertEquals(true, needsDismissConfirm(render("ready")))
+        assertEquals(false, needsDismissConfirm(render("failed")))
+        assertEquals(false, needsDismissConfirm(render("queued")))
+    }
+
+    @Test
+    fun headingShowsTheDayWhenKnown() {
+        assertEquals("Day 5 · Five contracts", videoCardHeading(5, "Five contracts"))
+        assertEquals("Five contracts", videoCardHeading(null, "Five contracts"))
+    }
+}
