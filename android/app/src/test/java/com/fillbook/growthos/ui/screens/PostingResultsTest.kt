@@ -153,3 +153,16 @@ class XPostCounterTest {
         assertEquals("2 / 280", xPostCounter("  hi \n").first)
     }
 }
+
+class ReplaceXDraftTest {
+    private fun post(state: com.fillbook.growthos.data.TodayXPostState, id: String? = "a") = com.fillbook.growthos.data.TodayXPost(state, id, "text")
+
+    @Test
+    fun onlyAReadyDraftCanBeReplaced() {
+        assertEquals(true, canReplaceXDraft(post(com.fillbook.growthos.data.TodayXPostState.READY)))
+        assertEquals(false, canReplaceXDraft(post(com.fillbook.growthos.data.TodayXPostState.READY, null)))
+        assertEquals(false, canReplaceXDraft(post(com.fillbook.growthos.data.TodayXPostState.HANDED_OFF)))
+        assertEquals(false, canReplaceXDraft(post(com.fillbook.growthos.data.TodayXPostState.POSTED)))
+        assertEquals(false, canReplaceXDraft(null))
+    }
+}
