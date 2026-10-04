@@ -18,6 +18,7 @@ import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/video/videoRenderReconciliation.js";
 import { runDailyChartCardRequests } from "../src/video/dailyChartCardRequests.js";
+import { expireStuckCampaignRuns } from "../src/video/campaignRunSweep.js";
 import { motionRequestedToday } from "../src/video/dailyLimit.js";
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
@@ -278,6 +279,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     results.push(
       await runStep("video_render_dispatch_sweep", () => sweepStuckVideoRenderDispatches(process.env.SUPABASE_SERVICE_ROLE_KEY as string)),
     );
+    // A draft run that never finished (a dead dispatch, a killed job) would hold its concept and the day's one request forever;
+    // after 25 minutes with no update it is marked failed so the refill below can try again. See campaignRunSweep.ts.
+    results.push(await runStep("campaign_run_sweep", () => expireStuckCampaignRuns(client)));
     // Keeps a few chart cards waiting in Approvals (owner request 2026-10-01). It only queues drafts; approving, and so
     // rendering, stays the owner's action. Bounded: one request a day, at most 1 waiting at once, each concept requested once.
     results.push(
