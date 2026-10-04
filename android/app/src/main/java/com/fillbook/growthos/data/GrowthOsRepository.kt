@@ -91,7 +91,7 @@ interface GrowthOsRepository {
      * Returns the render outcome when an approved asset was a video script (queued, already running, or
      * refused with a reason such as the daily render limit), and null otherwise.
      */
-    suspend fun decideApproval(campaignAssetId: String, approve: Boolean): VideoRenderOutcome?
+    suspend fun decideApproval(campaignAssetId: String, approve: Boolean, reason: String? = null): VideoRenderOutcome?
     /** Wires CampaignFactory.handOffToOwner() -- EXTERNAL_DRAFT only, "opened the composer," never a publish. */
     suspend fun handOffAsset(campaignAssetId: String): HandOffResult
 
@@ -501,7 +501,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         totalCalls = 20,
     )
 
-    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean): VideoRenderOutcome? {
+    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean, reason: String?): VideoRenderOutcome? {
         // No backend to call in fake mode -- no-op.
         return null
     }

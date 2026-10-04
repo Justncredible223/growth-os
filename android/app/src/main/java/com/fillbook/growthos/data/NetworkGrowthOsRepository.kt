@@ -423,11 +423,12 @@ class NetworkGrowthOsRepository(
         )
     }
 
-    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean): VideoRenderOutcome? {
+    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean, reason: String?): VideoRenderOutcome? {
         val body = JSONObject()
             .put("campaignAssetId", campaignAssetId)
             .put("action", if (approve) "approve" else "reject")
             .put("decidedBy", deciderName)
+        if (!approve && !reason.isNullOrBlank()) body.put("reason", reason)
         return parseVideoRenderOutcome(post("/api/approvals", body))
     }
 

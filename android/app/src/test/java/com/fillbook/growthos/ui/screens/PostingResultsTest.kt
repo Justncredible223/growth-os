@@ -115,3 +115,12 @@ class VideoStatusPolishTest {
         assertEquals("Five contracts", videoCardHeading(null, "Five contracts"))
     }
 }
+
+class RejectReasonsTest {
+    @Test
+    fun offersShortDistinctReasons() {
+        assertTrue(REJECT_REASONS.size in 3..6)
+        assertEquals(REJECT_REASONS.size, REJECT_REASONS.toSet().size)
+        assertTrue(REJECT_REASONS.all { it.length <= 40 })
+    }
+}
