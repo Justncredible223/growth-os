@@ -20,8 +20,8 @@ describe("computeReplyPacing (burst posting got @FillbookHQ's replies hidden, 20
     expect(computeReplyPacing([minutesAgo(20)], NOW).reason).toBeNull();
   });
 
-  it("caps replies at 5 in any rolling 24 hours, reopening when the oldest of them turns 24h old", () => {
-    const pacing = computeReplyPacing([minutesAgo(30), minutesAgo(90), minutesAgo(200), minutesAgo(600), minutesAgo(1380)], NOW);
+  it("caps replies at 10 in any rolling 24 hours, reopening when the oldest of them turns 24h old", () => {
+    const pacing = computeReplyPacing([30, 90, 150, 210, 300, 420, 600, 800, 1000, 1380].map(minutesAgo), NOW);
     expect(pacing.repliedLast24h).toBe(DAILY_REPLY_CAP);
     expect(pacing.reason).toBe("daily_cap");
     expect(pacing.nextReplyAt).toBe(minutesAgo(1380 - 1440));

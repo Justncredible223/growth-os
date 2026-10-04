@@ -7,8 +7,13 @@
 
 /** Minimum gap between two replies. */
 export const REPLY_COOLDOWN_MS = 20 * 60 * 1000;
-/** At most this many replies in any rolling 24 hours. */
-export const DAILY_REPLY_CAP = 5;
+/**
+ * At most this many replies in any rolling 24 hours. Raised from 5 to 10 on 2026-10-04: X publishes no safe daily count (its
+ * hard limit for an unverified account is about 200 replies a day), and what got the account's replies hidden was the burst
+ * (8 in 8 minutes), not the total. 10 spaced at least 20 minutes apart is a human pace; recovery mode (2 a day) still takes
+ * over automatically if reply views drop.
+ */
+export const DAILY_REPLY_CAP = 10;
 /**
  * Recovery mode (2026-09-26): while X is limiting the account's replies (Results' reply-visibility check reads
  * "dropped"), cold replies are held to 2 a day, only on posts under 4 hours old, and drafts never name Fillbook.
