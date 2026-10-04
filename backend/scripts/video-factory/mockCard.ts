@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, type MockBoxName } from "../../src/shortform/mockLayout.js";
-import type { ChartSpec, ChartTone } from "../../src/shortform/types.js";
+import { DETAIL_FOOTER, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, WINDOW_BAR, cursorPath, heroFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
+import type { ChartSpec, ChartTone, MockRow } from "../../src/shortform/types.js";
 import { VideoFactoryError } from "./types.js";
 
 /**
@@ -39,77 +39,66 @@ body{position:relative;color:var(--ink);font-family:MR,sans-serif;background:rad
 [data-box]{position:absolute}
 ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px}`).join("\n")}
 .logo{height:58px}
-.eyebrow{font:700 28px/36px MR;letter-spacing:.16em;color:var(--cyan);white-space:nowrap;overflow:hidden}
-.headline{font:700 ${MOCK_FONT.headline}px/${MOCK_FONT.headlineLine}px SG;letter-spacing:-.02em;overflow:hidden}
-.headline div{white-space:nowrap;overflow:hidden;height:${MOCK_FONT.headlineLine}px}.headline .accent{color:var(--cyan)}
-.win{border:2px solid var(--line);border-radius:26px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}
-.bar{display:flex;align-items:center;gap:12px;height:60px;padding:0 28px;border-bottom:2px solid var(--line);font:600 24px MR;color:var(--dim);white-space:nowrap}
+.label{font:700 ${MOCK_FONT.heroLabel}px/46px MR;letter-spacing:.16em;color:var(--cyan);white-space:nowrap;overflow:hidden}
+.hero{font-family:SG;font-weight:700;letter-spacing:-.04em;line-height:250px;white-space:nowrap;overflow:hidden}
+.big{font:700 ${MOCK_FONT.big}px/${MOCK_FONT.bigLine}px SG;letter-spacing:-.02em;overflow:hidden}.big em{font-style:normal;color:var(--cyan)}
+.good{color:var(--good)}.bad{color:var(--bad)}
+.win{border:2px solid var(--line);border-radius:28px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.bar{display:flex;align-items:center;gap:12px;height:${WINDOW_BAR}px;padding:0 28px;border-bottom:2px solid var(--line);font:600 26px MR;color:var(--dim);white-space:nowrap}
 .dot{width:16px;height:16px;border-radius:50%;background:#252f3b;flex:none}
-.bar .t{margin-left:14px}.bar .tag{margin-left:auto;font-size:20px;letter-spacing:.12em}
-table{width:100%;border-collapse:collapse}
-th{height:48px;font:700 20px MR;letter-spacing:.14em;color:var(--dim);text-align:left;padding:0 28px;white-space:nowrap}
-td{height:82px;font:500 32px JB;padding:0 28px;border-top:2px solid var(--line);white-space:nowrap}
-.r{text-align:right}.bad{color:var(--bad)}.good{color:var(--good)}
-.step{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
-.step span{border:2px solid #14566a;background:#0b2b34;color:var(--cyan);font:700 24px MR;letter-spacing:.14em;border-radius:999px;padding:10px 30px;white-space:nowrap}
-.step svg{width:34px;height:34px;stroke:var(--cyan);fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
-.stats{display:flex;gap:20px;padding:12px 28px 12px}
-.stat{flex:1;height:190px;border:2px solid var(--line);border-radius:20px;background:var(--bg2);padding:14px 22px;overflow:hidden}
-.stat .k{font:700 18px/24px MR;letter-spacing:.12em;color:var(--dim);height:44px;overflow:hidden}
-.stat .v{font:700 64px/72px SG;white-space:nowrap}.stat .v small{font:600 26px MR;color:var(--mute);margin-left:8px}
-.meter{height:14px;border-radius:9px;background:#1b2531;margin-top:10px;position:relative}
+.bar .t{margin-left:14px}.bar .g{margin-left:auto;font-size:22px;letter-spacing:.12em}
+.row{position:relative;padding:0 30px;border-top:2px solid var(--line);white-space:nowrap;overflow:hidden}
+.row .in{display:flex;align-items:center;gap:20px;height:100%}
+.bar + .row{border-top:0}
+.row .lt{min-width:0;flex:1}
+.row .l{font:600 ${MOCK_FONT.rowLabel}px/52px MR;color:var(--ink)}
+.row .s{font:500 ${MOCK_FONT.rowSub}px/32px MR;color:var(--dim)}
+.row .v{font:700 ${MOCK_FONT.rowValue}px JB;margin-left:auto}
+.row .ring{position:absolute;inset:5px;border:5px solid var(--cyan);border-radius:18px;background:rgba(34,184,220,.08);opacity:0;pointer-events:none}
+.row .ring.bad{border-color:var(--bad);background:rgba(248,113,113,.09)}
+.meter{height:14px;border-radius:9px;background:#1b2531;margin-top:8px;position:relative;width:100%}
 .meter i{position:absolute;left:0;top:0;bottom:0;width:100%;border-radius:9px;background:linear-gradient(90deg,#0891b2,#22b8dc)}
 .meter b{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--ink)}
-.note{font:600 20px/26px MR;color:var(--dim);margin-top:4px;white-space:nowrap}
+.det .row .l{font-size:34px;line-height:40px}.det .row .v{font-size:38px}
+.foot{height:${DETAIL_FOOTER}px;line-height:${DETAIL_FOOTER}px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 .caption{font:700 ${MOCK_FONT.caption}px/${MOCK_BOXES.caption.h}px MR;color:var(--ink);white-space:nowrap;overflow:hidden}
-.cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid #14566a;background:#0b2b34;border-radius:28px;padding:0 44px;font:700 46px/60px SG;color:var(--ink)}
-.det td{height:86px;font:600 30px MR;color:var(--ink)}.det td.r{font:700 32px JB}
-.win.d{display:flex;flex-direction:column}.win.d .foot{margin-top:auto}
-.foot{height:56px;line-height:56px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
-.hl{outline:4px solid var(--cyan);outline-offset:-4px;border-radius:14px}
-.dim{opacity:.3}
-.hidden{visibility:hidden}
+.cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid #14566a;background:#0b2b34;border-radius:28px;padding:0 44px;font:700 50px/66px SG;color:var(--ink)}
+.cursor{position:absolute;width:64px;height:64px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));pointer-events:none}
 `;
-
-/** A figure on its own in a line of text ("$657", "-$57", "71%", "2.5x", "$3,822"), so it can count up. A time such as "10:30" is not one. */
-const COUNT_TOKEN = /(?<![\w:.,])-?\$?\d[\d,]*(?:\.\d+)?[%x]?(?=[.,]?(?:\s|$))/g;
 
 /**
  * The page's animation driver. seek(t) draws every element at t ms into the beat, so a frame is a pure function of its time
- * (no running animation to race the screenshot); seek(Infinity) is the finished slide, identical to the old still.
+ * (no running animation to race the screenshot); seek(Infinity) is the finished slide.
+ *   settle  visible from the first frame, drifts and shrinks into place (the payoff figure is on screen at t=0)
+ *   slideup rises and fades in     rowin  slides in from the left     fade  fades in     pop  scales in
+ *   dimrow  fades to 35%           ring   fades in with a small scale (the "click")
+ *   data-cur="x0,y0,x1,y1"  the cursor travels from (x0,y0) to (x1,y1) starting at data-d
  */
 const PAGE_SCRIPT = `
 const ease = (p) => 1 - Math.pow(1 - p, 3);
 const DUR = 460;
-function fmt(target, t) {
-  const m = target.match(/^(-?)(\\$?)(\\d[\\d,]*)(\\.\\d+)?([%x]?)$/);
-  if (!m) return target;
-  const dec = m[4] ? m[4].length - 1 : 0, comma = m[3].includes(","), full = parseFloat(m[3].replace(/,/g, "") + (m[4] || ""));
-  let v = (full * t).toFixed(dec);
-  if (comma) v = Number(v).toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-  return m[1] + m[2] + v + m[5];
-}
 window.seek = (ms) => {
   for (const el of document.querySelectorAll("[data-a]")) {
     const kind = el.dataset.a, p = Math.min(1, Math.max(0, (ms - Number(el.dataset.d)) / DUR)), e = ease(p);
-    const cells = el.tagName === "TR" ? [...el.children] : [el];
-    if (kind === "dimin") el.style.opacity = String(1 - 0.7 * e);
+    if (kind === "settle") { el.style.opacity = "1"; el.style.transform = "translateY(" + (1 - e) * 26 + "px) scale(" + (1 + (1 - e) * 0.05) + ")"; el.style.transformOrigin = "left center"; }
+    else if (kind === "dimrow") el.style.opacity = String(1 - 0.65 * e);
+    else if (kind === "ring") { el.style.opacity = String(e); el.style.transform = "scale(" + (1.03 - 0.03 * e) + ")"; }
+    else if (kind === "rowin") { el.style.opacity = String(e); el.style.transform = "translateX(" + (1 - e) * -50 + "px)"; }
     else el.style.opacity = String(e);
     if (kind === "slideup") el.style.transform = "translateY(" + (1 - e) * 70 + "px)";
     if (kind === "pop") el.style.transform = "scale(" + (0.9 + 0.1 * e) + ")";
-    if (kind === "dimin") el.style.opacity = String(1 - 0.7 * e);
-    if (kind === "rowin") for (const c of cells) c.style.transform = "translateX(" + (1 - e) * -50 + "px)";
-    if (kind === "grow") { el.style.opacity = "1"; el.style.transformOrigin = "left"; el.style.transform = "scaleX(" + e + ")"; }
   }
-  for (const el of document.querySelectorAll("[data-count]")) {
-    const delay = Number(el.closest("[data-d]")?.dataset.d ?? 0) + 120;
-    const p = Math.min(1, Math.max(0, (ms - (el.dataset.delay ? Number(el.dataset.delay) : delay)) / 700));
-    const u = el.querySelector("small");
-    const text = fmt(el.dataset.count, ease(p));
-    if (u) el.firstChild.textContent = text; else el.textContent = text;
+  for (const el of document.querySelectorAll("[data-cur]")) {
+    const [x0, y0, x1, y1] = el.dataset.cur.split(",").map(Number);
+    const p = Math.min(1, Math.max(0, (ms - Number(el.dataset.d)) / 520)), e = ease(p);
+    el.style.left = x0 + (x1 - x0) * e + "px";
+    el.style.top = y0 + (y1 - y0) * e + "px";
+    el.style.opacity = ms < Number(el.dataset.d) - 120 ? "0" : "1";
   }
 };
 `;
+
+const CURSOR_SVG = `<svg viewBox="0 0 24 24"><path d="M3 2l7 19 3-8 8-3z" fill="#fff" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 
 /** The slide's HTML for one beat. Pure: the same frame always gives the same markup. */
 export function buildMockHtml(frame: MockFrame): string {
@@ -118,45 +107,71 @@ export function buildMockHtml(frame: MockFrame): string {
   if (!m) throw new VideoFactoryError("mockCard: a mock chart scene has no mock spec (validateScenePlan should have refused it).");
   const stage = chart.stage;
   const closing = chart.dim === true;
-  // Stage 4 of a mock with details swaps the step and result windows for the detail card.
-  const detail = m.details !== undefined && stage === 4 && !closing;
-  const showResult = stage >= 2 && !detail;
-  const lastRow = m.source.rows.length - 1;
   const box = (name: MockBoxName): string => `data-box="${name}"`;
   // Entrance motion: each element that appears or changes on this beat carries data-a (kind) and data-d (delay, ms); seek() in the page draws it.
   const a = (kind: string, delay: number): string => ` data-a="${kind}" data-d="${delay}"`;
-  const first = stage === 1;
-  const lines = chart.lines
-    .map((l, i) => {
-      // On the opening beat the figures in the headline count up from zero, so frame one already moves.
-      const text = first ? esc(l).replace(COUNT_TOKEN, (t) => `<span data-count="${t}">${t}</span>`) : esc(l);
-      return `<div class="${i >= m.accentFrom ? "accent" : ""}"${first ? a("slideup", 60 + i * 110) : ""}>${text}</div>`;
-    })
-    .join("");
-  const rows = m.source.rows
-    .map((r, i) => `<tr${first ? a("rowin", 380 + i * 120) : ""}><td>${esc(r.when)}</td><td>${esc(r.symbol)}</td><td class="r ${toneClass(r.tone)}${stage === 3 && i === lastRow ? " hl" : ""}">${esc(r.value)}</td></tr>`)
-    .join("");
-  const stats = m.result.stats
-    .map((s, i) => {
-      const meter = s.meter ? `<div class="meter"><i${stage === 2 ? a("grow", 520) : ""}></i><b style="left:${Math.round(s.meter.markAt * 1000) / 10}%"></b></div>` : "";
-      const unit = s.unit ? `<small>${esc(s.unit)}</small>` : "";
-      const note = s.note ? `<div class="note">${esc(s.note)}</div>` : "";
-      return `<div class="stat${stage === 3 && i === 1 ? " hl" : ""}"${stage === 3 && i === 1 ? a("pop", 0) : ""}><div class="k">${esc(s.label)}</div><div class="v"${stage === 2 ? ` data-count="${esc(s.value)}"` : ""}>${esc(s.value)}${unit}</div>${meter}${note}</div>`;
-    })
-    .join("");
+  const heroHtml = (h: { label: string; value: string; tone: ChartTone }, labelBox: MockBoxName, heroBox: MockBoxName, delay: number): string =>
+    `<div ${box(labelBox)} class="label" data-fit${a("settle", delay)}>${esc(h.label.toUpperCase())}</div>` +
+    `<div ${box(heroBox)} class="hero ${toneClass(h.tone)}" data-fit style="font-size:${heroFontSize(h.value)}px"${a("settle", delay)}>${esc(h.value)}</div>`;
+  const windowHtml = (w: { title: string; rows: MockRow[] }, kind: "window" | "windowLow", opts: { focus?: number; enter: "slideup" | "none"; rowDelay: number }): string => {
+    const g = windowGeometry(w.rows.length, kind);
+    const rows = w.rows
+      .map((r, i) => {
+        const meter = r.meter ? `<div class="meter"><i></i><b style="left:${Math.round(r.meter.markAt * 1000) / 10}%"></b></div>` : "";
+        const dimmed = opts.focus !== undefined && i !== opts.focus;
+        const enter = opts.enter === "slideup" ? a("rowin", opts.rowDelay + i * 110) : "";
+        const dim = dimmed ? a("dimrow", 700) : "";
+        const ring = opts.focus === i ? `<i class="ring ${r.tone === "bad" ? "bad" : ""}"${a("ring", 700)}></i>` : "";
+        return `<div class="row" data-fit style="height:${g.rowH}px"${enter}>${ring}<div class="in"${dim}><div class="lt"><div class="l">${esc(r.label)}</div>${r.sub ? `<div class="s">${esc(r.sub)}</div>` : ""}${meter}</div><b class="v ${toneClass(r.tone)}">${esc(r.value)}</b></div></div>`;
+      })
+      .join("");
+    return `<div ${box(kind)} class="win" style="top:${g.top}px;height:${g.height}px"${opts.enter === "slideup" ? a("slideup", 120) : ""}><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(w.title)}</span><span class="g">${esc(m.tag.toUpperCase())}</span></div>${rows}</div>`;
+  };
+  const bigText = (text: string): string => {
+    // The last word is drawn in the accent colour, or the last three of a long line ("side by side.").
+    const words = text.split(" ");
+    const accent = words.slice(words.length >= 5 ? -3 : -1);
+    const plain = words.slice(0, words.length - accent.length);
+    return `<div ${box("big")} class="big" data-fit${a("settle", 0)}>${esc(plain.join(" "))}${plain.length > 0 ? " " : ""}<em>${esc(accent.join(" "))}</em></div>`;
+  };
+  let content = "";
+  let showCaption = true;
+  if (stage === 1 || (stage >= 2 && stage <= 3 && !closing)) {
+    if (stage === 1) {
+      const [h1, h2] = m.opening;
+      content += heroHtml(h1!, "label", "hero", 0);
+      if (h2) content += heroHtml(h2, "label2", "hero2", 120);
+      content += windowHtml(m.windows[0]!, h2 ? "windowLow" : "window", { enter: "slideup", rowDelay: 360 });
+    } else {
+      const f = m.focus[stage - 2]!;
+      const prev = stage === 3 ? m.focus[0] : undefined;
+      const sameWindow = prev !== undefined && prev.window === f.window;
+      content += heroHtml(f.hero, "label", "hero", 0);
+      content += windowHtml(m.windows[f.window]!, "window", { focus: f.row, enter: sameWindow ? "none" : "slideup", rowDelay: 300 });
+      // The cursor travels to the ringed row; on beat 3 it starts where beat 2 left it when the window is the same one.
+      const n = m.windows[f.window]!.rows.length;
+      const path = cursorPath(n, f.row, "window");
+      const from = sameWindow ? cursorPath(n, prev!.row, "window").to : path.from;
+      content += `<div class="cursor" data-cur="${from.x},${from.y},${path.to.x},${path.to.y}" data-d="${sameWindow ? 100 : 200}" style="left:${from.x}px;top:${from.y}px">${CURSOR_SVG}</div>`;
+    }
+  } else if (stage === 4 && !closing && m.details) {
+    showCaption = false;
+    content += bigText(frame.captionText);
+    const d = m.details;
+    const g = windowGeometry(d.rows.length, "window", true);
+    const rows = d.rows
+      .map((r, i) => `<div class="row" data-fit style="height:${g.rowH}px"${a("rowin", 300 + i * 110)}><div class="in"><div class="lt"><div class="l">${esc(r.label)}</div></div><b class="v ${toneClass(r.tone)}">${esc(r.value)}</b></div></div>`)
+      .join("");
+    content += `<div ${box("window")} class="win det" style="top:${g.top}px;height:${g.height}px"${a("slideup", 120)}><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(d.title)}</span><span class="g">${esc(m.tag.toUpperCase())}</span></div>${rows}<div class="foot"${a("fade", 760)}>${esc(d.footer)}</div></div>`;
+  } else {
+    showCaption = false;
+    content += bigText(frame.captionText);
+    if (frame.cta) content += `<div ${box("cta")} class="cta"${a("pop", 200)}>${esc(frame.cta)}</div>`;
+  }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>
 <img ${box("logo")} class="logo" src="${url("fillbook-horizontal-white.svg")}">
-<div ${box("eyebrow")} class="eyebrow" data-fit${first ? a("fade", 0) : ""}>${esc(m.eyebrow)}</div>
-<div ${box("headline")} class="headline" data-fit>${lines}</div>
-<div ${box("source")} class="win${closing ? "" : ""}"${first ? a("slideup", 220) : closing ? a("dimin", 0) : ""}><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(m.source.title)}</span></div>
-<table><tr><th>${esc(m.source.columns[0])}</th><th>${esc(m.source.columns[1])}</th><th class="r">${esc(m.source.columns[2])}</th></tr>${rows}</table></div>
-<div ${box("step")} class="step${showResult ? "" : " hidden"}"${stage === 2 ? a("pop", 0) : closing ? a("dimin", 0) : ""}><span>${esc(m.step)}</span><svg viewBox="0 0 44 44"><path d="M22 6v30M10 25l12 12 12-12"/></svg></div>
-<div ${box("result")} class="win${showResult ? "" : " hidden"}"${stage === 2 ? a("slideup", 120) : closing ? a("dimin", 0) : ""}><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(m.result.title)}</span><span class="tag">${esc(m.result.tag.toUpperCase())}</span></div>
-<div class="stats">${stats}</div></div>
-${m.details ? `<div ${box("detail")} class="win d${detail ? "" : " hidden"}"${detail ? a("slideup", 0) : ""}><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(m.details.title)}</span><span class="tag">${esc(m.result.tag.toUpperCase())}</span></div>
-<table class="det">${m.details.rows.map((r, i) => `<tr${a("rowin", 260 + i * 130)}><td>${esc(r.label)}</td><td class="r ${toneClass(r.tone)}">${esc(r.value)}</td></tr>`).join("")}</table><div class="foot"${a("fade", 760)}>${esc(m.details.footer)}</div></div>` : ""}
-<div ${box("caption")} class="caption" data-fit${a("fade", first ? 520 : 300)}>${esc(frame.captionText)}</div>
-${frame.cta ? `<div ${box("cta")} class="cta"${a("pop", 120)}>${esc(frame.cta)}</div>` : ""}
+${content}
+${showCaption ? `<div ${box("caption")} class="caption" data-fit${a("fade", 300)}>${esc(frame.captionText)}</div>` : ""}
 <script>${PAGE_SCRIPT}</script>
 </body></html>`;
 }
@@ -230,6 +245,8 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
       const htmlPath = outPath.replace(/\.png$/i, ".html");
       writeFileSync(htmlPath, buildMockHtml(frame), "utf-8");
       await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "load" });
+      // A face no element on this slide uses (the closing slide has no figure rows) would stay "unloaded"; load all three explicitly.
+      await page.evaluate(() => Promise.all(["700 20px SG", "600 20px MR", "700 20px JB"].map((f) => document.fonts.load(f))));
       await page.evaluate(() => document.fonts.ready);
       const fonts = await page.evaluate(() => [...document.fonts].map((f) => `${f.family}:${f.status}`));
       if (!["SG:loaded", "MR:loaded", "JB:loaded"].every((f) => fonts.includes(f))) throw new VideoFactoryError(`mockCard: the brand fonts did not load (${fonts.join(", ")}).`);

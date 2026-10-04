@@ -233,20 +233,36 @@ export interface ChartIllustration {
   avgWin: number;
   avgLoss: number;
 }
-/** One row of the source window of a "mock" chart, e.g. a trade. Every number in it must appear in a fact the scene cites. */
-export interface MockRow {
-  when: string;
-  symbol: string;
+/** A big figure on a mock slide: a short label over a value drawn at up to 250px. The value must be a figure in a fact the scene cites. */
+export interface MockHero {
+  label: string;
   value: string;
   tone: ChartTone;
 }
-/** One stat tile of the result window. `meter.markAt` (0-1) is where "your average" falls on the bar, which is 1 / the stat's multiple. */
-export interface MockStat {
+/**
+ * One row of a mock window: a label, a small line under it and the figure on the right. `meter.markAt` (0-1) draws a bar under
+ * the row with a tick where "your average" falls, which is 1 / the row's multiple (so the value must be a multiple such as "2.5x").
+ * Every number in it must appear in a fact the scene cites.
+ */
+export interface MockRow {
   label: string;
+  sub?: string;
   value: string;
-  unit?: string;
-  note?: string;
+  tone: ChartTone;
   meter?: { markAt: number };
+}
+/** A window of the product (a table of rows) drawn large enough to read on a phone. */
+export interface MockWindow {
+  title: string;
+  rows: MockRow[];
+}
+/** Beats 2 and 3 of a mock: a hero figure above a window, with one of its rows ringed and the cursor on it. */
+export interface MockFocus {
+  hero: MockHero;
+  /** Index into `windows`. */
+  window: number;
+  /** Index of the ringed row in that window. */
+  row: number;
 }
 /** One line of a mock's detail card ("what else Fillbook shows"): a label and the figure beside it. Every number must be in a fact the scene cites. */
 export interface MockDetailRow {
@@ -255,20 +271,22 @@ export interface MockDetailRow {
   tone: ChartTone;
 }
 /**
- * The "mock" chart kind (2026-10): a product mock in the look of the site's own link-preview cards. A source window (what
- * the trader's platform shows), a step pill ("Fillbook Insights"), and a result window (what Fillbook shows). It shows
- * WHERE in the product a number comes from, which a bare bar chart does not. Laid out in HTML with the site's fonts and
- * colour tokens and rendered at the final 1080x1920; geometry and limits are in mockLayout.ts.
+ * The "mock" chart kind: a product mock in the look of the site's own link-preview cards, laid out in HTML with the site's
+ * fonts and colour tokens and rendered at the final 1080x1920 (geometry and limits are in mockLayout.ts). It shows WHERE in
+ * the product a number comes from.
+ *
+ *   beat 1   one or two hero figures over the first window
+ *   beat 2/3 a hero figure over a window with one row ringed and a cursor on it (`focus`)
+ *   beat 4   the screen's other lines (`details`), under the beat's caption as a headline
+ *   beat 5   the closing invitation, under the beat's caption as a headline
  */
 export interface MockSpec {
-  eyebrow: string;
-  /** Index of the first headline line drawn in the accent colour. */
-  accentFrom: number;
-  source: { title: string; columns: [string, string, string]; rows: MockRow[] };
-  step: string;
-  /** Shown on the beat with stage 4 in place of the step and result windows: the same screen's other lines, and what it does for a trader who journals. */
+  /** Must say "Demo data" for a recording that is demo data. Drawn on every slide. */
+  tag: string;
+  opening: MockHero[];
+  windows: MockWindow[];
+  focus: [MockFocus, MockFocus];
   details?: { title: string; rows: MockDetailRow[]; footer: string };
-  result: { title: string; /** Must say "Demo data" for a recording that is demo data. */ tag: string; stats: [MockStat, MockStat] };
 }
 export interface ChartSpec {
   kind: "grid_progress" | "pair" | "outcomes" | "bars" | "mock";

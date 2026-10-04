@@ -37,42 +37,49 @@ export const MOCK_SAFE: Rect = (() => {
 
 export const MOCK_CANVAS = { width: CANVAS.width, height: CANVAS.height } as const;
 
-/** Where every element of the mock sits. Windows have a fixed height, so text that is too long is a validation error, not a reflow. */
+/**
+ * Where every element of the mock sits. Windows have a fixed height (rows share it), so text that is too long is a
+ * validation error, not a reflow. `window` is the one box beats 2-4 draw their window in; beat 1 draws its window in
+ * `window` under one hero figure, or in `windowLow` under two.
+ */
 export const MOCK_BOXES = {
   logo: { x: MOCK_SAFE.x, y: 170, w: 220, h: 58 },
-  eyebrow: { x: MOCK_SAFE.x, y: 250, w: MOCK_SAFE.w, h: 36 },
-  headline: { x: MOCK_SAFE.x, y: 298, w: MOCK_SAFE.w, h: 330 },
-  source: { x: MOCK_SAFE.x, y: 650, w: MOCK_SAFE.w, h: 276 },
-  step: { x: MOCK_SAFE.x, y: 936, w: MOCK_SAFE.w, h: 90 },
-  result: { x: MOCK_SAFE.x, y: 1036, w: MOCK_SAFE.w, h: 284 },
-  detail: { x: MOCK_SAFE.x, y: 936, w: MOCK_SAFE.w, h: 384 },
-  caption: { x: MOCK_SAFE.x, y: 1332, w: MOCK_SAFE.w, h: 64 },
-  cta: { x: MOCK_SAFE.x, y: 680, w: MOCK_SAFE.w, h: 300 },
+  label: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 46 },
+  hero: { x: MOCK_SAFE.x, y: 306, w: MOCK_SAFE.w, h: 290 },
+  label2: { x: MOCK_SAFE.x, y: 606, w: MOCK_SAFE.w, h: 46 },
+  hero2: { x: MOCK_SAFE.x, y: 650, w: MOCK_SAFE.w, h: 290 },
+  window: { x: MOCK_SAFE.x, y: 620, w: MOCK_SAFE.w, h: 700 },
+  windowLow: { x: MOCK_SAFE.x, y: 950, w: MOCK_SAFE.w, h: 370 },
+  big: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 320 },
+  cta: { x: MOCK_SAFE.x, y: 640, w: MOCK_SAFE.w, h: 300 },
+  caption: { x: MOCK_SAFE.x, y: 1352, w: MOCK_SAFE.w, h: 72 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;
 
-/** Font sizes (px) the template draws with. The character budgets below follow from them. */
-export const MOCK_FONT = { headline: 106, headlineLine: 110, caption: 42 } as const;
+/** Font sizes (px) the template draws with. A hero figure shrinks to fit its box (see heroFontSize). */
+export const MOCK_FONT = { hero: 250, heroLabel: 34, big: 94, bigLine: 104, caption: 46, rowLabel: 44, rowSub: 26, rowValue: 46 } as const;
+
+/** The size a hero figure is drawn at: 250px, or smaller so a long value ("-$1,201") still fits the box. Space Grotesk digits and the dollar sign run up to about 0.56em wide. */
+export function heroFontSize(value: string): number {
+  return Math.min(MOCK_FONT.hero, Math.floor(MOCK_SAFE.w / (Math.max(value.length, 1) * 0.56)));
+}
 
 /** Most characters each text may have so it fits its fixed box (Space Grotesk / Manrope / JetBrains Mono at the sizes above). */
 export const MOCK_LIMITS = {
-  eyebrow: 26,
-  headlineLines: 3,
-  headlineLineChars: 13,
+  heroLabel: 26,
+  heroValue: 9,
+  openingHeroes: 2,
   windowTitle: 26,
-  column: 12,
-  rows: 2,
-  when: 14,
-  symbol: 8,
-  value: 16,
-  step: 24,
+  windows: 2,
+  rowsMin: 2,
+  rowsMax: 5,
+  rowLabel: 16,
+  rowSub: 26,
+  rowValue: 10,
   tag: 12,
-  statLabel: 30,
-  statValue: 6,
-  statUnit: 10,
-  statNote: 26,
-  detailRows: 3,
+  detailRowsMin: 3,
+  detailRowsMax: 5,
   detailLabel: 24,
   detailValue: 12,
   footer: 30,
@@ -90,17 +97,17 @@ export function boxesOutsideSafeArea(): MockBoxName[] {
 }
 
 /** Every text in a mock spec, with a label for error messages. The numbers in these must all come from the facts a scene cites. */
-export function mockTexts(spec: MockSpec, headlineLines: string[], caption: string, cta: string | null): Array<[string, string]> {
-  const t: Array<[string, string]> = [["eyebrow", spec.eyebrow], ["step", spec.step], ["source title", spec.source.title], ["result title", spec.result.title], ["tag", spec.result.tag]];
-  headlineLines.forEach((l, i) => t.push([`headline line ${i + 1}`, l]));
-  spec.source.columns.forEach((c, i) => t.push([`column ${i + 1}`, c]));
-  spec.source.rows.forEach((r, i) => {
-    t.push([`row ${i + 1} when`, r.when], [`row ${i + 1} symbol`, r.symbol], [`row ${i + 1} value`, r.value]);
-  });
-  spec.result.stats.forEach((s, i) => {
-    t.push([`stat ${i + 1} label`, s.label], [`stat ${i + 1} value`, s.value]);
-    if (s.unit) t.push([`stat ${i + 1} unit`, s.unit]);
-    if (s.note) t.push([`stat ${i + 1} note`, s.note]);
+export function mockTexts(spec: MockSpec, _headlineLines: string[], caption: string, cta: string | null): Array<[string, string]> {
+  const t: Array<[string, string]> = [["tag", spec.tag]];
+  const hero = (what: string, h: { label: string; value: string }) => t.push([`${what} label`, h.label], [`${what} value`, h.value]);
+  spec.opening.forEach((h, i) => hero(`opening figure ${i + 1}`, h));
+  spec.focus.forEach((f, i) => hero(`beat ${i + 2} figure`, f.hero));
+  spec.windows.forEach((w, wi) => {
+    t.push([`window ${wi + 1} title`, w.title]);
+    w.rows.forEach((r, i) => {
+      t.push([`window ${wi + 1} row ${i + 1} label`, r.label], [`window ${wi + 1} row ${i + 1} value`, r.value]);
+      if (r.sub) t.push([`window ${wi + 1} row ${i + 1} line`, r.sub]);
+    });
   });
   if (spec.details) {
     t.push(["detail title", spec.details.title], ["detail footer", spec.details.footer]);
@@ -111,39 +118,42 @@ export function mockTexts(spec: MockSpec, headlineLines: string[], caption: stri
   return t;
 }
 
-/** Character-budget problems with a mock spec, as plain messages. Pure, so it runs wherever plans are validated. */
-export function mockFitProblems(spec: MockSpec, headlineLines: string[], caption: string, cta: string | null): string[] {
+/** Character-budget and structure problems with a mock spec, as plain messages. Pure, so it runs wherever plans are validated. */
+export function mockFitProblems(spec: MockSpec, _headlineLines: string[], caption: string, cta: string | null): string[] {
   const L = MOCK_LIMITS;
   const p: string[] = [];
   const over = (what: string, text: string, max: number) => {
     if (text.length > max) p.push(`${what} "${text}" is ${text.length} characters; the most that fits its box is ${max}.`);
   };
-  over("eyebrow", spec.eyebrow, L.eyebrow);
-  if (headlineLines.length < 1 || headlineLines.length > L.headlineLines) p.push(`The headline must be 1 to ${L.headlineLines} lines, not ${headlineLines.length}.`);
-  headlineLines.forEach((l, i) => over(`headline line ${i + 1}`, l, L.headlineLineChars));
-  if (spec.accentFrom < 0 || spec.accentFrom >= headlineLines.length) p.push("accentFrom must be the index of one of the headline lines.");
-  over("source title", spec.source.title, L.windowTitle);
-  spec.source.columns.forEach((c, i) => over(`column ${i + 1}`, c, L.column));
-  if (spec.source.rows.length < 1 || spec.source.rows.length > L.rows) p.push(`The source window holds 1 to ${L.rows} rows, not ${spec.source.rows.length}.`);
-  spec.source.rows.forEach((r, i) => {
-    over(`row ${i + 1} when`, r.when, L.when);
-    over(`row ${i + 1} symbol`, r.symbol, L.symbol);
-    over(`row ${i + 1} value`, r.value, L.value);
+  const hero = (what: string, h: { label: string; value: string }) => {
+    over(`${what} label`, h.label, L.heroLabel);
+    over(`${what} value`, h.value, L.heroValue);
+  };
+  over("tag", spec.tag, L.tag);
+  if (spec.opening.length < 1 || spec.opening.length > L.openingHeroes) p.push(`The opening beat shows 1 to ${L.openingHeroes} figures, not ${spec.opening.length}.`);
+  spec.opening.forEach((h, i) => hero(`opening figure ${i + 1}`, h));
+  if (spec.windows.length < 1 || spec.windows.length > L.windows) p.push(`A mock has 1 to ${L.windows} windows, not ${spec.windows.length}.`);
+  if (spec.opening.length === 2 && (spec.windows[0]?.rows.length ?? 0) > 2) p.push("With two opening figures the first window holds 2 rows, because it sits lower on the slide.");
+  spec.windows.forEach((w, wi) => {
+    over(`window ${wi + 1} title`, w.title, L.windowTitle);
+    if (w.rows.length < L.rowsMin || w.rows.length > L.rowsMax) p.push(`Window ${wi + 1} holds ${L.rowsMin} to ${L.rowsMax} rows, not ${w.rows.length}.`);
+    w.rows.forEach((r, i) => {
+      over(`window ${wi + 1} row ${i + 1} label`, r.label, L.rowLabel);
+      if (r.sub) over(`window ${wi + 1} row ${i + 1} line`, r.sub, L.rowSub);
+      over(`window ${wi + 1} row ${i + 1} value`, r.value, L.rowValue);
+    });
   });
-  over("step", spec.step, L.step);
-  over("result title", spec.result.title, L.windowTitle);
-  over("tag", spec.result.tag, L.tag);
-  spec.result.stats.forEach((s, i) => {
-    over(`stat ${i + 1} label`, s.label, L.statLabel);
-    over(`stat ${i + 1} value`, s.value, L.statValue);
-    if (s.unit) over(`stat ${i + 1} unit`, s.unit, L.statUnit);
-    if (s.note) over(`stat ${i + 1} note`, s.note, L.statNote);
+  spec.focus.forEach((f, i) => {
+    hero(`beat ${i + 2} figure`, f.hero);
+    const w = spec.windows[f.window];
+    if (!w) p.push(`Beat ${i + 2} points at window ${f.window + 1}, which does not exist.`);
+    else if (!Number.isInteger(f.row) || f.row < 0 || f.row >= w.rows.length) p.push(`Beat ${i + 2} rings row ${f.row + 1} of window ${f.window + 1}, which does not exist.`);
   });
   if (spec.details) {
     const d = spec.details;
     over("detail title", d.title, L.windowTitle);
     over("detail footer", d.footer, L.footer);
-    if (d.rows.length !== L.detailRows) p.push(`The detail card holds exactly ${L.detailRows} rows, not ${d.rows.length}.`);
+    if (d.rows.length < L.detailRowsMin || d.rows.length > L.detailRowsMax) p.push(`The detail card holds ${L.detailRowsMin} to ${L.detailRowsMax} rows, not ${d.rows.length}.`);
     d.rows.forEach((r, i) => {
       over(`detail row ${i + 1} label`, r.label, L.detailLabel);
       over(`detail row ${i + 1} value`, r.value, L.detailValue);
@@ -152,4 +162,34 @@ export function mockFitProblems(spec: MockSpec, headlineLines: string[], caption
   over("caption", caption, L.caption);
   if (cta) over("invitation", cta, L.cta);
   return p;
+}
+
+/** Height of a window's title bar (px). */
+export const WINDOW_BAR = 64;
+/** Height of the detail card's footer line (px). */
+export const DETAIL_FOOTER = 56;
+
+export interface WindowGeometry {
+  top: number;
+  height: number;
+  rowH: number;
+}
+
+/**
+ * Where a window with `rowCount` equal rows sits: rows share the box's height (at most 190px each), and the window is
+ * centred in the `window` box, or starts at the top of `windowLow` under two hero figures. `detail` windows keep a footer line.
+ */
+export function windowGeometry(rowCount: number, kind: "window" | "windowLow", detail = false): WindowGeometry {
+  const box = MOCK_BOXES[kind];
+  const footer = detail ? DETAIL_FOOTER : 0;
+  const rowH = Math.min(detail ? 116 : 190, Math.floor((box.h - WINDOW_BAR - footer) / Math.max(rowCount, 1)));
+  const height = WINDOW_BAR + rowCount * rowH + footer;
+  return { top: kind === "windowLow" ? box.y : box.y + Math.floor((box.h - height) / 2), height, rowH };
+}
+
+/** Where the cursor's tip rests on a row of a window, and where it comes from (below and to the right of it, still on the slide). */
+export function cursorPath(rowCount: number, row: number, kind: "window" | "windowLow"): { from: { x: number; y: number }; to: { x: number; y: number } } {
+  const g = windowGeometry(rowCount, kind);
+  const to = { x: MOCK_SAFE.x + 470, y: g.top + WINDOW_BAR + Math.round(g.rowH * (row + 0.5)) };
+  return { from: { x: MOCK_SAFE.x + MOCK_SAFE.w - 40, y: Math.min(MOCK_BOXES.caption.y - 40, to.y + 260) }, to };
 }
