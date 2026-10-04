@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CRYPTO_QUERY_EXCLUSIONS, isBroadcastContent, isPlausiblyTradingRelated, isReplyWorthyPost, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
+import { CRYPTO_QUERY_EXCLUSIONS, MIN_PROSPECT_FOLLOWERS, isBroadcastContent, isPlausiblyTradingRelated, isPromoContent, isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
 
 /**
  * Regression coverage for a real, confirmed bug: Prospecting surfaced
@@ -208,5 +208,34 @@ describe("newsletters and articles are not conversations (2026-10-04)", () => {
   it("isReplyWorthyPost still rejects off-topic and crypto posts", () => {
     expect(isReplyWorthyPost("Lovely weather today, going for a run")).toBe(false);
     expect(isReplyWorthyPost("Longed SOL on Hyperliquid with 20x leverage, trading is rough")).toBe(false);
+  });
+});
+
+describe("ads and tiny accounts (2026-10-04)", () => {
+  const ads = [
+    "Prop trading just got a fight night.\n\n$100K account.\n\n$4K STATIC drawdown.\n\nTop 10% gets PAID.\n\nTrade today. Get paid today. https://t.co/DZszaxgsXy",
+    "A huge trading day should not create a payout problem.\n\nThat is why there is NO CONSISTENCY RULE on iFunds instant Funding. Make the profit. Request the payout.\n\nhttps://t.co/daEc0D1kZo",
+    "At Rabofund, we reward traders, not lucky days. 2 Steps Classic: 40% consistency rule, clearly explained. Link in bio.",
+    "Blowups happen when you break the rules.\n\nProp Firm Compliance tracks your strict limits.\n\nPass the evaluation and secure the funding. https://t.co/IN268yN6Dx",
+  ];
+  it("flags the prop-firm ads that reached the queue", () => {
+    for (const ad of ads) expect(isPromoContent(ad), ad).toBe(true);
+  });
+
+  it("keeps real trader posts, including one that ends on a link", () => {
+    expect(isPromoContent("Most traders I talk to are actually profitable.\n\nThey just blow one funded account and decide something is broken.")).toBe(false);
+    expect(isPromoContent("Yesterday I heard a trader friend keeps cutting winners, holding losers.\n\nLesson: old identity will hunt you.")).toBe(false);
+    expect(isReplyWorthyPost("Blew my funded account on the open, trailing drawdown again. Wrote it up here https://t.co/abc")).toBe(true);
+  });
+
+  it("drops AI trading-agent hype", () => {
+    expect(isReplyWorthyPost("One of the biggest problems with AI agents is proving that they work. Evaluate the trading agent beyond max drawdown.")).toBe(false);
+  });
+
+  it("treats accounts under the follower floor as not worth it, and an unknown count as fine", () => {
+    expect(isTooSmallToBeWorthIt(MIN_PROSPECT_FOLLOWERS - 1)).toBe(true);
+    expect(isTooSmallToBeWorthIt(0)).toBe(true);
+    expect(isTooSmallToBeWorthIt(MIN_PROSPECT_FOLLOWERS)).toBe(false);
+    expect(isTooSmallToBeWorthIt(null)).toBe(false);
   });
 });

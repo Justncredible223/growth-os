@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import { recordXSearchCostEvent } from "../cost/costTracking.js";
 import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.js";
-import { isReplyWorthyPost, withCryptoExclusions } from "./prospectingRelevance.js";
+import { isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   QUEUE_FULL_THRESHOLD,
@@ -146,7 +146,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       // "risk management") is never written to prospecting_candidates in
       // the first place, instead of being stored and only reclassified
       // 'not_relevant' the next time the queue happens to be fetched.
-      if (!isReplyWorthyPost(post.text)) {
+      if (!isReplyWorthyPost(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
         excludedAsIrrelevant++;
         continue;
       }

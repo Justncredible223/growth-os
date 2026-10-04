@@ -279,7 +279,53 @@ export function isBroadcastContent(postText: string): boolean {
   return BROADCAST_PATTERNS.some((p) => p.test(postText));
 }
 
-/** Prospecting's gate: about futures / prop-firm trading, and a post a person can actually reply to. */
+/**
+ * Advertisements, mostly prop firms and tools promoting themselves (owner, 2026-10-04: 4 of 12 queued candidates were ads such
+ * as "Halcyon Arena", "NO CONSISTENCY RULE on iFunds instant funding" and "Link in bio"). A reply under an ad is a reply to a
+ * company, not a trader. One strong signal is enough; two weak ones are.
+ */
+const PROMO_STRONG: RegExp[] = [
+  /\blink in (my )?bio\b/i,
+  /\b(instant|direct|fast) funding\b/i,
+  /\b(use|with) (code|promo)\b|\bpromo code\b|\bdiscount\b|\b\d+% off\b/i,
+  /\bget (funded|paid) (today|now|instantly|fast)\b|\bgets? paid\b/i,
+  /\b(sign up|join (now|today|us)|register (now|today)|limited (time|spots)|giveaway)\b/i,
+  /\bpayouts? (processed|within|in) \d+ ?(h|hours|hrs|days)\b/i,
+];
+const PROMO_WEAK: RegExp[] = [
+  /https?:\/\/t\.co\/\S+\s*$/, // ends on a link
+  /\bpass the (evaluation|challenge|combine)\b/i,
+  /\bwithdraw(al)? (anytime|any time|within|in \d+)\b/i,
+  /\bno minimum (trading )?days\b/i,
+  /\bno (consistency rule|time limit|daily drawdown|daily loss)\b/i,
+  /\b(\w+ ){0,3}(account|accounts) (from|for) \$?\d+/i,
+];
+
+function countMatches(text: string, patterns: RegExp[]): number {
+  return patterns.filter((p) => p.test(text)).length;
+}
+
+export function isPromoContent(postText: string): boolean {
+  if (countMatches(postText, PROMO_STRONG) > 0) return true;
+  const hashtags = (postText.match(/#\w+/g) ?? []).length;
+  const emojiBullets = (postText.match(/[✅📋🔥💰🚀💸🏆]/gu) ?? []).length;
+  const weak = countMatches(postText, PROMO_WEAK) + (hashtags >= 3 ? 1 : 0) + (emojiBullets >= 2 ? 1 : 0);
+  return weak >= 2;
+}
+
+/** Accounts this small get a reply seen by almost nobody (owner, 2026-10-04); an unknown follower count is not penalised. */
+export const MIN_PROSPECT_FOLLOWERS = 100;
+export function isTooSmallToBeWorthIt(followerCount: number | null | undefined): boolean {
+  return typeof followerCount === "number" && followerCount < MIN_PROSPECT_FOLLOWERS;
+}
+
+/** Prospecting's gate: about futures / prop-firm trading, and a post a person can actually reply to (not a newsletter or an ad). */
 export function isReplyWorthyPost(postText: string): boolean {
-  return isPlausiblyTradingRelated(postText) && !isBroadcastContent(postText);
+  return isPlausiblyTradingRelated(postText) && !isAiAgentHype(postText) && !isBroadcastContent(postText) && !isPromoContent(postText);
+}
+
+/** AI trading-agent hype (2026-10-04) is not the manual-discipline audience. No override: these posts always mention drawdown too. */
+const AI_AGENT_PATTERNS: RegExp[] = [/\bAI (trading )?agents?\b/i, /\btrading agents?\b/i];
+export function isAiAgentHype(postText: string): boolean {
+  return AI_AGENT_PATTERNS.some((p) => p.test(postText));
 }

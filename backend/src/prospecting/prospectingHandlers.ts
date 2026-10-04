@@ -10,7 +10,7 @@ import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
 import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWithRetries } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
-import { isReplyWorthyPost } from "./prospectingRelevance.js";
+import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
@@ -115,7 +115,7 @@ export async function listProspectingQueue(
   await repo.expireStale(staleCutoff);
 
   const nonTerminal = await repo.listByStatus([...NON_TERMINAL_STATUSES], 500);
-  const irrelevantIds = nonTerminal.filter((row) => !isReplyWorthyPost(row.postText)).map((row) => row.id);
+  const irrelevantIds = nonTerminal.filter((row) => !isReplyWorthyPost(row.postText) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
   if (irrelevantIds.length > 0) {
     await Promise.all(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant")));
   }
