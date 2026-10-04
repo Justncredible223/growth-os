@@ -402,7 +402,13 @@ From 2026-10-03 the app offers 30 concepts (`backend/src/shortform/dailyConcepts
 
 ## Recorded voiceovers (ElevenLabs)
 
-A recording dropped in `backend/scripts/video-factory/assets/voice/` is used for the concept it is named after, in place of the built-in voice (`suppliedVoice.ts`). Either one file per video (`<planId>.mp3`, the five lines separated by a pause of a second or more, cut at the pauses; the render fails naming what it found unless it finds exactly five parts) or five files (`<planId>-1.mp3` to `-5.mp3`). The parts get the same silence trimming, 1.5 s floor and joining as the built-in voice, so the two sound and time alike, and the render reports `narration: supplied`. Concepts with no recording keep the built-in voice, so they can arrive one at a time. The render never calls ElevenLabs: you generate the audio and add the files.
+A recording in `backend/scripts/video-factory/assets/voice/` is used for the concept it is named after, in place of the built-in voice (`suppliedVoice.ts`); a concept with none keeps the built-in voice. The render reports `narration: supplied`, and it never calls ElevenLabs.
+
+**The form the renderer uses is five files per video**, `<planId>-1.mp3` to `-5.mp3`, one per beat. They get the same silence trimming, 1.5 s floor and joining as the built-in voice, so the two sound and time alike.
+
+**Making them from plain recordings.** The 30 daily recordings were made from plain text with no timing markup (Eleven v4 takes audio tags, not pause tags): one file per day, `<planId>.mp3`, in a folder. `npx tsx scripts/splitVoiceRecordings.ts <folder>` (from `backend/`) cuts each into its five parts and writes them to `assets/voice/`. Every line is a full sentence, so the pause after each is longer than the pauses inside a line. Per day it tries, in order: the N-1 longest pauses, if they are clearly longer than the rest (ratio 1.3 or more) and every part is about the length its words predict (within 12 points of its share); then, when a colon pauses as long as a full stop, matching the pauses in order to the punctuation (when the count of pauses is exactly what the colons and full stops predict); then the set of pauses that makes every part the length its words predict, accepted only if it fits within 7 points and beats the next choice by 4. A day that none of these can settle is reported and nothing is written for it; re-record it. `--dry` checks without writing. `OK*` in the report marks a day cut by a fallback method.
+
+**A single file with long pauses** (`<planId>.mp3`, lines separated by a pause of a second or more) is also accepted by the renderer, which cuts it at the pauses and fails naming what it found unless there are exactly as many parts as beats.
 
 ## Music rotation
 
