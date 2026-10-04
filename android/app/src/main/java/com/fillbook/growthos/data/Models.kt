@@ -8,6 +8,22 @@ data class MotionConcept(
     val title: String,
     val hook: String,
     val topic: String,
+    /** Its day in the fixed daily order (1-30), or null for a concept outside it. */
+    val day: Int? = null,
+)
+
+/** A daily concept that cannot be requested again: already [state] "made", "waiting" in Approvals, or "rejected". */
+data class UnavailableMotionConcept(val id: String, val title: String, val state: String, val day: Int?)
+
+/** The one-a-day rule: [requestedToday] is the title of the concept already requested today (null when today is free); [nextRequestAt] is when the next request opens (ISO instant). */
+data class DailyRequestLimit(val requestedToday: String?, val nextRequestAt: String?)
+
+/** What the Create Fillbook Video dialog needs: the concepts on offer in day order, the used-up ones, the one-a-day state, and which concept is next. */
+data class MotionConceptCatalog(
+    val concepts: List<MotionConcept>,
+    val unavailable: List<UnavailableMotionConcept>,
+    val dailyLimit: DailyRequestLimit,
+    val nextConceptId: String?,
 )
 
 enum class HealthStatus { HEALTHY, DEGRADED, DOWN, NOT_CONNECTED }

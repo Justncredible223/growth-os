@@ -48,7 +48,7 @@ interface GrowthOsRepository {
      * these ids as [requestVideoScript]'s motionConceptId is the ONLY way
      * to get real motion -- the backend never infers it from topic text.
      */
-    suspend fun getMotionConcepts(): List<MotionConcept>
+    suspend fun getMotionConceptCatalog(): MotionConceptCatalog
     /**
      * Research Lab (2026-09-07): requests a private, internal research
      * report for EITHER a custom, owner-typed [topic] OR an existing
@@ -398,10 +398,15 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         costUsd = 0.09,
     )
 
-    override suspend fun getMotionConcepts(): List<MotionConcept> = listOf(
-        MotionConcept(id = "pilot-1-green-month-losing-setup", title = "Green month. Losing setup.", hook = "Green month. Losing setup.", topic = "A positive month total can hide a setup that loses money"),
-        MotionConcept(id = "pilot-2-balance-isnt-your-buffer", title = "Balance isn't your buffer.", hook = "Balance isn't your buffer.", topic = "Profit or balance and the remaining drawdown buffer answer different questions"),
-        MotionConcept(id = "pilot-3-same-setup-bigger-size", title = "Same setup. Bigger size.", hook = "Same setup. Bigger size.", topic = "The same setup, at a size that broke the written trading plan"),
+    override suspend fun getMotionConceptCatalog(): MotionConceptCatalog = MotionConceptCatalog(
+        concepts = listOf(
+            MotionConcept(id = "daily-02-orb-setup", title = "One setup: 8 trades, 25% win, lost $422", hook = "One setup wins only 25%. Overall 64%.", topic = "A sample account's setup report: its weakest setup", day = 2),
+            MotionConcept(id = "daily-03-busy-day", title = "6 trades against a norm of 2.7", hook = "6 trades. Your norm: only 2.7 a day.", topic = "A sample account's flagged busy days", day = 3),
+            MotionConcept(id = "daily-04-accounts-target", title = "Two accounts: 52% and 13% to target", hook = "52% to target here. Only 13% there.", topic = "A sample accounts overview", day = 4),
+        ),
+        unavailable = listOf(UnavailableMotionConcept(id = "daily-01-brief-room", title = "$1,725 to the floor, $1,000 left today", state = "made", day = 1)),
+        dailyLimit = DailyRequestLimit(requestedToday = null, nextRequestAt = null),
+        nextConceptId = "daily-02-orb-setup",
     )
 
     override suspend fun requestResearch(topic: String?, opportunityId: String?) = CampaignRunResult(

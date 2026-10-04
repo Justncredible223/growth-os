@@ -181,6 +181,10 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(body.motionConcepts.every((c) => c.id.startsWith("daily-"))).toBe(true);
     expect(body.motionConcepts.length).toBe(30);
     expect(body.motionConcepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
+    // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
+    const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
+    expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe("daily-01-brief-room");
     expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(0);
   });
 

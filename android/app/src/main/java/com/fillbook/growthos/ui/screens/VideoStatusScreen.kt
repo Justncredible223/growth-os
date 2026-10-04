@@ -83,6 +83,7 @@ import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
+import com.fillbook.growthos.ui.theme.Warning
 import kotlinx.coroutines.launch
 
 /**
@@ -136,6 +137,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // The concepts offered are the backend's fixed daily list (motionCatalog.ts / dailyConcepts.ts), in day order.
     var selectedMotionConceptId by rememberSaveable { mutableStateOf<String?>(null) }
     var motionConcepts by remember { mutableStateOf<List<com.fillbook.growthos.data.MotionConcept>>(emptyList()) }
+    var unavailableConcepts by remember { mutableStateOf<List<com.fillbook.growthos.data.UnavailableMotionConcept>>(emptyList()) }
+    // The one-a-day rule and which concept is next, from the same call as the list.
+    var dailyLimit by remember { mutableStateOf<com.fillbook.growthos.data.DailyRequestLimit?>(null) }
+    var nextConceptId by remember { mutableStateOf<String?>(null) }
     var loadingMotionConcepts by remember { mutableStateOf(false) }
     // Doubles as both the busy/spinner state AND the duplicate-tap guard --
     // a rapid double-tap on Confirm can't fire two requests since the
@@ -359,10 +364,17 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     fun loadMotionConcepts() {
         scope.launch {
             loadingMotionConcepts = true
-            motionConcepts = try {
-                repo.getMotionConcepts()
+            try {
+                val catalog = repo.getMotionConceptCatalog()
+                motionConcepts = catalog.concepts
+                unavailableConcepts = catalog.unavailable
+                dailyLimit = catalog.dailyLimit
+                nextConceptId = catalog.nextConceptId
             } catch (e: Exception) {
-                emptyList()
+                motionConcepts = emptyList()
+                unavailableConcepts = emptyList()
+                dailyLimit = null
+                nextConceptId = null
             }
             loadingMotionConcepts = false
         }
@@ -538,6 +550,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
     if (showCreateVideoDialog) {
+        val requestedToday = dailyLimit?.requestedToday
         AlertDialog(
             onDismissRequest = { showCreateVideoDialog = false },
             title = { Text("Create Fillbook Video") },
@@ -550,9 +563,17 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         color = TextTertiary,
                         modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
                     )
+                    if (requestedToday != null) {
+                        Text(
+                            dailyLimitMessage(requestedToday, dailyLimit?.nextRequestAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Warning,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
                     if (loadingMotionConcepts) {
                         CircularProgressIndicator(modifier = Modifier.height(18.dp))
-                    } else if (motionConcepts.isEmpty()) {
+                    } else if (motionConcepts.isEmpty() && unavailableConcepts.isEmpty()) {
                         Text("No motion concepts available right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxWidth().height(320.dp)) {
@@ -564,11 +585,21 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     RadioButton(
                                         selected = selectedMotionConceptId == concept.id,
                                         onClick = { selectedMotionConceptId = concept.id },
+                                        enabled = requestedToday == null,
                                     )
                                     Column {
-                                        Text(concept.title, style = MaterialTheme.typography.bodySmall)
+                                        Text(conceptLabel(concept.day, concept.title), style = MaterialTheme.typography.bodySmall)
                                         Text(concept.topic, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                                        if (concept.id == nextConceptId) {
+                                            Text("Next in order", style = MaterialTheme.typography.labelSmall, color = Accent)
+                                        }
                                     }
+                                }
+                            }
+                            items(unavailableConcepts, key = { "used-" + it.id }) { concept ->
+                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 12.dp)) {
+                                    Text(conceptLabel(concept.day, concept.title), style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                                    Text(unavailableStateLabel(concept.state), style = MaterialTheme.typography.labelSmall, color = TextTertiary)
                                 }
                             }
                         }
@@ -578,7 +609,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             confirmButton = {
                 TextButton(
                     onClick = { showCreateVideoDialog = false; showVideoConfirmDialog = true },
-                    enabled = selectedMotionConceptId != null,
+                    enabled = selectedMotionConceptId != null && requestedToday == null,
                 ) { Text("Continue") }
             },
             dismissButton = {
@@ -615,6 +646,29 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             },
         )
     }
+}
+
+/** "Day 5 · title" for a concept in the daily order, or just the title for one outside it. */
+internal fun conceptLabel(day: Int?, title: String): String = if (day != null) "Day $day · $title" else title
+
+/** What a used-up concept is doing, in the owner's words. */
+internal fun unavailableStateLabel(state: String): String = when (state) {
+    "made" -> "Already made"
+    "waiting" -> "Waiting in Approvals"
+    "rejected" -> "Rejected"
+    else -> "Not available"
+}
+
+/** The one-a-day message: today's concept, and when the next request opens (US Eastern, the zone the limit uses). */
+internal fun dailyLimitMessage(requestedToday: String, nextRequestAt: String?): String {
+    val opens = nextRequestAt?.let {
+        runCatching {
+            java.time.format.DateTimeFormatter.ofPattern("EEE h:mm a", java.util.Locale.US)
+                .withZone(java.time.ZoneId.of("America/New_York"))
+                .format(java.time.Instant.parse(it))
+        }.getOrNull()
+    }
+    return "Today's video is already requested: \"$requestedToday\"." + if (opens != null) " The next request opens $opens Eastern." else ""
 }
 
 /** The exact TikTok caption text this screen's own TIKTOK section shows/copies -- reused as the share intent's EXTRA_TEXT so both paths always agree. */

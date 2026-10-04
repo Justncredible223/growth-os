@@ -11,7 +11,7 @@ import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "..
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 import { motionRequestedToday, nextDayStart, oneADayMessage } from "../src/video/dailyLimit.js";
-import { MOTION_SCENE_PLANS, isOfferedPlan } from "../src/shortform/motionPlans.js";
+import { MOTION_SCENE_PLANS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans.js";
 import { distinctConcepts } from "../src/shortform/conceptVariety.js";
 import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
 
@@ -144,6 +144,8 @@ export function isAllowedAssetTypeOverride(value: unknown): value is AllowedAsse
  * through -- no separate pipeline, no separate budget/idempotency logic.
  */
 const planFor = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
+/** A concept's day in the fixed daily order (1-30), or 0 for a concept that is not in it. */
+const dayOf = (id: string): number => dailyPosition(id) + 1;
 /** Owner rule, 2026-10-01: a NEW video is only ever requested from a chart-card concept. Older concepts stay in the catalog (so an already drafted or approved script still renders) but are never offered or accepted again. */
 const isOffered = (id: string): boolean => { const p = planFor(id); return p ? isOfferedPlan(p) : false; };
 const meetsBar = (id: string): boolean => { const p = planFor(id); return p ? renderBar(p).ok : false; };
@@ -170,7 +172,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const offeredIds = new Set(motionConcepts.map((c) => c.id));
       res.status(200).json({
         // Only A and A+ concepts are offered (owner rule, 2026-09-30); the rest are listed with their grade and what to fix.
-        motionConcepts,
+        // Each concept carries its day number (1-30, the fixed daily order); nextConceptId is the first one on offer, i.e. what the
+        // daily refill will request next.
+        motionConcepts: motionConcepts.map((c) => ({ ...c, day: dayOf(c.id) })),
+        nextConceptId: motionConcepts[0]?.id ?? null,
         // One request a day (owner rule, 2026-10-03): the concept already requested today, if any, and when the next request opens.
         dailyLimit: { requestedToday, nextRequestAt: requestedToday ? nextDayStart(new Date()).toISOString() : null },
         // Unused concepts left out because they are near-copies of one that is made, waiting or offered above.
@@ -180,7 +185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .map((c) => ({ id: c.id, title: c.title, ...barSummary(c.id) })),
         unavailableMotionConcepts: listMotionConcepts()
           .filter((c) => isOffered(c.id) && states.has(manualMotionConceptTitle(c)))
-          .map((c) => ({ id: c.id, title: c.title, state: states.get(manualMotionConceptTitle(c)) })),
+          .map((c) => ({ id: c.id, title: c.title, day: dayOf(c.id), state: states.get(manualMotionConceptTitle(c)) })),
       });
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
