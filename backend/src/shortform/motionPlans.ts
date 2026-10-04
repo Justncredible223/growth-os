@@ -36,8 +36,11 @@ export function isOfferedPlan(plan: ScenePlan): boolean {
 
 /** Spoken pace for a narrated product mock: the project voice (en-US-AndrewNeural) at +8%, brisk but not rushed. */
 export const MOCK_SPEECH_RATE = "+8%";
-/** A narrated mock beat holds at least this long: the 1 s entrance animation plus time to read the figure. */
-export const MOCK_MIN_BEAT_SECONDS = 1.8;
+/** A narrated mock beat holds at least this long: the 1 s entrance animation plus half a second to read the figure. */
+export const MOCK_MIN_BEAT_SECONDS = 1.5;
+
+/** The narration settings of a narrated mock: the project voice and pace, silence trimmed off every line, and a floor on each beat. */
+export const MOCK_NARRATION = { rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MIN_BEAT_SECONDS, trimSilence: true } as const;
 
 /** True when this is an offered product-mock plan that is narrated (not the silent music-only form). */
 export function isNarratedMockPlan(plan: ScenePlan): boolean {

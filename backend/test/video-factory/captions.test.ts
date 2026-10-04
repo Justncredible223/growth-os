@@ -80,6 +80,11 @@ describe("mergeBrandNameWordCues", () => {
     ]);
   });
 
+  it("turns the hyphenated spoken name back into Fillbook, keeping its timing and any ending", () => {
+    const words = [word("Try", 0, 0.1), word("Fill-book", 0.15, 0.55), word("Fill-book's", 0.6, 1.0)];
+    expect(mergeBrandNameWordCues(words)).toEqual([word("Try", 0, 0.1), word("Fillbook", 0.15, 0.55), word("Fillbook's", 0.6, 1.0)]);
+  });
+
   it("matches case-insensitively and ignores trailing punctuation", () => {
     const words = [word("fill", 0, 0.2), word("book.", 0.2, 0.4)];
     expect(mergeBrandNameWordCues(words)).toEqual([{ text: "Fillbook", startSeconds: 0, endSeconds: 0.4 }]);

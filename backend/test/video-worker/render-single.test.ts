@@ -97,8 +97,10 @@ function createFakeRunner(finalDurationSeconds?: number): ProcessRunner {
       const path = String(args[args.length - 1]);
       const wantsStreams = args.includes("-show_streams");
       const isNarrationProbe = /voiceover\.mp3$/.test(path);
+      // A per-beat narration part measured again after silence trimming reports the same fake length, without counting toward the total twice.
+      const isPartProbe = /narration-\d+-[^/\\]*\.mp3$/.test(path);
       // A silent plan (voiceover none) has no narration to total up, so its final video's probed duration is given directly.
-      const duration = isNarrationProbe ? FAKE_NARRATION_SECONDS : finalDurationSeconds ?? (narrationTotalSeconds || FAKE_NARRATION_SECONDS);
+      const duration = isNarrationProbe || isPartProbe ? FAKE_NARRATION_SECONDS : finalDurationSeconds ?? (narrationTotalSeconds || FAKE_NARRATION_SECONDS);
       if (isNarrationProbe) narrationTotalSeconds += FAKE_NARRATION_SECONDS;
       const streams = wantsStreams
         ? [

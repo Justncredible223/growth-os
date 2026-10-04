@@ -66,7 +66,7 @@ import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
 import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary } from "../video-factory/motionCatalog.js";
 import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "../video-factory/scenePlanAdapter.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
-import { isPayoffPlan, isNarratedMockPlan, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../../src/shortform/motionPlans.js";
+import { isPayoffPlan, isNarratedMockPlan, MOCK_NARRATION } from "../../src/shortform/motionPlans.js";
 import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
 import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "../video-factory/payoffCues.js";
 import type { ScenePlan } from "../../src/shortform/types.js";
@@ -143,7 +143,7 @@ async function buildVerifiedMotionPlan(
     ? await synthesizeSilentNarration(scenePlan, outDir, runner)
     : process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
       ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
-      : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, isNarratedMockPlan(scenePlan) ? { rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MIN_BEAT_SECONDS } : payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
+      : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, isNarratedMockPlan(scenePlan) ? MOCK_NARRATION : payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
   const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId);
 
