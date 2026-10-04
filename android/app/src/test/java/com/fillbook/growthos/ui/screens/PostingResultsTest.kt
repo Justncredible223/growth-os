@@ -137,3 +137,19 @@ class ApprovalHeadingTest {
         assertEquals("Plain title", approvalHeading(asset("Plain title", null, null)))
     }
 }
+
+class XPostCounterTest {
+    @Test
+    fun warnsOnlyPastTheNormalLimit() {
+        assertEquals("5 / 280" to false, xPostCounter("hello"))
+        assertEquals(false, xPostCounter("a".repeat(280)).second)
+        val over = xPostCounter("a".repeat(281))
+        assertEquals(true, over.second)
+        assertTrue(over.first.startsWith("281 / 280"))
+    }
+
+    @Test
+    fun countsWithoutLeadingOrTrailingWhitespace() {
+        assertEquals("2 / 280", xPostCounter("  hi \n").first)
+    }
+}
