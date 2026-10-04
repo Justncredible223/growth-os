@@ -166,3 +166,12 @@ class ReplaceXDraftTest {
         assertEquals(false, canReplaceXDraft(null))
     }
 }
+
+class SearchFailureMessageTest {
+    @Test
+    fun saysWhenXCreditsAreUsedUp() {
+        val credits = Exception("POST /api/ingest failed: HTTP 500 -- {\"error\":\"X API GET /tweets/search/recent failed: HTTP 402 -- credits depleted\"}")
+        assertTrue(searchFailureMessage(credits).contains("credits are used up"))
+        assertTrue(searchFailureMessage(Exception("timeout")).contains("Check your connection"))
+    }
+}

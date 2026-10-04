@@ -154,7 +154,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 refresh()
                 actionError = null
             } catch (e: Exception) {
-                actionError = "Couldn't search for new candidates. Check your connection and try again."
+                actionError = searchFailureMessage(e)
             }
             searchingNow = false
         }
@@ -562,4 +562,14 @@ internal fun prospectingEmptyStateMessage(diagnostics: ProspectingDiagnostics?):
     if (reasons.isEmpty()) return fallback
 
     return "${reasons.joinToString(", and ")}. Check back soon, or pull to refresh."
+}
+
+/** What to tell the owner when Search now fails: the X API running out of credits is not a connection problem. */
+internal fun searchFailureMessage(e: Exception): String {
+    val text = e.message.orEmpty()
+    return if (text.contains("credits depleted", ignoreCase = true) || text.contains("HTTP 402")) {
+        "X search is paused: the X API credits are used up. Add credits in the X developer portal, then search again."
+    } else {
+        "Couldn't search for new candidates. Check your connection and try again."
+    }
 }

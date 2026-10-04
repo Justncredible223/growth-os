@@ -183,7 +183,7 @@ describe("recovery mode (X limiting the account's replies, 2026-09-26)", () => {
     expect(result.pacing).toMatchObject({ dailyCap: 2, repliedLast24h: 2, reason: "daily_cap" });
   });
 
-  it("while off, the normal 12h window and cap of 5 apply", async () => {
+  it("while off, the normal 12h window and cap of 10 apply", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
     repo.seed(candidate({ id: "older", status: "new", opportunityScore: 90, postCreatedAt: hoursAgo(6), authorExternalId: "b" }));
@@ -191,7 +191,7 @@ describe("recovery mode (X limiting the account's replies, 2026-09-26)", () => {
     const result = await listProspectingQueue(fakeClient, NOW, { repo, loadRecovery: off });
 
     expect(result.candidates.map((c) => c.id).sort()).toEqual(["fresh", "older"]);
-    expect(result.pacing.dailyCap).toBe(5);
+    expect(result.pacing.dailyCap).toBe(10);
   });
 
   it("while on, a draft that names Fillbook is rejected and redrafted with the recovery note", async () => {
