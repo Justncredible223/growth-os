@@ -660,7 +660,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST") {
     try {
       const body = req.body as
-        | { campaignAssetId?: string; action?: string; decidedBy?: string; channel?: string; actualUrl?: string; ownerReportedPublishedAt?: string }
+        | { campaignAssetId?: string; action?: string; decidedBy?: string; reason?: string; channel?: string; actualUrl?: string; ownerReportedPublishedAt?: string }
         | undefined;
       const campaignAssetId = body?.campaignAssetId;
       const action = body?.action;
@@ -760,6 +760,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
         .eq("id", asset.campaign_id);
       if (updateError) throw updateError;
+
+      // Why it was rejected (optional). Separate, best-effort update: before migration 0048 the column does not exist, and a
+      // missing reason must never block the decision itself.
+      const rejectionReason = typeof body?.reason === "string" ? body.reason.trim().slice(0, 200) : "";
+      if (action === "reject" && rejectionReason) {
+        const { error: reasonError } = await client.from("campaigns").update({ rejection_reason: rejectionReason }).eq("id", asset.campaign_id);
+        if (reasonError) console.warn("[approvals] rejection reason not saved:", reasonError.message);
+      }
 
       // Closes a real, confirmed bug: approving/rejecting previously only
       // ever updated campaigns.status above -- this asset's own stage

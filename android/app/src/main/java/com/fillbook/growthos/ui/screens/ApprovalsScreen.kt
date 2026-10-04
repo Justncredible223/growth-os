@@ -29,6 +29,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -101,6 +102,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var actionError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var pendingReject by remember { mutableStateOf<ApprovalAsset?>(null) }
+    var rejectReason by remember { mutableStateOf<String?>(null) }
     var pendingRenderConfirm by remember { mutableStateOf<ApprovalAsset?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     // Guards against a fast double-tap firing decideApproval twice for the
@@ -131,12 +133,12 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         else assets.filter { it.campaignTitle.contains(query, ignoreCase = true) || it.previewText.contains(query, ignoreCase = true) }
     }
 
-    fun decide(asset: ApprovalAsset, approve: Boolean) {
+    fun decide(asset: ApprovalAsset, approve: Boolean, reason: String? = null) {
         if (busyId == asset.id) return
         scope.launch {
             busyId = asset.id
             try {
-                val renderOutcome = repo.decideApproval(asset.id, approve)
+                val renderOutcome = repo.decideApproval(asset.id, approve, reason)
                 actionError = null
                 refresh()
                 snackbarHostState.showSnackbar(
@@ -263,9 +265,21 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         AlertDialog(
             onDismissRequest = { pendingReject = null },
             title = { Text("Reject this draft?") },
-            text = { Text("\"${asset.campaignTitle}\" will be retired. This can't be undone from here.") },
+            text = {
+                Column {
+                    Text("\"${asset.campaignTitle}\" will be retired. This can't be undone from here.")
+                    Spacer(Modifier.height(8.dp))
+                    Text("Why? (optional)", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                    REJECT_REASONS.forEach { option ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            RadioButton(selected = rejectReason == option, onClick = { rejectReason = if (rejectReason == option) null else option })
+                            Text(option, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { decide(asset, approve = false); pendingReject = null }) { Text("Reject") }
+                TextButton(onClick = { decide(asset, approve = false, reason = rejectReason); pendingReject = null; rejectReason = null }) { Text("Reject") }
             },
             dismissButton = {
                 TextButton(onClick = { pendingReject = null }) { Text("Cancel") }
@@ -397,3 +411,7 @@ internal fun approvalSnackbarMessage(approve: Boolean, outcome: VideoRenderOutco
         else -> "Approved, but the video was not queued."
     }
 }
+
+
+/** The quick reasons offered when rejecting a draft; saved with the rejection (migration 0048). */
+internal val REJECT_REASONS = listOf("Wrong figure or claim", "Wrong tone", "Weak topic", "Too similar to another video")
