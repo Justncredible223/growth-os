@@ -41,8 +41,11 @@ describe("assessVideoLoop", () => {
     expect(item(assessVideoLoop(base()), "YouTube stats")).toBeUndefined();
   });
 
-  it("warns when an auto-publish flag is on", () => {
-    expect(item(assessVideoLoop(base({ publishingFlagsOn: ["TIKTOK_PUBLISHING_ENABLED"] })), "Auto-publishing")).toMatchObject({ status: "DEGRADED" });
+  it("reports an auto-publish flag as on, but not as a problem: it only uploads private drafts (owner enabled it 2026-09-22)", () => {
+    const flagged = item(assessVideoLoop(base({ publishingFlagsOn: ["TIKTOK_PUBLISHING_ENABLED"] })), "Auto-publishing");
+    expect(flagged).toMatchObject({ status: "HEALTHY" });
+    expect(flagged?.detail).toMatch(/drafts/);
+    expect(flagged?.detail).toMatch(/nothing goes public/i);
   });
 
   it("says posting isn't set up when the tables are missing", () => {

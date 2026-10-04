@@ -73,8 +73,12 @@ export function assessVideoLoop(input: VideoHealthInput): VideoHealthItem[] {
 
   items.push(
     input.publishingFlagsOn.length > 0
-      ? { label: "Auto-publishing", status: "DEGRADED", detail: `${input.publishingFlagsOn.join(", ")} is on. Fillbook posts by hand; this should stay off.` }
-      : { label: "Auto-publishing", status: "HEALTHY", detail: "Off. Nothing posts on its own." },
+      ? {
+          label: "Auto-publishing",
+          status: "HEALTHY",
+          detail: `${input.publishingFlagsOn.join(", ")} is on. This only uploads drafts (YouTube as a private video, TikTok into your inbox); nothing goes public until you publish it.`,
+        }
+      : { label: "Auto-publishing", status: "HEALTHY", detail: "Off. Nothing is uploaded to YouTube or TikTok on its own." },
   );
   return items;
 }
