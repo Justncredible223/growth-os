@@ -27,3 +27,20 @@ describe("buildPinnedComment", () => {
     expect(PINNED_COMMENT).not.toMatch(/^everything in this video/i);
   });
 });
+
+describe("tracked link (owner approval 2026-10-04)", () => {
+  const id = "9f3c2a71-5b0e-4d8a-8c11-aaaaaaaaaaaa";
+  it("tags the link with the video's own id and leaves the rest of the wording alone", () => {
+    const tracked = buildPinnedComment("hook", id);
+    expect(tracked.startsWith(`${PINNED_COMMENT_LINK}?utm_source=video&utm_medium=organic_social&utm_content=9f3c2a71`)).toBe(true);
+    expect(tracked.endsWith(PINNED_COMMENT.slice(PINNED_COMMENT_LINK.length))).toBe(true);
+  });
+  it("stays inside the comment limit and the guardrails", () => {
+    const tracked = buildPinnedComment("hook", id);
+    expect(tracked.length).toBeLessThanOrEqual(180);
+    expect(tracked).not.toMatch(/\b(live|real[- ]?time|guarantee|profit)\b/i);
+  });
+  it("keeps the plain link when no id is given", () => {
+    expect(buildPinnedComment("hook")).toBe(PINNED_COMMENT);
+  });
+});
