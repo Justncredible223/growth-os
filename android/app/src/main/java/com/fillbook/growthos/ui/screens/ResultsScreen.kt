@@ -119,6 +119,23 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                                 Text(message, style = MaterialTheme.typography.bodyMedium, color = if (warning == true) Danger else TextSecondary)
                             }
                         }
+                        val leaders = rankedVideos(r.videos)
+                        if (leaders.size >= 2) {
+                            item(key = "leaderboard") {
+                                GrowthCard(accentBar = Success) {
+                                    Text("Best so far", style = MaterialTheme.typography.titleMedium)
+                                    Text("Total views across the platforms with numbers, last 30 days.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                    Spacer(Modifier.height(8.dp))
+                                    leaders.forEachIndexed { i, video ->
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                            Text("${i + 1}.", style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(24.dp))
+                                            Text(conceptHeading(video), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                            Text("${formatCount(video.totalViews)} views", style = MaterialTheme.typography.labelLarge, color = Accent)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         item(key = "videos-header") { SectionHeader("Videos, last 30 days") }
                         if (r.videos.isEmpty()) {
                             item(key = "videos-empty") {
@@ -128,7 +145,7 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                         items(r.videos, key = { it.campaignAssetId }) { video ->
                             GrowthCard {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text(conceptHeading(video), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                     Text("${formatCount(video.totalViews)} views", style = MaterialTheme.typography.labelLarge, color = Accent)
                                 }
                                 Text("Posted ${video.firstPostedAt.take(10)}", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
@@ -144,7 +161,7 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                                         )
                                         if (post.platform != com.fillbook.growthos.data.PostingPlatform.YOUTUBE_SHORTS) {
                                             TextButton(onClick = { statsTarget = video to post }) {
-                                                Text(if (post.needsManualStats) "Add stats" else "Update", color = if (post.needsManualStats) Accent else TextTertiary, style = MaterialTheme.typography.labelMedium)
+                                                Text(statsButtonLabel(post), color = if (post.needsManualStats || post.needsDay7Stats) Accent else TextTertiary, style = MaterialTheme.typography.labelMedium)
                                             }
                                         }
                                     }
@@ -192,6 +209,19 @@ fun ResultsScreen(repo: GrowthOsRepository) {
             onDismiss = { if (!savingStats) statsTarget = null },
         )
     }
+}
+
+/** "Day 5 · 5 contracts against a plan of 3": the concept's day in the daily order, when known. */
+internal fun conceptHeading(video: VideoResult): String = if (video.day != null) "Day ${video.day} · ${video.title}" else video.title
+
+/** The videos with numbers, best first (most total views), at most 5. Videos with no numbers yet are left out. */
+internal fun rankedVideos(videos: List<VideoResult>): List<VideoResult> =
+    videos.filter { (it.totalViews ?: 0) > 0 }.sortedByDescending { it.totalViews }.take(5)
+
+internal fun statsButtonLabel(post: PostResult): String = when {
+    post.needsManualStats -> "Add stats"
+    post.needsDay7Stats -> "Add day-7 stats"
+    else -> "Update"
 }
 
 /** Views, likes, comments and shares for one TikTok or Instagram post, as shown in that app's insights. */
