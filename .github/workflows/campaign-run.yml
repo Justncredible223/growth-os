@@ -50,9 +50,14 @@ jobs:
         working-directory: backend
         run: npm install
 
+      # Lets run-single.ts push "script ready to approve". Harmless when the secret is missing: the push is skipped.
+      - name: Write Firebase service account
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}' > /tmp/firebase-sa.json
+
       - name: Run campaign
         working-directory: backend
         env:
+          FIREBASE_SERVICE_ACCOUNT_JSON_PATH: /tmp/firebase-sa.json
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}

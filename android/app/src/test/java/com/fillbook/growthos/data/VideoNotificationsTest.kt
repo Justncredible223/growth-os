@@ -21,5 +21,7 @@ class VideoNotificationsTest {
     @Test
     fun `does not route when there is no video render id extra -- a normal launcher tap`() {
         assertNull(VideoNotifications.deepLinkRouteForExtra(null))
+        assertEquals("approvals", VideoNotifications.deepLinkRouteForExtra("script-ready", "script_ready"))
+        assertEquals("video_status", VideoNotifications.deepLinkRouteForExtra("render-1", "failed"))
     }
 }

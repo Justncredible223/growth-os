@@ -57,7 +57,11 @@ class FillbookMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         val videoRenderId = message.data["videoRenderId"] ?: return
         val kind = message.data["kind"] ?: return
-        val title = message.notification?.title ?: if (kind == "ready") "Video ready" else "Video render failed"
+        val title = message.notification?.title ?: when (kind) {
+            "ready" -> "Video ready"
+            "script_ready" -> "Script ready to approve"
+            else -> "Video render failed"
+        }
         val body = message.notification?.body ?: "Open the app to see details."
         VideoNotifications.show(applicationContext, videoRenderId, kind, title, body)
     }

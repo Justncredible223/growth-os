@@ -24,6 +24,8 @@ import { SupabaseOpportunityRepository } from "../../src/opportunities/supabaseO
 import { buildSupabaseRunCampaignDeps, runCampaignForOpportunity, type CampaignRunSource } from "../../src/content/runCampaignForOpportunity.js";
 import { recordResearchCost } from "../../src/research/researchHandlers.js";
 import { errorMessage } from "../../src/lib/errorMessage.js";
+import { sendScriptReadyNotification } from "../video-worker/pushSender.js";
+import { notifyScriptReady } from "./notifyScriptReady.js";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -79,6 +81,10 @@ async function main(): Promise<void> {
       })
       .eq("id", campaignRunRequestId);
     if (updateError) throw new Error(`mark campaign_run_requests ready failed: ${updateError.message}`);
+
+    if (assetTypeOverride === "video_script" && result.finalStage === "ready_for_owner") {
+      await notifyScriptReady(client, opportunity.title, sendScriptReadyNotification);
+    }
 
     console.log(`[campaign-worker] done: ${campaignRunRequestId} -> ${result.finalStage}`);
   } catch (err) {
