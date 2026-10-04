@@ -48,6 +48,8 @@ export interface BarsConfig {
   assetId: string;
   /** The topic of the facts the beats cite (must also be one of the recording's topics). */
   expectedTopic: string;
+  /** Other topics of the recording's facts that the beats cite (a concept can draw on facts the recording files under more than one topic). */
+  alsoTopics?: string[];
   lines: string[];
   accent: "good" | "bad";
   rows?: ChartRow[];
@@ -92,7 +94,7 @@ export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
       platform: "both" as const,
       experimentId: PILOT_EXPERIMENT_ID,
       variationId: cfg.variationId,
-      expectedTopics: [cfg.expectedTopic],
+      expectedTopics: [cfg.expectedTopic, ...(cfg.alsoTopics ?? [])],
       claims: b.closing ? [claim, { id: `${cfg.variationId}-invite`, type: "invitation" as const, text: "Invites the viewer to try it on their own account.", evidence: [] }] : [claim],
       masks: [],
       chart: cfg.mock

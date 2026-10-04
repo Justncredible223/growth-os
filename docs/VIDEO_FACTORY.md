@@ -392,6 +392,18 @@ at most two figures (`test/narratedMocks.test.ts`). A beat's audio is padded wit
 already carries its own text, so no word-by-word subtitles are burned over a mock. The older drawn
 bar charts stay silent. Spoken lines are 7 words or fewer, whole dollars only (a voice reads cents slowly), with the silence the voice leaves around each line trimmed (`trimSilence`), so most beats run 1.5-2.5 s and a concept about 9-12 s. A figure in the thousands ("$3,822") alone takes about 2 s to say. The name is sent to the voice as "Fill-book" (the plain spelling reads as "fill bewk").
 
+## The 30 daily concepts, one a day
+
+From 2026-10-03 the app offers 30 concepts (`backend/src/shortform/dailyConcepts.ts`), in a fixed order: day 1 first, the day number is part of the concept id (`daily-05-size-over-plan`). They replace the first twelve product mocks and every older concept, which stay in the catalog (so a script already drafted or approved still renders) but are no longer offered. Each is built only from figures in a verified recording (`assets/verified-manifest.json`), never invented, and passes the same claim, fit and story checks as before (`test/dailyConcepts.test.ts`). Two concepts about the same recording never run back to back.
+
+**One a day.** Only one new concept request is allowed per calendar day in US Eastern (`src/video/dailyLimit.ts`). It applies to the app's Motion render button (a second request gets a 409 naming today's concept and when the next opens) and to the daily refill, which also now keeps at most one waiting in Approvals. A request counts while its draft is waiting or approved, or while it is queued or running. A rejected or retired draft, or a failed run, does not count, so you can pick a different concept the same day. `GET` on the endpoint reports `dailyLimit.requestedToday` and `nextRequestAt`.
+
+**Voice sheet.** `docs/VOICE_SCRIPTS.md` lists the 30 in order with the exact lines to record; regenerate it with `npx tsx scripts/printVoiceScripts.ts > ../docs/VOICE_SCRIPTS.md` from `backend/` if a line changes. Do not reorder the days once recordings exist: the file name carries the day number.
+
+## Recorded voiceovers (ElevenLabs)
+
+A recording dropped in `backend/scripts/video-factory/assets/voice/` is used for the concept it is named after, in place of the built-in voice (`suppliedVoice.ts`). Either one file per video (`<planId>.mp3`, the five lines separated by a pause of a second or more, cut at the pauses; the render fails naming what it found unless it finds exactly five parts) or five files (`<planId>-1.mp3` to `-5.mp3`). The parts get the same silence trimming, 1.5 s floor and joining as the built-in voice, so the two sound and time alike, and the render reports `narration: supplied`. Concepts with no recording keep the built-in voice, so they can arrive one at a time. The render never calls ElevenLabs: you generate the audio and add the files.
+
 ## Music rotation
 
 Each render takes the next bundled track in order: `runRender` counts the render rows

@@ -59,9 +59,10 @@ describe("story scorecard", () => {
     const scored = MOTION_SCENE_PLANS.map((p) => ({ id: p.planId, grade: scoreStory(p).grade }));
     const aPlus = scored.filter((s) => s.grade === "A+");
     expect(aPlus.length).toBeGreaterThan(0);
-    expect(aPlus.every((s) => s.id.includes("-story-") || s.id.startsWith("chart-"))).toBe(true);
+    expect(aPlus.every((s) => s.id.includes("-story-") || s.id.startsWith("chart-") || s.id.startsWith("daily-"))).toBe(true);
     expect(scored.filter((s) => s.grade === "D").length).toBeGreaterThan(0);
-    // Most of the library is older concepts that do not clear the bar; the A+ ones are the story rebuilds and the chart cards.
-    expect(scored.filter((s) => s.grade === "A" || s.grade === "A+").length).toBeLessThan(scored.length / 2);
+    // Most of the older library does not clear the bar; the A+ ones are the story rebuilds and the chart cards. The 30 daily concepts (2026-10-03) are written to clear it.
+    const older = scored.filter((s) => !s.id.startsWith("daily-"));
+    expect(older.filter((s) => s.grade === "A" || s.grade === "A+").length).toBeLessThan(older.length / 2);
   });
 });

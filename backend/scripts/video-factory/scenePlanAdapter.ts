@@ -30,6 +30,7 @@ import type { CaptionCue } from "./types.js";
 import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../../src/shortform/types.js";
 import { synthesizeOfflineNarration } from "./localTts.js";
 import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE } from "./voiceover.js";
+import { BOUNDARY_SILENCE_SECONDS, SILENCE_THRESHOLD_DB, parseSilences, speechSegments, splitProblem, type Segment, type SuppliedVoice } from "./suppliedVoice.js";
 import { CARD_SHADOW_SPREAD, PLATFORM_OVERLAY_ZONES, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
 import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLayout.js";
 import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./payoffCues.js";
@@ -428,29 +429,87 @@ export async function synthesizeProductionNarrationAudio(
       const result = await generateVoiceover(text, sceneOutDir, runner, DEFAULT_VOICE, options.rate);
       copyFileSync(result.mp3Path, partPath);
       wordCuesBySceneId[sceneId] = result.wordCues;
-      let spoken = result.durationSeconds;
-      if (options.trimSilence) {
-        const trimmedPath = partPath.replace(/\.mp3$/, ".trimmed.mp3");
-        // Leading silence is removed, then the audio is reversed so the same filter removes the trailing silence, then flipped back.
-        const filter = `silenceremove=start_periods=1:start_silence=${TRIM_LEAD_SECONDS}:start_threshold=-42dB,areverse,silenceremove=start_periods=1:start_silence=${TRIM_TAIL_SECONDS}:start_threshold=-42dB,areverse`;
-        const trimmed = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", filter, "-c:a", "libmp3lame", trimmedPath], {});
-        if (trimmed.exitCode !== 0) throw new VideoFactoryError(`Failed to trim narration for scene "${sceneId}": ${trimmed.stderr || trimmed.stdout}`);
-        copyFileSync(trimmedPath, partPath);
-        spoken = await measureAudioDuration(partPath, runner);
-      }
-      const min = options.minSceneSeconds;
-      if (min !== undefined && spoken < min) {
-        const paddedPath = partPath.replace(/\.mp3$/, ".padded.mp3");
-        const padded = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", `apad=whole_dur=${min.toFixed(3)}`, "-t", min.toFixed(3), "-c:a", "libmp3lame", paddedPath], {});
-        if (padded.exitCode !== 0) throw new VideoFactoryError(`Failed to pad narration for scene "${sceneId}": ${padded.stderr || padded.stdout}`);
-        copyFileSync(paddedPath, partPath);
-        return min;
-      }
-      return spoken;
+      return finishNarrationPart(partPath, sceneId, result.durationSeconds, options, runner);
     },
     "voiceover-production-narration.mp3",
   );
   return { voiceoverPath, durationsBySceneId, wordCuesBySceneId, provenance: "edge_tts" };
+}
+
+/**
+ * The last step for one beat's audio: optionally cut the silence around the line, then pad it with silence up to the beat's
+ * minimum length. Returns the beat's final length. Shared by the built-in voice and a recording the owner supplied.
+ */
+async function finishNarrationPart(
+  partPath: string,
+  sceneId: string,
+  spokenSeconds: number,
+  options: { minSceneSeconds?: number; trimSilence?: boolean },
+  runner: ProcessRunner,
+): Promise<number> {
+  let spoken = spokenSeconds;
+  if (options.trimSilence) {
+    const trimmedPath = partPath.replace(/\.mp3$/, ".trimmed.mp3");
+    // Leading silence is removed, then the audio is reversed so the same filter removes the trailing silence, then flipped back.
+    const filter = `silenceremove=start_periods=1:start_silence=${TRIM_LEAD_SECONDS}:start_threshold=-42dB,areverse,silenceremove=start_periods=1:start_silence=${TRIM_TAIL_SECONDS}:start_threshold=-42dB,areverse`;
+    const trimmed = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", filter, "-c:a", "libmp3lame", trimmedPath], {});
+    if (trimmed.exitCode !== 0) throw new VideoFactoryError(`Failed to trim narration for scene "${sceneId}": ${trimmed.stderr || trimmed.stdout}`);
+    copyFileSync(trimmedPath, partPath);
+    spoken = await measureAudioDuration(partPath, runner);
+  }
+  const min = options.minSceneSeconds;
+  if (min !== undefined && spoken < min) {
+    const paddedPath = partPath.replace(/\.mp3$/, ".padded.mp3");
+    const padded = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", `apad=whole_dur=${min.toFixed(3)}`, "-t", min.toFixed(3), "-c:a", "libmp3lame", paddedPath], {});
+    if (padded.exitCode !== 0) throw new VideoFactoryError(`Failed to pad narration for scene "${sceneId}": ${padded.stderr || padded.stdout}`);
+    copyFileSync(paddedPath, partPath);
+    return min;
+  }
+  return spoken;
+}
+
+/**
+ * Narration from a recording the owner supplied (see suppliedVoice.ts): one file cut at its long pauses into one part per
+ * beat, or one file per beat. The parts then get the same trim, padding and joining as the built-in voice, so the two sound
+ * and time alike. Fails loudly, with the pauses it found, when a single file does not hold exactly one part per beat.
+ */
+export async function synthesizeSuppliedNarrationAudio(
+  plan: ScenePlan,
+  supplied: SuppliedVoice,
+  outDir: string,
+  runner: ProcessRunner,
+  options: { minSceneSeconds?: number; trimSilence?: boolean } = {},
+): Promise<RealNarrationResult> {
+  mkdirSync(outDir, { recursive: true });
+  const indexOfScene = new Map(plan.scenes.map((sc, i) => [sc.sceneId, i] as const));
+  let segments: Segment[] = [];
+  if (supplied.kind === "single") {
+    const total = await measureAudioDuration(supplied.path, runner);
+    const detect = await runner.run("ffmpeg", ["-i", supplied.path, "-af", `silencedetect=noise=${SILENCE_THRESHOLD_DB}dB:d=${BOUNDARY_SILENCE_SECONDS}`, "-f", "null", "-"], {});
+    if (detect.exitCode !== 0) throw new VideoFactoryError(`Could not read the recording for "${plan.planId}": ${detect.stderr || detect.stdout}`);
+    segments = speechSegments(parseSilences(`${detect.stderr}\n${detect.stdout}`), total);
+    if (segments.length !== plan.scenes.length) throw new VideoFactoryError(splitProblem(plan.planId, segments, plan.scenes.length));
+  } else if (supplied.paths.length !== plan.scenes.length) {
+    throw new VideoFactoryError(`The recording for "${plan.planId}" has ${supplied.paths.length} files but the video has ${plan.scenes.length} beats.`);
+  }
+  const { voiceoverPath, durationsBySceneId } = await synthesizePerSceneAndConcat(
+    plan,
+    outDir,
+    runner,
+    "mp3",
+    async (_text, partPath, sceneId) => {
+      const i = indexOfScene.get(sceneId)!;
+      const args =
+        supplied.kind === "single"
+          ? ["-y", "-ss", Math.max(0, segments[i]!.start - 0.04).toFixed(3), "-to", (segments[i]!.end + 0.04).toFixed(3), "-i", supplied.path, "-c:a", "libmp3lame", partPath]
+          : ["-y", "-i", supplied.paths[i]!, "-c:a", "libmp3lame", partPath];
+      const cut = await runner.run("ffmpeg", args, {});
+      if (cut.exitCode !== 0) throw new VideoFactoryError(`Failed to prepare the recording for scene "${sceneId}": ${cut.stderr || cut.stdout}`);
+      return finishNarrationPart(partPath, sceneId, await measureAudioDuration(partPath, runner), options, runner);
+    },
+    "voiceover-supplied-narration.mp3",
+  );
+  return { voiceoverPath, durationsBySceneId, provenance: "supplied" };
 }
 
 /**

@@ -15,7 +15,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MOTION_SCENE_PLANS, isPayoffPlan, isNarratedMockPlan, MOCK_NARRATION } from "../../src/shortform/motionPlans.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
-import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "./scenePlanAdapter.js";
+import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration, synthesizeSuppliedNarrationAudio } from "./scenePlanAdapter.js";
+import { findSuppliedVoice } from "./suppliedVoice.js";
 import { buildAssFile } from "./captions.js";
 import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "./payoffCues.js";
 import { renderVideo } from "./render.js";
@@ -42,9 +43,13 @@ async function main() {
     const outDir = join(OUT_ROOT, plan.planId);
     mkdirSync(outDir, { recursive: true });
     console.log(`\n=== ${plan.planId} (${voice} voice) ===`);
+    // A recording supplied for this concept (assets/voice/) is used the same way the render worker uses it.
+    const supplied = isNarratedMockPlan(plan) ? findSuppliedVoice(plan.planId, plan.scenes.length) : null;
     const narration =
       plan.voiceover === "none"
         ? await synthesizeSilentNarration(plan, outDir, runner)
+        : supplied
+          ? await synthesizeSuppliedNarrationAudio(plan, supplied, outDir, runner, MOCK_NARRATION)
         : voice === "offline"
           ? await synthesizeRealNarrationAudio(plan, outDir, runner)
           : await synthesizeProductionNarrationAudio(plan, outDir, runner, isNarratedMockPlan(plan) ? MOCK_NARRATION : { rate: PAYOFF_SPEECH_RATE });
