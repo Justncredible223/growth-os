@@ -144,6 +144,21 @@ data class GrowthLoopChannelBreakdown(
     val firstPaidConversions: Int,
 )
 
+/** Where the daily video is, for the Home card (backend: src/video/todaysVideo.ts). */
+enum class TodaysVideoState { NONE, DRAFTING, NEEDS_APPROVAL, RENDERING, READY, POSTED, FAILED }
+
+data class TodaysVideo(
+    val state: TodaysVideoState,
+    /** The concept's own title, or null when nothing is in play. */
+    val title: String?,
+    /** Its day in the fixed daily order (1-30). */
+    val day: Int?,
+    val headline: String,
+    val detail: String,
+    /** Platforms with a saved post link: "tiktok", "youtube_shorts", "instagram". */
+    val platformsPosted: List<String> = emptyList(),
+)
+
 data class HomeSummary(
     val signalsAnalyzedToday: Int,
     val opportunitiesFound: Int,
@@ -153,6 +168,8 @@ data class HomeSummary(
     val analytics: AnalyticsBreakdown,
     val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null, null, null, null, false),
     val attribution: AttributionSummary = AttributionSummary(0, null),
+    /** Null when the server did not send it (an older backend) or could not work it out. */
+    val video: TodaysVideo? = null,
 )
 
 /**

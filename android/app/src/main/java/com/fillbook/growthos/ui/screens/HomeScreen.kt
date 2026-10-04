@@ -55,6 +55,8 @@ import com.fillbook.growthos.data.HomeSummary
 import com.fillbook.growthos.data.InboundSummary
 import com.fillbook.growthos.data.TodayXPost
 import com.fillbook.growthos.data.TodayXPostState
+import com.fillbook.growthos.data.TodaysVideo
+import com.fillbook.growthos.data.TodaysVideoState
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.HeroActionCard
 import com.fillbook.growthos.ui.components.InsetRow
@@ -203,6 +205,8 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                 val issueCount = health.count { it.status.name == "DOWN" || it.status.name == "DEGRADED" }
 
                 item { Box20 { NextBestActionCard(s, inbound, onNavigate) } }
+
+                s.video?.let { video -> item { Box20 { TodaysVideoCard(video, onNavigate) } } }
 
                 item {
                     Box20 {
@@ -647,6 +651,49 @@ private fun TimelineRow(label: String, detail: String, isLast: Boolean) {
         Column(modifier = Modifier.padding(bottom = if (isLast) 0.dp else 14.dp)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
             Text(detail, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+        }
+    }
+}
+
+
+/** The tab a video in this state needs the owner in: Approvals to read the script, Video Status for everything else. */
+internal fun todaysVideoRoute(state: TodaysVideoState): String = if (state == TodaysVideoState.NEEDS_APPROVAL) "approvals" else "video_status"
+
+/** The label and what the owner has to do, by state; the state decides the colour so a glance tells what needs attention. */
+private fun todaysVideoTone(state: TodaysVideoState): Pair<String, androidx.compose.ui.graphics.Color> = when (state) {
+    TodaysVideoState.NONE -> "TODAY'S VIDEO" to TextTertiary
+    TodaysVideoState.DRAFTING -> "DRAFTING" to Accent
+    TodaysVideoState.NEEDS_APPROVAL -> "NEEDS YOU" to Warning
+    TodaysVideoState.RENDERING -> "RENDERING" to Accent
+    TodaysVideoState.READY -> "READY TO POST" to Warning
+    TodaysVideoState.POSTED -> "POSTED" to Success
+    TodaysVideoState.FAILED -> "FAILED" to Danger
+}
+
+/** Today's video at a glance: the concept and its day, where it is, and one tap to the screen where the next step happens. */
+@Composable
+private fun TodaysVideoCard(video: TodaysVideo, onNavigate: (String) -> Unit) {
+    val (label, tone) = todaysVideoTone(video.state)
+    GrowthCard(onClick = { onNavigate(todaysVideoRoute(video.state)) }, accentBar = tone) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = tone)
+        Spacer(Modifier.height(6.dp))
+        val title = video.title
+        if (title != null) {
+            Text(
+                if (video.day != null) "Day ${video.day} · $title" else title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+        Text(video.headline, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+        Spacer(Modifier.height(2.dp))
+        Text(video.detail, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (video.state == TodaysVideoState.NEEDS_APPROVAL) "Open Approvals" else "Open Video Status", style = MaterialTheme.typography.labelLarge, color = Accent)
+            Spacer(Modifier.width(4.dp))
+            Text("→", style = MaterialTheme.typography.labelLarge, color = Accent)
         }
     }
 }

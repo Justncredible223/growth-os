@@ -332,6 +332,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun getHomeSummary() = HomeSummary(
+        video = TodaysVideo(TodaysVideoState.NEEDS_APPROVAL, "5 contracts against a plan of 3", 5, "Waiting for your approval", "Read the script in Approvals. Approving it starts the render."),
         signalsAnalyzedToday = 0,
         opportunitiesFound = 1,
         assetsReady = 0,
