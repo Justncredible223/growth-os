@@ -337,13 +337,19 @@ numbers against its recording before approving it.
 A `mock` slide is laid out in HTML/CSS with the site's own typefaces (Space Grotesk,
 Manrope, JetBrains Mono -- `backend/scripts/video-factory/assets/brand`, copied from
 the fillbook repo with their OFL licences) and colour tokens, then screenshotted by
-headless Chromium at the final 1080x1920 (`mockCard.ts`). It shows a source window
-(what the trader's platform shows), a "Fillbook Insights" step, and the result
-window, so the viewer sees where in the product a number comes from.
-All nine `chart-bars-*` concepts use it (the older drawn "bars" kind is still
-supported and tested). To add a concept, give a `buildBarsPlan` config a `mock`
-spec: headline of at most 3 lines of 13 characters, 2 source rows, 2 result stats;
-put the "but" item last, since the third beat highlights the last row and 2nd stat.
+headless Chromium at the final 1080x1920 (`mockCard.ts`). It shows large figures over a
+product window, so the viewer sees where in the product a number comes from. Frame one
+is the payoff: one or two figures at up to 250px, drawn from the first frame (no count up
+from zero), over the first window. Beats 2 and 3 each show one figure over a window with
+one row ringed and a cursor on it (the cursor travels there, and on beat 3 moves on from
+where beat 2 left it). Beat 4 is the caption as a headline over "what else this screen
+shows"; beat 5 is the caption as a headline over the invitation.
+All twelve offered concepts use it (the older drawn "bars" kind is still supported and
+tested). To add a concept, give a `buildBarsPlan` config a `mock` spec: `opening` (1-2
+`MockHero` figures), `windows` (1-2 windows of 2-5 rows; with two opening figures the
+first window holds 2), `focus` (the figure, window and row for beats 2 and 3, "but" item
+last) and optional `details` (3-5 rows). Every text is length-limited and every number in
+it is checked against the facts the beat cites (`mockLayout.ts`, `chart.ts`).
 
 **Platform overlays.** Every box has a fixed position in `mockLayout.ts`, all inside
 x 100-880, y 170-1600 -- the strictest of TikTok's and YouTube Shorts' insets, the
@@ -357,24 +363,22 @@ reaches a video. `test/mockLayout.test.ts` proves both.
 Locally, set `MOCK_CHROMIUM_PATH` or run the same command. Preview a concept with
 `npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-sized-up`.
 
-**Length and detail.** Each concept runs five beats, about 17 seconds: the source
-window, the Fillbook result, the highlighted figure, a "what else this screen shows"
-detail card (`mock.details`: 3 rows from the cited facts plus "From your synced
-trades."), and the dimmed closing with the invitation. Because a mock draws every
-window on every beat, each beat cites all of the concept's facts. The detail beat's
-claim is a `product_capability` claim, so wording must stay within the guardrails
-(synced, closed trades; no "live"; behaviour labels framed as flags).
+**Length and detail.** Each concept runs five beats; the spoken length sets the video length
+(about 12-16 s). The detail beat's claim is a `product_capability` claim, so wording must
+stay within the guardrails (synced, closed trades; no "live"; behaviour labels framed as
+flags). Because a mock draws windows that carry every figure, each beat cites all of the
+concept's facts.
 
 **Motion.** Every mock beat opens with a one-second entrance, drawn as 30 PNG frames
 (`MOCK_ENTRANCE` in `mockCard.ts`) and played by `render.ts` as an image sequence
 that then holds on the finished slide. The page script `seek(ms)` draws each frame as
-a pure function of time, so a render is deterministic. Beat 1: the headline lines
-slide in with their figures counting up from zero (the first frame already moves),
-then the source window rises and its rows slide in. Beat 2: the step pill pops, the
-result window rises, stat figures count up and the meter fills. Beat 3: the highlight
-pops. Beat 4: the detail card rises with its rows. Beat 5: the windows dim and the
-invitation pops. Counting uses only each figure's own finished text, so the last
-frame is exactly the verified number. Motion only slides content from inside the safe
+a pure function of time, so a render is deterministic. Beat 1: the figures settle into
+place (visible from frame one) and the window rises with its rows sliding in. Beats 2-3:
+the figure settles, the window rises (only when it is a different window from the last
+beat), the cursor travels to the focused row, the row is ringed and the others fade.
+Beat 4: the headline settles and the detail card rises with its rows. Beat 5: the headline
+settles and the invitation pops. Every figure is its own finished text from the first
+frame, so the last frame is exactly the verified number. Motion only slides content from inside the safe
 area; the finished slide is the one measured against the platform overlays. A video
 takes about a minute to render locally because each beat is 30 screenshots.
 

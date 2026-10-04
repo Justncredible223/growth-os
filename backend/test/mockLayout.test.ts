@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CHART, validateChartScene } from "../src/shortform/chart";
-import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea } from "../src/shortform/mockLayout";
+import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea, cursorPath, heroFontSize, windowGeometry } from "../src/shortform/mockLayout";
 import { PLATFORM_OVERLAY_ZONES, buildFfmpegArgs } from "../scripts/video-factory/render";
 import { BARS_PILOTS, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { MOCK_CARD_PILOTS } from "../src/shortform/chartMockConcepts";
@@ -49,11 +49,16 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     const s = plan.scenes[1]!;
     const run = (patch: object, extra: Partial<SceneSpec> = {}) =>
       validateChartScene({ ...s, ...extra, chart: { ...s.chart!, mock: { ...s.chart!.mock!, ...patch } } }, manifest.assets.find((a) => a.id === s.assetId)!).map((i) => i.code);
-    expect(run({ eyebrow: "A SAMPLE ACCOUNT WITH A VERY LONG NAME" })).toContain("chart_mock_text_too_long");
-    expect(run({ step: "FILLBOOK INSIGHTS 99" })).toContain("chart_unsupported_number");
     const m = s.chart!.mock!;
-    expect(run({ result: { ...m.result, stats: [m.result.stats[0], { ...m.result.stats[1]!, meter: { markAt: 0.9 } }] } })).toContain("chart_mock_meter_mismatch");
-    expect(run({ result: { ...m.result, tag: "Sample" } })).toContain("chart_mock_missing_demo_tag");
+    expect(run({ opening: [{ label: "A VERY LONG LABEL FOR A FIGURE", value: "$127", tone: "bad" }] })).toContain("chart_mock_text_too_long");
+    expect(run({ opening: [{ label: "Lost", value: "$99,999", tone: "bad" }] })).toContain("chart_unsupported_number");
+    const w = m.windows[1]!;
+    const meterRow = w.rows.findIndex((r) => r.meter);
+    expect(meterRow).toBeGreaterThanOrEqual(0);
+    const rows = w.rows.map((r, i) => (i === meterRow ? { ...r, meter: { markAt: 0.9 } } : r));
+    expect(run({ windows: [m.windows[0], { ...w, rows }] })).toContain("chart_mock_meter_mismatch");
+    expect(run({ tag: "Sample" })).toContain("chart_mock_missing_demo_tag");
+    expect(run({ focus: [{ ...m.focus[0], row: 9 }, m.focus[1]] })).toContain("chart_mock_text_too_long");
   });
 
   it("measured boxes past the right limit or the bottom are reported", () => {
@@ -64,21 +69,62 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     expect(measuredProblems([{ ...ok, overflowY: 12 }]).join()).toMatch(/overflows/);
   });
 
-  it("the HTML shows the result and highlight only from the beat that reveals them", () => {
-    const [b1, , b3] = plan.scenes;
-    expect(buildMockHtml(frame(b1!))).toMatch(/class="step hidden"/);
-    expect(buildMockHtml(frame(b3!))).toMatch(/class="stat hl"/);
+  it("the HTML rings a row and moves the cursor only on the beats that focus one", () => {
+    const [b1, b2, b3, b4, b5] = plan.scenes.map((s) => buildMockHtml(frame(s)));
+    expect(b1).not.toMatch(/class="ring/);
+    expect(b1).not.toMatch(/data-cur=/);
+    expect(b2).toMatch(/class="ring/);
+    expect(b2).toMatch(/data-cur="/);
+    expect(b3).toMatch(/class="ring/);
+    expect(b4).not.toMatch(/data-cur=/);
+    expect(b5).not.toMatch(/data-cur=/);
   });
 
-  it("the opening beat's headline figures count up, and later beats animate what they reveal", () => {
+  it("frame one already shows the payoff figure (no count up from zero), and every beat animates what it reveals", () => {
     const [b1, b2, b3, b4, b5] = plan.scenes.map((s) => buildMockHtml(frame(s)));
-    expect(b1).toMatch(/data-count="\$127"/);
+    expect(b1).toMatch(/class="hero [^"]*"[^>]*data-a="settle"[^>]*>\$127</);
+    expect(b1).not.toMatch(/data-count/);
     expect(b1).toMatch(/data-a="slideup"/);
-    expect(b2).toMatch(/class="v" data-count="5"/);
-    expect(b3).toMatch(/data-a="pop"/);
-    expect(b4).toMatch(/class="win d"[^>]*data-a="slideup"/);
-    expect(b5).toMatch(/data-a="dimin"/);
-    expect(b1).not.toMatch(/data-count="\$127"[^>]*>\$0/); // markup holds the finished text; the page script draws the count
+    expect(b2).toMatch(/data-a="dimrow"/);
+    expect(b3).toMatch(/data-a="ring"/);
+    expect(b4).toMatch(/class="win det"[^>]*data-a="slideup"/);
+    expect(b5).toMatch(/class="cta"[^>]*data-a="pop"/);
+  });
+
+  it("beat 3's cursor starts where beat 2 left it when both ring rows of the same window", () => {
+    const dow = BARS_PILOTS.find((p) => p.planId === "chart-bars-day-of-week")!;
+    const [, b2, b3] = dow.scenes.map((s) => buildMockHtml(frame(s))) as [string, string, string];
+    const cur = (html: string) => html.match(/data-cur="(\d+),(\d+),(\d+),(\d+)"/)!.slice(1).map(Number) as [number, number, number, number];
+    const [, , x2, y2] = cur(b2);
+    const [x3, y3, , y3b] = cur(b3);
+    expect([x3, y3]).toEqual([x2, y2]);
+    expect(y3b).toBeGreaterThan(y2!); // moves down to the second row
+  });
+
+  it("hero figures shrink to fit the box", () => {
+    expect(heroFontSize("$57")).toBe(250);
+    expect(heroFontSize("-$1,201") * 7 * 0.56).toBeLessThanOrEqual(MOCK_SAFE.w);
+    expect(heroFontSize("17 of 18")).toBeLessThan(250);
+  });
+
+  it("windows and the cursor stay inside the clear area", () => {
+    for (const n of [2, 3, 4, 5]) {
+      for (const kind of ["window", "windowLow"] as const) {
+        if (kind === "windowLow" && n > 2) continue;
+        const g = windowGeometry(n, kind);
+        expect(g.top, `${kind} ${n}`).toBeGreaterThanOrEqual(MOCK_BOXES[kind].y);
+        expect(g.top + g.height, `${kind} ${n}`).toBeLessThanOrEqual(MOCK_BOXES[kind].y + MOCK_BOXES[kind].h);
+        for (let row = 0; row < n; row++) {
+          const { from, to } = cursorPath(n, row, kind);
+          for (const pt of [from, to]) {
+            expect(pt.x).toBeLessThanOrEqual(MOCK_SAFE.x + MOCK_SAFE.w);
+            expect(pt.y).toBeLessThanOrEqual(1450);
+          }
+        }
+      }
+    }
+    const d = windowGeometry(5, "window", true);
+    expect(d.top + d.height).toBeLessThanOrEqual(MOCK_BOXES.window.y + MOCK_BOXES.window.h);
   });
 
   it("a scene with entrance frames is read as an image sequence and held on its last frame", () => {

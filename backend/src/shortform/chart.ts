@@ -295,14 +295,16 @@ export function validateChartScene(scene: SceneSpec, asset: VerifiedAsset): Plan
       for (const [field, text] of mockTexts(m, chart.lines, scene.captionText, null)) {
         for (const token of extractNumbers(text)) needsFact(`a figure in the ${field}`, token);
       }
-      // "Your average" on the meter is 1 / the multiple the stat shows, so a bar cannot imply a different ratio than its number.
-      for (const [i, stat] of m.result.stats.entries()) {
-        if (!stat.meter) continue;
-        const multiple = Number(`${stat.value}`.replace(/x$/i, ""));
-        if (!/x$/i.test(stat.value) || !(multiple > 1)) add("chart_mock_meter_unit", `Stat ${i + 1} has a meter, so its value must be a multiple above 1 such as "2.5x".`);
-        else if (Math.abs(stat.meter.markAt - 1 / multiple) > 0.01) add("chart_mock_meter_mismatch", `Stat ${i + 1}'s average mark is at ${stat.meter.markAt}, but 1 / ${multiple} is ${(1 / multiple).toFixed(3)}.`);
+      // "Your average" on the meter is 1 / the multiple the row shows, so a bar cannot imply a different ratio than its number.
+      for (const [wi, w] of m.windows.entries()) {
+        for (const [i, row] of w.rows.entries()) {
+          if (!row.meter) continue;
+          const multiple = Number(`${row.value}`.replace(/x$/i, ""));
+          if (!/x$/i.test(row.value) || !(multiple > 1)) add("chart_mock_meter_unit", `Row ${i + 1} of window ${wi + 1} has a meter, so its value must be a multiple above 1 such as "2.5x".`);
+          else if (Math.abs(row.meter.markAt - 1 / multiple) > 0.01) add("chart_mock_meter_mismatch", `Row ${i + 1} of window ${wi + 1}'s average mark is at ${row.meter.markAt}, but 1 / ${multiple} is ${(1 / multiple).toFixed(3)}.`);
+        }
       }
-      if (!/demo data/i.test(m.result.tag) && /demo data/i.test(scene.disclosure ?? "")) add("chart_mock_missing_demo_tag", 'The result window must say "Demo data" on the slide itself.');
+      if (!/demo data/i.test(m.tag) && /demo data/i.test(scene.disclosure ?? "")) add("chart_mock_missing_demo_tag", 'The slide must say "Demo data" on itself.');
       for (const box of boxesOutsideSafeArea()) add("chart_mock_outside_safe_area", `The mock's ${box} box sits outside the area TikTok and YouTube Shorts leave clear.`);
     }
   }

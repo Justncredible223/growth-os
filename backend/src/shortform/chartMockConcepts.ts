@@ -23,16 +23,25 @@ export function mockPayoutGapPlan(): ScenePlan {
     lines: ["17 green days", "and still", "$1,484 short."],
     accent: "good",
     mock: {
-      eyebrow: "PAYOUT TARGET: $9,000",
-      accentFrom: 1,
-      source: {
-        title: "September calendar",
-        columns: ["DAYS", "PERIOD", "RESULT"],
-        rows: [
-          { when: "Green days", symbol: "Sep", value: "17 of 18", tone: "good" },
-          { when: "Worst day", symbol: "Sep", value: "-$1,504", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Green days", value: "17 of 18", tone: "good" },
+        { label: "Still short", value: "$1,484", tone: "bad" },
+      ],
+      windows: [
+        { title: "September calendar", rows: [
+          { label: "Green days", sub: "Sep", value: "17 of 18", tone: "good" },
+          { label: "Worst day", sub: "Sep", value: "-$1,504", tone: "bad" },
+        ] },
+        { title: "Payout target", rows: [
+          { label: "Toward target", sub: "of $9,000", value: "$7,516", tone: "good" },
+          { label: "Still to go", sub: "about one red day", value: "$1,484", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Still to go", value: "$1,484", tone: "bad" }, window: 1, row: 1 },
+        { hero: { label: "One red day", value: "-$1,504", tone: "bad" }, window: 0, row: 1 },
+      ],
       details: {
         title: "Calendar · September",
         rows: [
@@ -41,15 +50,6 @@ export function mockPayoutGapPlan(): ScenePlan {
           { label: "Avg per trading day", value: "$388.66", tone: "good" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK PAYOUTS",
-      result: {
-        title: "Payout target",
-        tag: "Demo data",
-        stats: [
-          { label: "TOWARD THE TARGET", value: "$7,516", note: "of $9,000" },
-          { label: "STILL TO GO", value: "$1,484", note: "about one red day" },
-        ],
       },
     },
     beats: [
@@ -73,16 +73,24 @@ export function mockFinalDayPlan(): ScenePlan {
     lines: ["10 green days", "and still", "not done."],
     accent: "good",
     mock: {
-      eyebrow: "PROFIT TARGET: $3,000",
-      accentFrom: 1,
-      source: {
-        title: "September dashboard",
-        columns: ["DAYS", "PERIOD", "RESULT"],
-        rows: [
-          { when: "Green days", symbol: "Sep", value: "10 of 10", tone: "good" },
-          { when: "Account now", symbol: "Sep", value: "$2,940", tone: "good" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Green days", value: "10 of 10", tone: "good" },
+      ],
+      windows: [
+        { title: "September dashboard", rows: [
+          { label: "Green days", sub: "Sep", value: "10 of 10", tone: "good" },
+          { label: "Account now", sub: "Sep", value: "$2,940", tone: "good" },
+        ] },
+        { title: "Profit target", rows: [
+          { label: "The target", sub: "profit target", value: "$3,000", tone: "good" },
+          { label: "Account now", sub: "98% of the target", value: "$2,940", tone: "good" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Profit target", value: "$3,000", tone: "good" }, window: 1, row: 0 },
+        { hero: { label: "Account now", value: "$2,940", tone: "good" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Dashboard · September",
         rows: [
@@ -91,15 +99,6 @@ export function mockFinalDayPlan(): ScenePlan {
           { label: "Avg per trading day", value: "$294.00", tone: "good" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK DASHBOARD",
-      result: {
-        title: "Profit target",
-        tag: "Demo data",
-        stats: [
-          { label: "THE TARGET", value: "$3,000" },
-          { label: "THE ACCOUNT NOW", value: "$2,940", note: "98% of the target" },
-        ],
       },
     },
     beats: [
@@ -123,16 +122,24 @@ export function mockTwoAccountsPlan(): ScenePlan {
     lines: ["One signal.", "Two accounts", "lost $1,201."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNTS",
-      accentFrom: 2,
-      source: {
-        title: "Account dashboards",
-        columns: ["ACCOUNT", "DAY", "RESULT"],
-        rows: [
-          { when: "Account A", symbol: "25", value: "-$1,201", tone: "bad" },
-          { when: "Account B", symbol: "25", value: "-$1,201", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Account A lost", value: "$1,201", tone: "bad" },
+      ],
+      windows: [
+        { title: "Account dashboards", rows: [
+          { label: "Account A", sub: "day 25", value: "-$1,201", tone: "bad" },
+          { label: "Account B", sub: "day 25", value: "-$1,201", tone: "bad" },
+        ] },
+        { title: "Worst day · September", rows: [
+          { label: "Account A", sub: "on its worst day", value: "$1,201", tone: "bad" },
+          { label: "Account B", sub: "the same amount", value: "$1,201", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Account B lost", value: "$1,201", tone: "bad" }, window: 0, row: 1 },
+        { hero: { label: "Same loss, twice", value: "$1,201", tone: "bad" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Dashboard · each account",
         rows: [
@@ -141,15 +148,6 @@ export function mockTwoAccountsPlan(): ScenePlan {
           { label: "Day 25 · trades each", value: "1", tone: "bad" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK ACCOUNTS",
-      result: {
-        title: "Worst day · September",
-        tag: "Demo data",
-        stats: [
-          { label: "ACCOUNT A LOST", value: "$1,201", note: "on its worst day" },
-          { label: "ACCOUNT B LOST", value: "$1,201", note: "the same amount" },
-        ],
       },
     },
     beats: [

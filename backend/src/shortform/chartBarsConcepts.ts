@@ -129,33 +129,31 @@ export function barsDayOfWeekPlan(): ScenePlan {
     lines: ["Tuesday $157.", "Monday lost", "$57."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Daily P&L",
-        columns: ["DAY", "TRADES", "P&L"],
-        rows: [
-          { when: "Tuesday", symbol: "5", value: "$157", tone: "good" },
-          { when: "Monday", symbol: "5", value: "-$57", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Tuesday made", value: "$157", tone: "good" },
+        { label: "Monday lost", value: "$57", tone: "bad" },
+      ],
+      windows: [
+        { title: "Daily P&L", rows: [
+          { label: "Tuesday", sub: "5 trades", value: "$157", tone: "good" },
+          { label: "Monday", sub: "5 trades", value: "-$57", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Best day · Tuesday", value: "$157", tone: "good" }, window: 0, row: 0 },
+        { hero: { label: "Only red day · Monday", value: "-$57", tone: "bad" }, window: 0, row: 1 },
+      ],
       details: {
         title: "Reports · by weekday",
         rows: [
+          { label: "Monday · 5 trades", value: "-$57.32", tone: "bad" },
+          { label: "Tuesday · 5 trades", value: "$157.12", tone: "good" },
           { label: "Wednesday · 4 trades", value: "$60.60", tone: "good" },
           { label: "Thursday · 4 trades", value: "$104.60", tone: "good" },
           { label: "Friday · 4 trades", value: "$122.08", tone: "good" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK REPORTS",
-      result: {
-        title: "Profit by weekday",
-        tag: "Demo data",
-        stats: [
-          { label: "BEST DAY: TUESDAY", value: "$157" },
-          { label: "ONLY RED DAY: MONDAY", value: "-$57" },
-        ],
       },
     },
     beats: [
@@ -179,16 +177,25 @@ export function barsTimeOfDayPlan(): ScenePlan {
     lines: ["71% at open.", "Only 24%", "after 10:30."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Trade history",
-        columns: ["TIME (ET)", "TRADES", "WIN RATE"],
-        rows: [
-          { when: "9:30-10:30am", symbol: "106", value: "71% win", tone: "good" },
-          { when: "10:30am-12pm", symbol: "25", value: "24% win", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "The open wins", value: "71%", tone: "good" },
+        { label: "Late morning", value: "24%", tone: "bad" },
+      ],
+      windows: [
+        { title: "Trade history", rows: [
+          { label: "9:30-10:30am", sub: "106 trades", value: "71% win", tone: "good" },
+          { label: "10:30am-12pm", sub: "25 trades", value: "24% win", tone: "bad" },
+        ] },
+        { title: "Win rate by time", rows: [
+          { label: "The open", sub: "106 trades", value: "71%", tone: "good" },
+          { label: "Late morning", sub: "25 trades", value: "24%", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "The open", value: "71%", tone: "good" }, window: 1, row: 0 },
+        { hero: { label: "Late morning", value: "24%", tone: "bad" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Reports · by time of day",
         rows: [
@@ -197,15 +204,6 @@ export function barsTimeOfDayPlan(): ScenePlan {
           { label: "Late morning · profit", value: "-$1,406.00", tone: "bad" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK REPORTS",
-      result: {
-        title: "Win rate by time",
-        tag: "Demo data",
-        stats: [
-          { label: "THE OPEN", value: "71%", note: "106 trades" },
-          { label: "LATE MORNING", value: "24%", note: "25 trades" },
-        ],
       },
     },
     beats: [
@@ -229,16 +227,24 @@ export function barsHabitCostPlan(): ScenePlan {
     lines: ["Moved stops", "cost $656."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Tagged trades",
-        columns: ["TAG", "TRADES", "RESULT"],
-        rows: [
-          { when: "Moved stop", symbol: "4", value: "-$656", tone: "bad" },
-          { when: "Discipline", symbol: "12", value: "$828", tone: "good" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Moved stops cost", value: "$656", tone: "bad" },
+      ],
+      windows: [
+        { title: "Tagged trades", rows: [
+          { label: "Moved stop", sub: "4 trades", value: "-$656", tone: "bad" },
+          { label: "Discipline", sub: "12 trades", value: "$828", tone: "good" },
+        ] },
+        { title: "Net result by tag", rows: [
+          { label: "Moved stop", sub: "4 trades", value: "-$656", tone: "bad" },
+          { label: "Good discipline", sub: "12 trades", value: "$828", tone: "good" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Moved stop", value: "-$656", tone: "bad" }, window: 1, row: 0 },
+        { hero: { label: "Good discipline", value: "$828", tone: "good" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Insights · tagged habits",
         rows: [
@@ -247,15 +253,6 @@ export function barsHabitCostPlan(): ScenePlan {
           { label: "Oversized · 5 trades", value: "-$605.08", tone: "bad" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK INSIGHTS",
-      result: {
-        title: "Net result by tag",
-        tag: "Demo data",
-        stats: [
-          { label: "MOVED STOP", value: "-$656", note: "4 trades" },
-          { label: "GOOD DISCIPLINE", value: "$828", note: "12 trades" },
-        ],
       },
     },
     beats: [
@@ -279,16 +276,25 @@ export function barsConvictionPlan(): ScenePlan {
     lines: ["Yes: made", "$3,822. No:", "lost $2,576."],
     accent: "bad",
     mock: {
-      eyebrow: "WOULD YOU TAKE IT AGAIN?",
-      accentFrom: 1,
-      source: {
-        title: "Trade review",
-        columns: ["ANSWER", "TRADES", "RESULT"],
-        rows: [
-          { when: "Yes, again", symbol: "75", value: "$3,822", tone: "good" },
-          { when: "No, not again", symbol: "34", value: "-$2,576", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Would take again", value: "$3,822", tone: "good" },
+        { label: "Would not", value: "-$2,576", tone: "bad" },
+      ],
+      windows: [
+        { title: "Trade review", rows: [
+          { label: "Yes, again", sub: "75 trades", value: "$3,822", tone: "good" },
+          { label: "No, not again", sub: "34 trades", value: "-$2,576", tone: "bad" },
+        ] },
+        { title: "Results by conviction", rows: [
+          { label: "Take again", sub: "75 trades", value: "$3,822", tone: "good" },
+          { label: "Not again", sub: "34 trades", value: "-$2,576", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Would take again", value: "$3,822", tone: "good" }, window: 1, row: 0 },
+        { hero: { label: "Would not", value: "-$2,576", tone: "bad" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Reports · by conviction",
         rows: [
@@ -297,15 +303,6 @@ export function barsConvictionPlan(): ScenePlan {
           { label: "Unsure · 22 trades", value: "$315.92", tone: "good" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK REPORTS",
-      result: {
-        title: "Results by conviction",
-        tag: "Demo data",
-        stats: [
-          { label: "WOULD TAKE AGAIN", value: "75", note: "made $3,822" },
-          { label: "WOULDN'T TAKE AGAIN", value: "34", note: "lost $2,576" },
-        ],
       },
     },
     beats: [
@@ -329,16 +326,25 @@ export function barsPlanWindowPlan(): ScenePlan {
     lines: ["In plan: $21", "Outside it:", "lost $39."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Trade history",
-        columns: ["WHERE", "TRADES", "AVG TRADE"],
-        rows: [
-          { when: "Inside plan", symbol: "\u2013", value: "$21", tone: "good" },
-          { when: "Outside plan", symbol: "20", value: "-$39", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "In the plan", value: "$21", tone: "good" },
+        { label: "Outside it", value: "-$39", tone: "bad" },
+      ],
+      windows: [
+        { title: "Trade history", rows: [
+          { label: "Inside plan", sub: "average per trade", value: "$21", tone: "good" },
+          { label: "Outside plan", sub: "20 trades", value: "-$39", tone: "bad" },
+        ] },
+        { title: "Plan vs reality", rows: [
+          { label: "Inside window", sub: "09:30-11:30 · per trade", value: "$21", tone: "good" },
+          { label: "Outside it", sub: "average per trade", value: "-$39", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Inside the plan", value: "$21", tone: "good" }, window: 1, row: 0 },
+        { hero: { label: "Outside it", value: "-$39", tone: "bad" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Plan vs reality",
         rows: [
@@ -347,15 +353,6 @@ export function barsPlanWindowPlan(): ScenePlan {
           { label: "Max trades per day", value: "90%", tone: "good" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK PLAN VS REALITY",
-      result: {
-        title: "Plan vs reality",
-        tag: "Demo data",
-        stats: [
-          { label: "INSIDE 09:30-11:30", value: "$21", note: "average per trade" },
-          { label: "OUTSIDE IT", value: "-$39", note: "average per trade" },
-        ],
       },
     },
     beats: [
@@ -379,16 +376,25 @@ export function barsSizedUpPlan(): ScenePlan {
     lines: ["Lost $127.", "Then sized", "up 2.5x."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Trade history",
-        columns: ["WHEN", "SYMBOL", "RESULT"],
-        rows: [
-          { when: "Loss", symbol: "MNQ", value: "-$127", tone: "bad" },
-          { when: "3 min later", symbol: "MNQ", value: "2.5x size", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Lost", value: "$127", tone: "bad" },
+        { label: "Then sized up", value: "2.5x", tone: "bad" },
+      ],
+      windows: [
+        { title: "Trade history", rows: [
+          { label: "Loss", sub: "MNQ", value: "-$127", tone: "bad" },
+          { label: "3 min later", sub: "MNQ", value: "2.5x size", tone: "bad" },
+        ] },
+        { title: "Behavior patterns", rows: [
+          { label: "Revenge trades", sub: "possible, flagged", value: "5", tone: "bad" },
+          { label: "Size vs average", sub: "against your own", value: "2.5x", tone: "bad", meter: { markAt: 0.4 } },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Flagged trades", value: "5", tone: "bad" }, window: 1, row: 0 },
+        { hero: { label: "Size vs average", value: "2.5x", tone: "bad" }, window: 1, row: 1 },
+      ],
       details: {
         title: "Insights · flagged trades",
         rows: [
@@ -397,15 +403,6 @@ export function barsSizedUpPlan(): ScenePlan {
           { label: "7 min after a $75 loss", value: "1.9x size", tone: "bad" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK INSIGHTS",
-      result: {
-        title: "Behavior patterns",
-        tag: "Demo data",
-        stats: [
-          { label: "POSSIBLE REVENGE TRADES", value: "5" },
-          { label: "SIZE VS YOUR AVERAGE", value: "2.5x", meter: { markAt: 0.4 } },
-        ],
       },
     },
     beats: [
@@ -429,16 +426,20 @@ export function barsEdgeMapPlan(): ScenePlan {
     lines: ["Score: 67.", "Still", "developing."],
     accent: "good",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Score parts",
-        columns: ["PART", "SCORE", "NOTE"],
-        rows: [
-          { when: "Rule adherence", symbol: "87", value: "strongest", tone: "good" },
-          { when: "Profitability", symbol: "59", value: "lowest", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Edge Score", value: "67", tone: "good" },
+      ],
+      windows: [
+        { title: "Score parts", rows: [
+          { label: "Rule adherence", sub: "strongest", value: "87", tone: "good" },
+          { label: "Profitability", sub: "lowest", value: "59", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Rule adherence", value: "87", tone: "good" }, window: 0, row: 0 },
+        { hero: { label: "Profitability", value: "59", tone: "bad" }, window: 0, row: 1 },
+      ],
       details: {
         title: "Edge Score · the parts",
         rows: [
@@ -447,15 +448,6 @@ export function barsEdgeMapPlan(): ScenePlan {
           { label: "Rule adherence", value: "87", tone: "good" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK EDGE SCORE",
-      result: {
-        title: "Edge Score",
-        tag: "Demo data",
-        stats: [
-          { label: "EDGE SCORE", value: "67", note: "Still developing" },
-          { label: "PROFITABILITY", value: "59", note: "the lowest part" },
-        ],
       },
     },
     beats: [
@@ -479,16 +471,21 @@ export function barsWinDriftPlan(): ScenePlan {
     lines: ["Win rate 76%.", "Now only 55%."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Win rate",
-        columns: ["PERIOD", "TRADES", "WIN RATE"],
-        rows: [
-          { when: "Baseline", symbol: "\u2013", value: "76%", tone: "good" },
-          { when: "Recent", symbol: "\u2013", value: "55%", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "Baseline", value: "76%", tone: "good" },
+        { label: "Now only", value: "55%", tone: "bad" },
+      ],
+      windows: [
+        { title: "Win rate", rows: [
+          { label: "Baseline", sub: "your own", value: "76%", tone: "good" },
+          { label: "Recent", sub: "down 21%", value: "55%", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "Your baseline", value: "76%", tone: "good" }, window: 0, row: 0 },
+        { hero: { label: "Recent", value: "55%", tone: "bad" }, window: 0, row: 1 },
+      ],
       details: {
         title: "Progress · vs baseline",
         rows: [
@@ -497,15 +494,6 @@ export function barsWinDriftPlan(): ScenePlan {
           { label: "Overtrading days", value: "0% to 17%", tone: "bad" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK PROGRESS",
-      result: {
-        title: "Progress",
-        tag: "Demo data",
-        stats: [
-          { label: "BASELINE", value: "76%", note: "your own baseline" },
-          { label: "RECENT", value: "55%", note: "down 21%" },
-        ],
       },
     },
     beats: [
@@ -529,16 +517,20 @@ export function barsConsistencyPlan(): ScenePlan {
     lines: ["One day made", "46%. The cap:", "only 40%."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
-      accentFrom: 1,
-      source: {
-        title: "Daily P&L",
-        columns: ["ITEM", "BASIS", "SHARE"],
-        rows: [
-          { when: "Firm cap", symbol: "profit", value: "40% of total", tone: "good" },
-          { when: "Biggest day", symbol: "profit", value: "46% of total", tone: "bad" },
-        ],
-      },
+      tag: "Demo data",
+      opening: [
+        { label: "One day made", value: "46%", tone: "bad" },
+      ],
+      windows: [
+        { title: "Daily P&L", rows: [
+          { label: "Firm cap", sub: "of total profit", value: "40%", tone: "good" },
+          { label: "Biggest day", sub: "of total profit", value: "46%", tone: "bad" },
+        ] },
+      ],
+      focus: [
+        { hero: { label: "The cap", value: "40%", tone: "good" }, window: 0, row: 0 },
+        { hero: { label: "Biggest day", value: "46%", tone: "bad" }, window: 0, row: 1 },
+      ],
       details: {
         title: "Account health",
         rows: [
@@ -547,15 +539,6 @@ export function barsConsistencyPlan(): ScenePlan {
           { label: "Top action", value: "over the cap", tone: "bad" },
         ],
         footer: "From your synced trades.",
-      },
-      step: "FILLBOOK ACCOUNT HEALTH",
-      result: {
-        title: "Account health",
-        tag: "Demo data",
-        stats: [
-          { label: "FIRM CAP", value: "40%", note: "of total profit" },
-          { label: "BIGGEST DAY", value: "46%", note: "of total profit" },
-        ],
       },
     },
     beats: [
