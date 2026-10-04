@@ -404,7 +404,7 @@ describe("api/run-campaign.ts handler -- one new concept request a day (owner ru
     const error = (result.body as { error: string }).error;
     expect(error).toMatch(/One video a day/);
     expect(error).toContain("5 contracts against a plan of 3");
-    expect(error).toMatch(/Eastern/);
+    expect(error).toMatch(/Arizona/);
     expect(state.calls.filter((c) => c.kind === "enqueue_campaign_run")).toEqual([]);
     expect(state.insertedOpportunities).toEqual([]);
   });

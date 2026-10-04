@@ -42,7 +42,7 @@ export interface TodaysVideoInput {
   /** The latest render of that campaign's video asset, if any. */
   render: { status: string; error: string | null } | null;
   platformsPosted: string[];
-  /** The start of today (US Eastern, the one-a-day zone) as an ISO instant. */
+  /** The start of today (Arizona, the one-a-day zone) as an ISO instant. */
   startOfToday: string;
 }
 

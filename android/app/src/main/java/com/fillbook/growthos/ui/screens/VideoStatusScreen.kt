@@ -697,16 +697,16 @@ internal fun unavailableStateLabel(state: String): String = when (state) {
     else -> "Not available"
 }
 
-/** The one-a-day message: today's concept, and when the next request opens (US Eastern, the zone the limit uses). */
+/** The one-a-day message: today's concept, and when the next request opens (Arizona time, the zone the limit uses). */
 internal fun dailyLimitMessage(requestedToday: String, nextRequestAt: String?): String {
     val opens = nextRequestAt?.let {
         runCatching {
             java.time.format.DateTimeFormatter.ofPattern("EEE h:mm a", java.util.Locale.US)
-                .withZone(java.time.ZoneId.of("America/New_York"))
+                .withZone(java.time.ZoneId.of("America/Phoenix"))
                 .format(java.time.Instant.parse(it))
         }.getOrNull()
     }
-    return "Today's video is already requested: \"$requestedToday\"." + if (opens != null) " The next request opens $opens Eastern." else ""
+    return "Today's video is already requested: \"$requestedToday\"." + if (opens != null) " The next request opens $opens Arizona time." else ""
 }
 
 /** The exact TikTok caption text this screen's own TIKTOK section shows/copies -- reused as the share intent's EXTRA_TEXT so both paths always agree. */

@@ -5,11 +5,12 @@ type Client = ReturnType<typeof getServiceClient>;
 
 /**
  * Owner rule, 2026-10-03: only ONE new video concept may be requested per day. "A day" is the calendar day in this zone
- * (US Eastern, the owner's trading day), so the limit resets at midnight Eastern whatever the server's clock says. The rule
+ * (America/Phoenix since 2026-10-04, the same day the render cap and the posting plan use; it was US Eastern before), so the
+ * limit resets at midnight Arizona time whatever the server's clock says. The rule
  * covers both ways a request is made: the app's Motion render button (api/run-campaign.ts) and the daily refill
  * (src/video/dailyChartCardRequests.ts), so a manual request in the morning stops the refill that evening and vice versa.
  */
-export const ONE_PER_DAY_ZONE = "America/New_York";
+export const ONE_PER_DAY_ZONE = "America/Phoenix";
 
 interface Parts {
   y: number;
@@ -97,5 +98,5 @@ export async function motionRequestedToday(client: Client, now: Date = new Date(
 export function oneADayMessage(requestedTitle: string, now: Date = new Date()): string {
   const shown = requestedTitle.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX) ? requestedTitle.slice(MANUAL_MOTION_CONCEPT_TITLE_PREFIX.length) : requestedTitle;
   const opens = nextDayStart(now).toLocaleString("en-US", { timeZone: ONE_PER_DAY_ZONE, weekday: "short", hour: "numeric", minute: "2-digit" });
-  return `One video a day: "${shown}" was already requested today. The next request opens ${opens} Eastern. Reject that draft in Approvals if you would rather make a different one today.`;
+  return `One video a day: "${shown}" was already requested today. The next request opens ${opens} Arizona time. Reject that draft in Approvals if you would rather make a different one today.`;
 }
