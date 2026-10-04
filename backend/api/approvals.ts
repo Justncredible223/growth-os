@@ -53,6 +53,8 @@ import {
 import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
+import { dayForTitle } from "../src/video/todaysVideo.js";
+import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../src/opportunities/manualMotionConcept.js";
 import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, retryFailedRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
@@ -880,6 +882,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return {
           id: asset.id,
           campaignTitle,
+          // The daily concept behind a motion video draft and its day (1-30); null for any other draft.
+          conceptTitle: campaignTitle.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX) ? campaignTitle.slice(MANUAL_MOTION_CONCEPT_TITLE_PREFIX.length) : null,
+          conceptDay: dayForTitle(campaignTitle),
           platform: asset.platform,
           assetType: asset.asset_type,
           previewText: latestVersion?.body ?? "",
