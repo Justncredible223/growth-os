@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CRYPTO_QUERY_EXCLUSIONS, isPlausiblyTradingRelated, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
+import { CRYPTO_QUERY_EXCLUSIONS, isBroadcastContent, isPlausiblyTradingRelated, isReplyWorthyPost, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
 
 /**
  * Regression coverage for a real, confirmed bug: Prospecting surfaced
@@ -184,5 +184,29 @@ describe("crypto leakage closed 2026-10-04", () => {
 
   it("wraps each discovery query so the exclusions apply to the whole of an OR", () => {
     expect(withCryptoExclusions('"a" OR "b"')).toBe('("a" OR "b") ' + CRYPTO_QUERY_EXCLUSIONS);
+  });
+});
+
+describe("newsletters and articles are not conversations (2026-10-04)", () => {
+  it("flags the real examples that reached the queue", () => {
+    expect(isBroadcastContent("# The Complete Masterclass: Intertwining Futures Trading and Sports Betting Philosophies\n\nWelcome to today's complete session.")).toBe(true);
+    expect(isBroadcastContent("The Opening Edge\nSunday Futures Open Outlook\nOctober 4, 2026\n\nTonight's open finds the global macro tape navigating...")).toBe(true);
+  });
+
+  it("flags a very long post and thread numbering", () => {
+    expect(isBroadcastContent("word ".repeat(200))).toBe(true);
+    expect(isBroadcastContent("Why traders blow funded accounts 1/8")).toBe(true);
+  });
+
+  it("keeps ordinary conversational posts", () => {
+    const post = "He keeps sabotaging progress, cutting winners, holding losers.\n\nLesson: old identity will hunt you. Funded trader here, still fighting it.";
+    expect(isBroadcastContent(post)).toBe(false);
+    expect(isReplyWorthyPost(post)).toBe(true);
+    expect(isBroadcastContent("Blew my funded account again on the open. Revenge trading is real.")).toBe(false);
+  });
+
+  it("isReplyWorthyPost still rejects off-topic and crypto posts", () => {
+    expect(isReplyWorthyPost("Lovely weather today, going for a run")).toBe(false);
+    expect(isReplyWorthyPost("Longed SOL on Hyperliquid with 20x leverage, trading is rough")).toBe(false);
   });
 });
