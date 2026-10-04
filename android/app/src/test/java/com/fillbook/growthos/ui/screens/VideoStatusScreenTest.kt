@@ -303,8 +303,8 @@ class VideoStatusScreenCreateVideoStructureTest {
         val confirmIndex = source.indexOf("TextButton(\n                    onClick = { showCreateVideoDialog = false; showVideoConfirmDialog = true },")
         check(confirmIndex >= 0) { "Expected the entry dialog's Continue button." }
         val window = source.substring(confirmIndex, minOf(confirmIndex + 200, source.length))
-        check(window.contains("enabled = selectedMotionConceptId != null")) {
-            "Expected Continue to require a picked motion concept."
+        check(window.contains("selectedMotionConceptId != null") && window.contains("requestedToday == null")) {
+            "Expected Continue to require a picked motion concept and a free day (the one-a-day rule)."
         }
         // Owner decision 2026-10-03: Motion render is the only way to make a video; the backend refuses the other two.
         for (gone in listOf("videoTopicInput", "useExistingOpportunity", "selectedOpportunityId", "Custom topic", "Existing Radar opportunity", "getSuggestedTopics")) {

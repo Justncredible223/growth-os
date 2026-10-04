@@ -314,17 +314,7 @@ class NetworkGrowthOsRepository(
     override suspend fun requestVideoScript(motionConceptId: String): CampaignRunResult =
         enqueueAndAwaitCampaignRun(JSONObject().put("assetType", "video_script").put("motionConceptId", motionConceptId))
 
-    override suspend fun getMotionConcepts(): List<MotionConcept> {
-        val json = get("/api/run-campaign")
-        return json.getJSONArray("motionConcepts").map { item ->
-            MotionConcept(
-                id = item.getString("id"),
-                title = item.getString("title"),
-                hook = item.getString("hook"),
-                topic = item.getString("topic"),
-            )
-        }
-    }
+    override suspend fun getMotionConceptCatalog(): MotionConceptCatalog = parseMotionConceptCatalog(get("/api/run-campaign"))
 
     override suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult {
         val body = JSONObject().put("assetType", "research")
@@ -1218,5 +1208,43 @@ internal fun parseVideoRenderOutcome(response: JSONObject): VideoRenderOutcome? 
         queued = block.optBoolean("queued", false),
         alreadyExisted = block.optBoolean("alreadyExisted", false),
         reason = if (block.isNull("reason")) null else block.optString("reason").ifBlank { null },
+    )
+}
+
+
+/** The concept request title the backend stores begins with this; the dialog shows only the concept's own title. */
+private const val MOTION_CONCEPT_REQUEST_PREFIX = "Motion concept request: "
+
+/**
+ * Reads GET /api/run-campaign: the concepts on offer (each with its day in the daily order), the used-up ones, the one-a-day
+ * state and the next concept. Every field added after the first version is optional, so an older server still parses.
+ */
+internal fun parseMotionConceptCatalog(json: JSONObject): MotionConceptCatalog {
+    val concepts = json.getJSONArray("motionConcepts").map { item ->
+        MotionConcept(
+            id = item.getString("id"),
+            title = item.getString("title"),
+            hook = item.getString("hook"),
+            topic = item.getString("topic"),
+            day = item.optInt("day", 0).takeIf { it > 0 },
+        )
+    }
+    val unavailable = json.optJSONArray("unavailableMotionConcepts")?.map { item ->
+        UnavailableMotionConcept(
+            id = item.getString("id"),
+            title = item.getString("title"),
+            state = item.optString("state", ""),
+            day = item.optInt("day", 0).takeIf { it > 0 },
+        )
+    } ?: emptyList()
+    val limit = json.optJSONObject("dailyLimit")
+    return MotionConceptCatalog(
+        concepts = concepts,
+        unavailable = unavailable.sortedBy { it.day ?: Int.MAX_VALUE },
+        dailyLimit = DailyRequestLimit(
+            requestedToday = limit?.optString("requestedToday", "")?.takeIf { it.isNotBlank() && it != "null" }?.removePrefix(MOTION_CONCEPT_REQUEST_PREFIX),
+            nextRequestAt = limit?.optString("nextRequestAt", "")?.takeIf { it.isNotBlank() && it != "null" },
+        ),
+        nextConceptId = json.optString("nextConceptId", "").takeIf { it.isNotBlank() && it != "null" },
     )
 }
