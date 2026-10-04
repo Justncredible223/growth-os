@@ -17,7 +17,17 @@ export const PINNED_COMMENT_LINK = "fillbookhq.com/sample";
  */
 export const PINNED_COMMENT = `${PINNED_COMMENT_LINK}: open this same screen with the demo data yourself. Sample account, not a real trader's data.`;
 
-/** The comment to pin under a video. Kept as a function of the hook so callers need not change if wordings ever vary again. */
-export function buildPinnedComment(_hook: string): string {
-  return PINNED_COMMENT;
+/**
+ * The link's tag for one video (owner approval 2026-10-04): the same wording, but the link carries the video's own id so the
+ * site's analytics can tell which video a visit came from. Only the query string differs; nothing else about the comment changes.
+ */
+export function trackedSampleLink(campaignAssetId: string): string {
+  const id = campaignAssetId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase();
+  return `${PINNED_COMMENT_LINK}?utm_source=video&utm_medium=organic_social&utm_content=${id}`;
+}
+
+/** The comment to pin under a video. With the video's asset id the link is tagged to that video; without one it is the plain link. */
+export function buildPinnedComment(_hook: string, campaignAssetId?: string): string {
+  if (!campaignAssetId) return PINNED_COMMENT;
+  return PINNED_COMMENT.replace(PINNED_COMMENT_LINK, trackedSampleLink(campaignAssetId));
 }

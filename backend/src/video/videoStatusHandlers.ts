@@ -57,7 +57,7 @@ export interface VideoRenderStatusJson {
  * than throwing) since a render's metadata is best-effort display, never
  * something that should break the whole status list.
  */
-export function parseVideoRenderMetadata(rawMetadata: unknown): VideoRenderMetadataJson | null {
+export function parseVideoRenderMetadata(rawMetadata: unknown, campaignAssetId?: string): VideoRenderMetadataJson | null {
   if (typeof rawMetadata !== "object" || rawMetadata === null) return null;
   const videoScript = (rawMetadata as Record<string, unknown>).videoScript;
   if (typeof videoScript !== "object" || videoScript === null) return null;
@@ -79,7 +79,7 @@ export function parseVideoRenderMetadata(rawMetadata: unknown): VideoRenderMetad
     hashtags: v.hashtags as string[],
     disclosureCta: typeof v.disclosureCta === "string" ? v.disclosureCta : null,
     youtubeThumbnailConcept: typeof v.youtubeThumbnailConcept === "string" ? v.youtubeThumbnailConcept : null,
-    pinnedComment: buildPinnedComment(typeof v.hook === "string" ? v.hook : v.youtubeTitle),
+    pinnedComment: buildPinnedComment(typeof v.hook === "string" ? v.hook : v.youtubeTitle, campaignAssetId),
   };
 }
 
@@ -129,7 +129,7 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
       // asset id is its latest version, so a later (older) row for the
       // same asset is skipped rather than overwriting it.
       if (metadataByAssetId.has(v.campaign_asset_id)) continue;
-      metadataByAssetId.set(v.campaign_asset_id, parseVideoRenderMetadata(v.metadata));
+      metadataByAssetId.set(v.campaign_asset_id, parseVideoRenderMetadata(v.metadata, v.campaign_asset_id));
     }
   }
 
