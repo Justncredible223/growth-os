@@ -607,6 +607,9 @@ data class VideoRenderStatus(
     val videoMetadata: VideoRenderMetadata? = null,
     /** The real external URL the owner pasted back in after manually posting this video -- null until they do. See setVideoPublishedUrl. */
     val publishedUrl: String? = null,
+    /** The daily concept behind this video and its day (1-30), when it came from one. */
+    val conceptTitle: String? = null,
+    val conceptDay: Int? = null,
 )
 
 /** See [VideoRenderStatus.videoMetadata]'s own doc comment. */

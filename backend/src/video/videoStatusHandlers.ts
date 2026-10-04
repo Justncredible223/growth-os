@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import { extractYoutubeVideoId } from "./youtubeUrl.js";
 import { buildPinnedComment } from "./pinnedComment.js";
+import { dayForTitle } from "./todaysVideo.js";
+import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "./videoRenderEligibility.js";
 
 /**
@@ -40,6 +42,10 @@ export interface VideoRenderStatusJson {
   createdAt: string;
   updatedAt: string;
   videoMetadata: VideoRenderMetadataJson | null;
+  /** The motion concept's own title, when this video came from one of the daily concepts. */
+  conceptTitle: string | null;
+  /** Its day in the fixed daily order (1-30). */
+  conceptDay: number | null;
   /** The real external URL the owner pasted back in after manually posting this video (see setPublishedUrl) -- null until they do. Never inferred/guessed. */
   publishedUrl: string | null;
 }
@@ -127,8 +133,20 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
     }
   }
 
+  // The concept behind each video (best-effort, like the metadata above): the campaign's thesis is the request title.
+  const thesisByAssetId = new Map<string, string>();
+  if (assetIds.length > 0) {
+    const { data: assetRows } = await client.from("campaign_assets").select("id, campaigns(thesis)").in("id", assetIds);
+    for (const a of (assetRows ?? []) as unknown as Array<{ id: string; campaigns: { thesis?: string } | Array<{ thesis?: string }> | null }>) {
+      const campaign = Array.isArray(a.campaigns) ? a.campaigns[0] : a.campaigns;
+      if (campaign?.thesis) thesisByAssetId.set(a.id, campaign.thesis);
+    }
+  }
+
   return Promise.all(
     rows.map(async (row) => {
+      const thesis = thesisByAssetId.get(row.campaign_asset_id);
+      const isConcept = thesis !== undefined && thesis.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX);
       let downloadUrl: string | null = null;
       let thumbnailDownloadUrl: string | null = null;
       if (row.status === "ready" && row.storage_path) {
@@ -159,6 +177,8 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         videoMetadata: metadataByAssetId.get(row.campaign_asset_id) ?? null,
+        conceptTitle: isConcept ? thesis!.slice(MANUAL_MOTION_CONCEPT_TITLE_PREFIX.length) : null,
+        conceptDay: isConcept ? dayForTitle(thesis!) : null,
         publishedUrl: row.published_url,
       };
     }),

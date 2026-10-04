@@ -171,6 +171,15 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
 
     LaunchedEffect(Unit) { refresh() }
 
+    // While a render is queued or running, check again every 15 seconds so the card flips to Ready (or Failed) on its own.
+    val anyInProgress = renders.any { shouldAutoRefresh(it.status) }
+    LaunchedEffect(anyInProgress) {
+        while (anyInProgress) {
+            kotlinx.coroutines.delay(VIDEO_STATUS_POLL_MILLIS)
+            refresh()
+        }
+    }
+
     // Registered once for the screen's lifetime -- DownloadManager posts
     // this broadcast for EVERY completed download system-wide (not just
     // this app's), so pendingDownloads is what filters it down to ones
@@ -348,6 +357,8 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             )
         }
     }
+
+    var dismissTarget by remember { mutableStateOf<VideoRenderStatus?>(null) }
 
     fun dismiss(render: VideoRenderStatus) {
         scope.launch {
@@ -531,7 +542,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     onDownload = { download(render) },
                                     onShare = { share(render) },
                                     onDownloadThumbnail = { downloadThumbnail(render) },
-                                    onDismiss = { dismiss(render) },
+                                    onDismiss = { if (needsDismissConfirm(render)) dismissTarget = render else dismiss(render) },
                                     onRetry = { retry(render) },
                                 )
                             }
@@ -541,6 +552,16 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    dismissTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { dismissTarget = null },
+            title = { Text("Delete this video?") },
+            text = { Text("This removes the finished video from storage. You can't get it back, so download it first if you still need it.") },
+            confirmButton = { TextButton(onClick = { dismissTarget = null; dismiss(target) }) { Text("Delete", color = Danger) } },
+            dismissButton = { TextButton(onClick = { dismissTarget = null }) { Text("Cancel") } },
+        )
     }
 
     linkTarget?.let { (video, platform) ->
@@ -719,6 +740,17 @@ internal fun statusLabel(status: String): String = when (status) {
     else -> status.replaceFirstChar { it.uppercase() }
 }
 
+internal const val VIDEO_STATUS_POLL_MILLIS = 15_000L
+
+/** Queued and rendering videos change on their own, so the screen keeps checking while any exist. */
+internal fun shouldAutoRefresh(status: String): Boolean = status == "queued" || status == "rendering"
+
+/** "Day 5 · title" when the day is known. */
+internal fun videoCardHeading(day: Int?, title: String): String = if (day != null) "Day $day · $title" else title
+
+/** Only a finished video holds a file that dismissing deletes for good; a failed or queued card can go without asking. */
+internal fun needsDismissConfirm(render: VideoRenderStatus): Boolean = render.status == "ready"
+
 @Composable
 private fun VideoRenderCard(
     render: VideoRenderStatus,
@@ -751,12 +783,16 @@ private fun VideoRenderCard(
             }
             if (onDismiss != null) {
                 Spacer(Modifier.width(8.dp))
-                androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.height(24.dp).width(24.dp)) {
+                androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.height(48.dp).width(48.dp)) {
                     androidx.compose.material3.Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextTertiary, modifier = Modifier.height(16.dp).width(16.dp))
                 }
             }
         }
         Spacer(Modifier.height(10.dp))
+        render.conceptTitle?.let { title ->
+            Text(videoCardHeading(render.conceptDay, title), style = MaterialTheme.typography.titleSmall, color = TextPrimary, maxLines = 2)
+            Spacer(Modifier.height(6.dp))
+        }
         render.durationSeconds?.let { seconds ->
             Text("${seconds.toInt()}s video", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
             Spacer(Modifier.height(6.dp))

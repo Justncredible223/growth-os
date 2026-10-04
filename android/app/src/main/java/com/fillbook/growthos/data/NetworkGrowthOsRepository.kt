@@ -968,6 +968,8 @@ class NetworkGrowthOsRepository(
         updatedAt = getString("updatedAt"),
         videoMetadata = toVideoRenderMetadata(),
         publishedUrl = optStringOrNull("publishedUrl"),
+        conceptTitle = optStringOrNull("conceptTitle"),
+        conceptDay = if (isNull("conceptDay")) null else optInt("conceptDay", 0).takeIf { it > 0 },
     )
 
     // Folded into /api/approvals (?resource=video-status) -- same
