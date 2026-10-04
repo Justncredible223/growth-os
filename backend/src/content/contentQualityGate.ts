@@ -22,6 +22,15 @@ export function spokenScriptOf(text: string): string {
   return match ? match[1]! : text;
 }
 
+/** Posts longer than this need a blank line between parts; a short one-liner does not. */
+export const PARAGRAPH_MIN_CHARS = 200;
+
+/** True when the text is short enough not to need paragraphs, or already has a blank line in it. */
+export function hasParagraphBreaks(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length <= PARAGRAPH_MIN_CHARS || /\n\s*\n/.test(trimmed);
+}
+
 /**
  * Combines the mechanical checks (brand vocabulary, anti-slop, originality)
  * into a single pass/fail gate that content must clear before advancing
@@ -35,7 +44,7 @@ export class ContentQualityGate {
 
   constructor(private brandConstitution: BrandConstitution) {}
 
-  async check(candidateText: string, recentTextsForSameTopic: string[], options: { isVideo?: boolean } = {}): Promise<QualityGateResult> {
+  async check(candidateText: string, recentTextsForSameTopic: string[], options: { isVideo?: boolean; requireParagraphs?: boolean } = {}): Promise<QualityGateResult> {
     const vocabularyViolations = await this.brandConstitution.checkVocabulary(candidateText);
     const slopFindings = checkAntiSlop(candidateText, { isVideo: options.isVideo });
     const similarities = options.isVideo
@@ -54,6 +63,10 @@ export class ContentQualityGate {
     }
     if (maxSimilarity >= ORIGINALITY_THRESHOLD) {
       blockReasons.push(`too similar to recent content (${(maxSimilarity * 100).toFixed(0)}% overlap)`);
+    }
+
+    if (options.requireParagraphs && !hasParagraphBreaks(candidateText)) {
+      blockReasons.push("x post is one block of text: put the hook, the point and the Fillbook line on separate paragraphs with a blank line between");
     }
 
     return {
