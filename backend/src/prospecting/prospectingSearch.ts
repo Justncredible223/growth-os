@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import { recordXSearchCostEvent } from "../cost/costTracking.js";
 import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.js";
-import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
+import { isPlausiblyTradingRelated, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   QUEUE_FULL_THRESHOLD,
@@ -133,7 +133,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     // returning fewer (or zero) results under this bound is the correct,
     // intended outcome, not a bug -- a genuinely quiet topic this run just
     // means fewer new candidates today, never stale ones let through.
-    const results = await deps.adapter.searchRecentPosts(topic.query, RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+    const results = await deps.adapter.searchRecentPosts(withCryptoExclusions(topic.query), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
     postsRead += results.length;
     costUsd += await recordXSearchCostEvent(deps.client, results.length, { topic: topic.key, query: topic.query });
 

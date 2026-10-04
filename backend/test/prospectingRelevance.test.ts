@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPlausiblyTradingRelated } from "../src/prospecting/prospectingRelevance";
+import { CRYPTO_QUERY_EXCLUSIONS, isPlausiblyTradingRelated, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
 
 /**
  * Regression coverage for a real, confirmed bug: Prospecting surfaced
@@ -160,5 +160,29 @@ describe("isPlausiblyTradingRelated -- cryptocurrency spelling and airdrop/KYC s
 
   it("does not falsely exclude unrelated words that merely start with 'crypto' (e.g. cryptography)", () => {
     expect(isPlausiblyTradingRelated("Learned some cryptography basics while building a trading journal app")).toBe(true);
+  });
+});
+
+describe("crypto leakage closed 2026-10-04", () => {
+  it("rejects posts that use coin names, exchanges, cashtags or on-chain slang with no futures anchor", () => {
+    for (const text of [
+      "Added to my $WIF position, trading the pump with 20x leverage",
+      "Longed SOL on Hyperliquid, my stop-loss got hit, trading is rough",
+      "my wallet got liquidated overnight, trader tilt is real",
+      "degen trading week: revenge trading on perps again",
+      "Binance futures trading drawdown today",
+    ]) {
+      expect(isPlausiblyTradingRelated(text), text).toBe(false);
+    }
+  });
+
+  it("keeps futures and prop-firm posts, including futures cashtags", () => {
+    expect(isPlausiblyTradingRelated("Blew my funded account on $NQ today after revenge trading. Trailing drawdown is brutal.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Prop firm consistency rule hit me again, $ES day")).toBe(true);
+    expect(isPlausiblyTradingRelated("Trading journal habit: review every trade, $MNQ size too big")).toBe(true);
+  });
+
+  it("wraps each discovery query so the exclusions apply to the whole of an OR", () => {
+    expect(withCryptoExclusions('"a" OR "b"')).toBe('("a" OR "b") ' + CRYPTO_QUERY_EXCLUSIONS);
   });
 });
