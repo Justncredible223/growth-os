@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -301,6 +302,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
 
     if (reviewingXPost) {
         val post = summary?.todayXPost
+        val counter = xPostCounter(editedXPostText)
         AlertDialog(
             onDismissRequest = { if (!handingOff) reviewingXPost = false },
             title = { Text("Today's X Post") },
@@ -317,12 +319,28 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                         onValueChange = { editedXPostText = it },
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        // Tall enough to read a whole post without scrolling inside the box.
+                        minLines = 8,
+                        maxLines = 16,
+                        supportingText = {
+                            Text(counter.first, color = if (counter.second) Warning else TextTertiary, style = MaterialTheme.typography.labelMedium)
+                        },
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = { copyToClipboard(context, "Today's X post", editedXPostText) },
+                            enabled = !handingOff && editedXPostText.isNotBlank(),
+                        ) { Text("Copy only") }
+                        TextButton(
+                            onClick = { regenerateXPost() },
+                            enabled = !handingOff && !xPostActionBusy && post?.canRegenerate == true,
+                        ) { Text(if (xPostActionBusy) "Writing..." else "New draft") }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         val assetId = post?.campaignAssetId
                         if (assetId != null) handOffXPost(assetId, editedXPostText)
@@ -334,6 +352,19 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                 TextButton(onClick = { reviewingXPost = false }, enabled = !handingOff) { Text("Cancel") }
             },
         )
+    }
+}
+
+/** Over this a normal X account cannot post. A Premium (blue check) account can post longer, so going over only warns. */
+internal const val X_POST_NORMAL_LIMIT = 280
+
+/** The counter line under the draft, and whether it is over the normal limit ("412 / 280 - too long unless your account allows long posts"). */
+internal fun xPostCounter(text: String): Pair<String, Boolean> {
+    val length = text.trim().length
+    return if (length > X_POST_NORMAL_LIMIT) {
+        "$length / $X_POST_NORMAL_LIMIT - over the normal limit; fine only if your account allows long posts" to true
+    } else {
+        "$length / $X_POST_NORMAL_LIMIT" to false
     }
 }
 
