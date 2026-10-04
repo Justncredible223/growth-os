@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import { loadVideoHealth } from "../src/video/videoHealth.js";
 import { createSearchConsoleAdapter } from "../src/signals/adapters/searchConsoleAdapter.js";
 
 interface HealthItem {
@@ -227,6 +228,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   health.push(await checkInboundSync(client));
   health.push(await checkProspectingSync(client));
+  try {
+    health.push(...(await loadVideoHealth(client)));
+  } catch (err) {
+    health.push({ label: "Video loop", status: "DEGRADED", detail: errorMessage(err) });
+  }
 
   res.status(200).json({ health });
 }
