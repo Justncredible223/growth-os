@@ -18,6 +18,7 @@ import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/video/videoRenderReconciliation.js";
 import { runDailyChartCardRequests } from "../src/video/dailyChartCardRequests.js";
+import { motionRequestedToday } from "../src/video/dailyLimit.js";
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 import { motionConceptStates } from "./run-campaign.js";
@@ -278,7 +279,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await runStep("video_render_dispatch_sweep", () => sweepStuckVideoRenderDispatches(process.env.SUPABASE_SERVICE_ROLE_KEY as string)),
     );
     // Keeps a few chart cards waiting in Approvals (owner request 2026-10-01). It only queues drafts; approving, and so
-    // rendering, stays the owner's action. Bounded: at most 3 waiting at once, each concept requested once.
+    // rendering, stays the owner's action. Bounded: one request a day, at most 1 waiting at once, each concept requested once.
     results.push(
       await runStep("chart_card_requests", () =>
         runDailyChartCardRequests({
@@ -287,6 +288,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return Boolean((data as { paused?: boolean } | null)?.paused);
           },
           states: () => motionConceptStates(client),
+          requestedToday: () => motionRequestedToday(client),
           request: async (conceptId) => {
             const concept = listMotionConcepts().find((c) => c.id === conceptId);
             if (!concept) throw new Error(`unknown concept ${conceptId}`);

@@ -7,6 +7,7 @@ import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea, cursorPa
 import { PLATFORM_OVERLAY_ZONES, buildFfmpegArgs } from "../scripts/video-factory/render";
 import { BARS_PILOTS, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { MOCK_CARD_PILOTS } from "../src/shortform/chartMockConcepts";
+import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
 import { MOCK_ENTRANCE, buildMockHtml, chromiumAvailable, createMockRenderer, measuredProblems } from "../scripts/video-factory/mockCard";
@@ -139,13 +140,13 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     const dir = mkdtempSync(join(tmpdir(), "mock-"));
     const r = await createMockRenderer(dir);
     try {
-      for (const p of [...BARS_PILOTS, ...MOCK_CARD_PILOTS]) {
+      for (const p of [...BARS_PILOTS, ...MOCK_CARD_PILOTS, ...DAILY_PILOTS]) {
         for (const [i, s] of p.scenes.entries()) expect(existsSync(await r.render(frame(s), join(dir, `${p.planId}-${i}.png`))), `${p.planId} beat ${i + 1}`).toBe(true);
       }
     } finally {
       await r.close();
     }
-  }, 120_000);
+  }, 300_000);
 
   it.skipIf(!chromium)("writes an entrance sequence that ends on the finished slide", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mock-seq-"));

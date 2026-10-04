@@ -10,6 +10,7 @@ import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTop
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept.js";
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
+import { motionRequestedToday, nextDayStart, oneADayMessage } from "../src/video/dailyLimit.js";
 import { MOTION_SCENE_PLANS, isOfferedPlan } from "../src/shortform/motionPlans.js";
 import { distinctConcepts } from "../src/shortform/conceptVariety.js";
 import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
@@ -165,10 +166,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // waiting says, or what an earlier one in this list says, is left out (it stays in the catalog; see conceptVariety.ts).
       const used = listMotionConcepts().filter((c) => isOffered(c.id) && ["made", "waiting"].includes(states.get(manualMotionConceptTitle(c)) ?? "")).map((c) => c.id);
       const motionConcepts = distinctConcepts(unused, used, planFor);
+      const requestedToday = await motionRequestedToday(getServiceClient());
       const offeredIds = new Set(motionConcepts.map((c) => c.id));
       res.status(200).json({
         // Only A and A+ concepts are offered (owner rule, 2026-09-30); the rest are listed with their grade and what to fix.
         motionConcepts,
+        // One request a day (owner rule, 2026-10-03): the concept already requested today, if any, and when the next request opens.
+        dailyLimit: { requestedToday, nextRequestAt: requestedToday ? nextDayStart(new Date()).toISOString() : null },
         // Unused concepts left out because they are near-copies of one that is made, waiting or offered above.
         hiddenNearCopyConceptIds: unused.filter((c) => !offeredIds.has(c.id)).map((c) => c.id),
         belowBarMotionConcepts: listMotionConcepts()
@@ -237,6 +241,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               ? `You already rejected the script for "${concept.title}", and a new request would produce the same script. Pick another concept.`
               : `"${concept.title}" is already in progress or waiting in Approvals.`,
         });
+        return;
+      }
+      // Owner rule, 2026-10-03: one new concept request per day (src/video/dailyLimit.ts).
+      const requestedToday = await motionRequestedToday(client);
+      if (requestedToday) {
+        res.status(409).json({ error: oneADayMessage(requestedToday) });
         return;
       }
       const queued = await enqueueMotionConceptRequest(client, concept);

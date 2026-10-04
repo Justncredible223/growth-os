@@ -23,8 +23,8 @@ vi.mock("../src/shortform/storyScore", async (importOriginal) => {
  */
 
 // A chart-card concept: the only kind the app offers for a new video (older concepts are retired from the list).
-const CONCEPT_ID = "chart-a-17-green-days";
-const CONCEPT_TITLE = "17 green days and $1,484 still to go";
+const CONCEPT_ID = "daily-01-brief-room";
+const CONCEPT_TITLE = "$1,725 to the floor, $1,000 left today";
 
 function fakeReq(body: unknown, method = "POST"): VercelRequest {
   return { method, headers: { authorization: "Bearer test-app-token" }, body } as unknown as VercelRequest;
@@ -43,6 +43,14 @@ function fakeRes() {
     }),
   };
   return { res: handle as unknown as VercelResponse, result: res };
+}
+
+/** The fake database cannot filter by date, so the one-a-day lookup (src/video/dailyLimit.ts) is stubbed here and tested on its own in dailyLimit.test.ts. */
+function stubOneADay(requestedToday: string | null) {
+  vi.doMock("../src/video/dailyLimit.js", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("../src/video/dailyLimit")>();
+    return { ...actual, motionRequestedToday: async () => requestedToday };
+  });
 }
 
 /** Minimal, chainable, thenable Supabase client fake -- records every rpc()/insert() call so a test can assert on exactly what was sent. */
@@ -151,11 +159,13 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     fakeClientState = createFakeClient();
     vi.resetModules();
     vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => fakeClientState.client }));
+    stubOneADay(null);
     handler = (await import("../api/run-campaign")).default;
   });
 
   afterEach(() => {
     vi.doUnmock("../src/lib/supabaseClient.js");
+    vi.doUnmock("../src/video/dailyLimit.js");
     vi.resetModules();
   });
 
@@ -165,13 +175,12 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
-    // 2026-10-01: only chart-card concepts are offered: 3 hand-made (chartMockConcepts.ts) + 9 bar charts (chartBarsConcepts.ts), all drawn as product mocks.
-    // Every older concept is retired from the list but stays in the catalog so a script already drafted or approved still renders.
-    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["chart-a-17-green-days", "chart-b-10-green-days", "chart-c-one-signal-two-accounts"]));
-    expect(body.motionConcepts.every((c) => c.id.startsWith("chart-"))).toBe(true);
-    // 24 chart concepts exist; the 12 illustrative win-rate cards are not drawn as product mocks, so they are no longer offered.
-    expect(body.motionConcepts.length).toBe(12);
-    expect(body.motionConcepts.some((c) => c.id.startsWith("chart-o-"))).toBe(false);
+    // 2026-10-03: only the 30 daily concepts are offered (dailyConcepts.ts). The first twelve product mocks and every older
+    // concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
+    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["daily-01-brief-room", "daily-05-size-over-plan", "daily-08-weak-hour"]));
+    expect(body.motionConcepts.every((c) => c.id.startsWith("daily-"))).toBe(true);
+    expect(body.motionConcepts.length).toBe(30);
+    expect(body.motionConcepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
     expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(0);
   });
 
@@ -261,9 +270,9 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
 });
 
 describe("api/run-campaign.ts handler -- a concept is used up once requested (owner rule 2026-09-25)", () => {
-  const A = "Motion concept request: 17 green days and $1,484 still to go";
-  const B = "Motion concept request: 10 green days and still not done";
-  const C = "Motion concept request: One signal, two accounts, both lost $1,201";
+  const A = "Motion concept request: $1,725 to the floor, $1,000 left today";
+  const B = "Motion concept request: 5 contracts against a plan of 3";
+  const C = "Motion concept request: 11:00 wins 25%; the account wins 62%";
   let handler: typeof import("../api/run-campaign").default;
   let state: ReturnType<typeof createFakeClient>;
 
@@ -272,11 +281,13 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     state = createFakeClient(opts);
     vi.resetModules();
     vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => state.client }));
+    stubOneADay(null);
     handler = (await import("../api/run-campaign")).default;
   }
 
   afterEach(() => {
     vi.doUnmock("../src/lib/supabaseClient.js");
+    vi.doUnmock("../src/video/dailyLimit.js");
     vi.resetModules();
   });
 
@@ -292,13 +303,13 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
     const ids = body.motionConcepts.map((c) => c.id);
-    expect(ids).not.toContain("chart-a-17-green-days");
-    expect(ids).not.toContain("chart-b-10-green-days");
-    expect(ids).toContain("chart-c-one-signal-two-accounts");
+    expect(ids).not.toContain("daily-01-brief-room");
+    expect(ids).not.toContain("daily-05-size-over-plan");
+    expect(ids).toContain("daily-08-weak-hour");
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "chart-a-17-green-days", state: "made" }),
-        expect.objectContaining({ id: "chart-b-10-green-days", state: "waiting" }),
+        expect.objectContaining({ id: "daily-01-brief-room", state: "made" }),
+        expect.objectContaining({ id: "daily-05-size-over-plan", state: "waiting" }),
       ]),
     );
   });
@@ -310,8 +321,8 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     const body = result.body as { unavailableMotionConcepts: { id: string; state: string }[] };
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "chart-a-17-green-days", state: "rejected" }),
-        expect.objectContaining({ id: "chart-c-one-signal-two-accounts", state: "waiting" }),
+        expect.objectContaining({ id: "daily-01-brief-room", state: "rejected" }),
+        expect.objectContaining({ id: "daily-08-weak-hour", state: "waiting" }),
       ]),
     );
   });
@@ -321,15 +332,15 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
-    expect(body.motionConcepts.map((c) => c.id)).toContain("chart-a-17-green-days");
-    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "chart-c-one-signal-two-accounts", state: "rejected" })]));
-    expect(body.unavailableMotionConcepts.map((c) => c.id)).not.toContain("chart-a-17-green-days");
+    expect(body.motionConcepts.map((c) => c.id)).toContain("daily-01-brief-room");
+    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "daily-08-weak-hour", state: "rejected" })]));
+    expect(body.unavailableMotionConcepts.map((c) => c.id)).not.toContain("daily-01-brief-room");
   });
 
   it("POST for a concept that already has a video is refused with 409 before anything is created or enqueued", async () => {
     await load({ campaignRows: [{ thesis: A, status: "approved" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "chart-a-17-green-days" }), res);
+    await handler(fakeReq({ motionConceptId: "daily-01-brief-room" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already been made");
     expect(state.insertedOpportunities).toHaveLength(0);
@@ -339,7 +350,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept waiting in Approvals is refused with 409", async () => {
     await load({ campaignRows: [{ thesis: B, status: "in_review" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "chart-b-10-green-days" }), res);
+    await handler(fakeReq({ motionConceptId: "daily-05-size-over-plan" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("waiting in Approvals");
   });
@@ -347,7 +358,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept whose request is still queued is refused with 409, so it can't be run twice", async () => {
     await load({ pendingRuns: [{ opportunity_id: "opp-queued", title: C }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "chart-c-one-signal-two-accounts" }), res);
+    await handler(fakeReq({ motionConceptId: "daily-08-weak-hour" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already in progress");
     expect(state.calls).toHaveLength(0);
@@ -356,8 +367,63 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept whose script was rejected is refused with 409", async () => {
     await load({ campaignRows: [{ thesis: A, status: "retired" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "chart-a-17-green-days" }), res);
+    await handler(fakeReq({ motionConceptId: "daily-01-brief-room" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already rejected");
+  });
+});
+
+describe("api/run-campaign.ts handler -- one new concept request a day (owner rule 2026-10-03)", () => {
+  let handler: typeof import("../api/run-campaign").default;
+  let state: ReturnType<typeof createFakeClient>;
+
+  async function load(requestedToday: string | null) {
+    process.env.APP_API_TOKEN = "test-app-token";
+    state = createFakeClient();
+    vi.resetModules();
+    vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => state.client }));
+    stubOneADay(requestedToday);
+    handler = (await import("../api/run-campaign")).default;
+  }
+
+  afterEach(() => {
+    vi.doUnmock("../src/lib/supabaseClient.js");
+    vi.doUnmock("../src/video/dailyLimit.js");
+    vi.resetModules();
+  });
+
+  it("refuses a second request on the same day with a 409 that names today's concept, before anything is created or queued", async () => {
+    await load("Motion concept request: 5 contracts against a plan of 3");
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "daily-01-brief-room" }), res);
+    expect(result.statusCode).toBe(409);
+    const error = (result.body as { error: string }).error;
+    expect(error).toMatch(/One video a day/);
+    expect(error).toContain("5 contracts against a plan of 3");
+    expect(error).toMatch(/Eastern/);
+    expect(state.calls.filter((c) => c.kind === "enqueue_campaign_run")).toEqual([]);
+    expect(state.insertedOpportunities).toEqual([]);
+  });
+
+  it("accepts the day's first request", async () => {
+    await load(null);
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "daily-01-brief-room" }), res);
+    expect(result.statusCode).toBe(200);
+    expect(state.calls.filter((c) => c.kind === "enqueue_campaign_run")).toHaveLength(1);
+  });
+
+  it("GET tells the app which concept was requested today and when the next request opens", async () => {
+    await load("Motion concept request: 5 contracts against a plan of 3");
+    const { res, result } = fakeRes();
+    await handler(fakeReq(undefined, "GET"), res);
+    const body = result.body as { dailyLimit: { requestedToday: string | null; nextRequestAt: string | null } };
+    expect(body.dailyLimit.requestedToday).toContain("5 contracts");
+    expect(new Date(body.dailyLimit.nextRequestAt!).getTime()).toBeGreaterThan(Date.now());
+
+    await load(null);
+    const free = fakeRes();
+    await handler(fakeReq(undefined, "GET"), free.res);
+    expect((free.result.body as { dailyLimit: unknown }).dailyLimit).toEqual({ requestedToday: null, nextRequestAt: null });
   });
 });

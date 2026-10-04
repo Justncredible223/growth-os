@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { CHART, barsPitch, chartGeometry, validateChartScene } from "../src/shortform/chart";
 import { BARS_PILOTS, buildBarsPlan } from "../src/shortform/chartBarsConcepts";
+import { DAILY_CONCEPT_ORDER } from "../src/shortform/dailyConcepts";
 import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
@@ -156,12 +157,16 @@ describe("bars drawing", () => {
 });
 
 describe("the daily queue", () => {
-  it("serves different themes first, so the win-rate template does not run back to back", () => {
+  it("serves the 30 daily concepts in their fixed order, day 1 first, and offers none of the first twelve", () => {
+    const ids = offeredChartConcepts().map((c) => c.id);
+    expect(ids).toEqual(DAILY_CONCEPT_ORDER);
+    expect(ids).toHaveLength(30);
+    expect(ids.some((id) => BARS_PILOTS.some((p) => p.planId === id))).toBe(false);
+  });
+
+  it("never serves two concepts about the same recording back to back", () => {
     const byId = new Map(MOTION_SCENE_PLANS.map((p) => [p.planId, p] as const));
-    const order = offeredChartConcepts().map((c) => byId.get(c.id)!.scenes[0]!.expectedTopics[0]);
-    const firstRound = order.slice(0, new Set(order).size);
-    expect(new Set(firstRound).size).toBe(firstRound.length);
-    expect(order.slice(0, 10).filter((t) => t === "trading_math").length).toBeLessThanOrEqual(1);
-    for (let i = 1; i < firstRound.length; i++) expect(firstRound[i]).not.toBe(firstRound[i - 1]);
+    const assets = offeredChartConcepts().map((c) => byId.get(c.id)!.scenes[0]!.assetId);
+    for (let i = 1; i < assets.length; i++) expect(assets[i], `day ${i + 1}`).not.toBe(assets[i - 1]);
   });
 });

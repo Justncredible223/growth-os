@@ -64,7 +64,8 @@ import { SupabaseJobQueueRepository } from "../../src/jobs/supabaseJobQueueRepos
 import { PUBLISH_YOUTUBE_JOB_TYPE } from "../../src/video/youtubePublishJob.js";
 import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
 import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary } from "../video-factory/motionCatalog.js";
-import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "../video-factory/scenePlanAdapter.js";
+import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration, synthesizeSuppliedNarrationAudio } from "../video-factory/scenePlanAdapter.js";
+import { findSuppliedVoice } from "../video-factory/suppliedVoice.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { isPayoffPlan, isNarratedMockPlan, MOCK_NARRATION } from "../../src/shortform/motionPlans.js";
 import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
@@ -128,7 +129,7 @@ async function buildVerifiedMotionPlan(
   runner: ProcessRunner,
   outputPath: string,
   musicRotation?: number,
-): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" | "none" }> {
+): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" | "supplied" | "none" }> {
   const manifest = loadManifest();
   // Payoff-layout plans (the retention redesign) are timed for a brisker voice and snappier cuts; every other plan is unchanged.
   const payoff = isPayoffPlan(scenePlan);
@@ -139,8 +140,12 @@ async function buildVerifiedMotionPlan(
   // `narrationProvenance` honestly (see RenderRunResult) rather than
   // implying the real edge-tts voice was used.
   // A plan with voiceover "none" has no speech: a silent track under the music bed, scenes as authored. Product mocks are narrated (MOCK_SPEECH_RATE, beats padded to MOCK_MIN_BEAT_SECONDS).
+  // A recording the owner supplied (assets/voice/, see suppliedVoice.ts) is used for a narrated mock that has one; every other video keeps the built-in voice.
+  const supplied = isNarratedMockPlan(scenePlan) ? findSuppliedVoice(scenePlan.planId, scenePlan.scenes.length) : null;
   const narration = scenePlan.voiceover === "none"
     ? await synthesizeSilentNarration(scenePlan, outDir, runner)
+    : supplied
+      ? await synthesizeSuppliedNarrationAudio(scenePlan, supplied, outDir, runner, MOCK_NARRATION)
     : process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
       ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
       : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, isNarratedMockPlan(scenePlan) ? MOCK_NARRATION : payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
@@ -165,7 +170,7 @@ async function buildVerifiedMotionPlan(
     musicFile: music?.file,
     musicStartSeconds: music?.startSeconds,
   };
-  return { plan, assetsUsed: summarizeUsedAssets(adjustedPlan, manifest), narrationProvenance: narration.provenance === "offline_sapi" ? "offline_sapi" : narration.provenance === "none" ? "none" : "edge_tts" };
+  return { plan, assetsUsed: summarizeUsedAssets(adjustedPlan, manifest), narrationProvenance: narration.provenance === "offline_sapi" ? "offline_sapi" : narration.provenance === "none" ? "none" : narration.provenance === "supplied" ? "supplied" : "edge_tts" };
 }
 
 /** The existing, unchanged stock-footage/UI-screenshot path -- exactly the same logic this file always ran, just factored out so buildRenderPlan can choose between it and the verified-motion path above. */
