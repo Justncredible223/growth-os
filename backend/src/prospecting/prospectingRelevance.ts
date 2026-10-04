@@ -255,3 +255,31 @@ export function isPlausiblyTradingRelated(postText: string): boolean {
   }
   return true;
 }
+
+/**
+ * Newsletters, market outlooks and long article-style posts (owner, 2026-10-04: two of the three queued candidates were a
+ * "Masterclass" article and a "Sunday Futures Open Outlook" newsletter). Nobody is in a conversation there, and a reply to a
+ * broadcast looks like spam. A normal tweet is under 300 characters, so a long post is nearly always an article; the
+ * title phrases catch the shorter ones.
+ */
+const BROADCAST_PATTERNS: RegExp[] = [
+  /^#{1,3}\s/m, // a markdown heading
+  /\bmasterclass\b/i,
+  /\bcomplete (guide|session|course|breakdown)\b/i,
+  /\b(open|week(ly)?|daily|market|futures|premarket|pre-market|morning|evening|sunday|monday) (outlook|recap|brief|preview|wrap|newsletter|report)\b/i,
+  /\bnewsletter\b/i,
+  /\bthread\b.{0,12}\b1\s*\/\s*\d+\b/i,
+  /\b\d+\s*\/\s*\d+\s*$/m, // "1/8" style thread numbering
+];
+/** Longer than this is an article, not a tweet-sized conversation. */
+export const BROADCAST_MIN_CHARS = 700;
+
+export function isBroadcastContent(postText: string): boolean {
+  if (postText.trim().length > BROADCAST_MIN_CHARS) return true;
+  return BROADCAST_PATTERNS.some((p) => p.test(postText));
+}
+
+/** Prospecting's gate: about futures / prop-firm trading, and a post a person can actually reply to. */
+export function isReplyWorthyPost(postText: string): boolean {
+  return isPlausiblyTradingRelated(postText) && !isBroadcastContent(postText);
+}
