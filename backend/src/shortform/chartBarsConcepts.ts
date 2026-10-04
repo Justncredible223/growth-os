@@ -21,7 +21,8 @@ import { OFFICIAL_HANDLE, type ChartRow, type Claim, type MockSpec, type SceneSp
  * product shows, never advice.
  */
 const VISUAL_STYLE = "chart-card-v1";
-const VOICE = "none (on-screen text and music only)";
+const VOICE_NONE = "none (on-screen text and music only)";
+const VOICE_NARRATED = "en-US-AndrewNeural at +8%";
 const CTA = `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`;
 
 interface BeatInput {
@@ -108,10 +109,11 @@ export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
     experimentId: PILOT_EXPERIMENT_ID,
     variationId: cfg.variationId,
     platforms: ["tiktok", "youtube_shorts"],
-    voice: VOICE,
+    voice: cfg.mock ? VOICE_NARRATED : VOICE_NONE,
     visualStyle: VISUAL_STYLE,
     requiredAssets: [],
-    voiceover: "none",
+    // A product mock is narrated (one number per sentence); the older drawn bar charts stay silent.
+    voiceover: cfg.mock ? "narrated" : "none",
     scenes,
   };
 }
@@ -157,11 +159,11 @@ export function barsDayOfWeekPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["dow.all"], narration: "Fillbook Reports show profit by day of the week.", takeaway: "Reports split profit by weekday.", caption: "Reports: profit by weekday." },
-      { stage: 2, seconds: 3.2, facts: ["dow.all"], narration: "Tuesday made $157.12. Friday made $122.08.", takeaway: "The two best days.", caption: "Tuesday: $157.12." },
-      { stage: 3, seconds: 3.4, facts: ["dow.all", "dow.monday"], narration: "But Monday is the only red day: -$57.32.", takeaway: "Monday is the only losing day.", caption: "Only Monday is red." },
-      { stage: 4, seconds: 4.6, facts: ["dow.all"], capability: true, narration: "Fillbook Reports list every weekday with its trade count and profit, from your synced trades.", takeaway: "Reports show each weekday.", caption: "Every weekday, side by side." },
-      { stage: 5, seconds: 3.2, facts: ["dow.all"], closing: true, narration: "Tuesday made $157. Monday lost $57. Fillbook shows yours by weekday.", takeaway: "Look at your own weekdays.", caption: "Check your own weekdays." },
+      { stage: 1, seconds: 3.0, facts: ["dow.all"], narration: "Fillbook shows profit by weekday.", takeaway: "Reports split profit by weekday.", caption: "Reports: profit by weekday." },
+      { stage: 2, seconds: 3.2, facts: ["dow.all"], narration: "Tuesday made $157.", takeaway: "The two best days.", caption: "Tuesday: $157.12." },
+      { stage: 3, seconds: 3.4, facts: ["dow.all", "dow.monday"], narration: "But Monday lost $57.", takeaway: "Monday is the only losing day.", caption: "Only Monday is red." },
+      { stage: 4, seconds: 4.6, facts: ["dow.all"], capability: true, narration: "Fillbook lists every weekday, from your synced trades.", takeaway: "Reports show each weekday.", caption: "Every weekday, side by side." },
+      { stage: 5, seconds: 3.2, facts: ["dow.all"], closing: true, narration: "Check your own weekdays in Fillbook.", takeaway: "Look at your own weekdays.", caption: "Check your own weekdays." },
     ],
   });
 }
@@ -207,11 +209,11 @@ export function barsTimeOfDayPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["timing.buckets"], narration: "Fillbook Reports break win rate down by time of day.", takeaway: "Reports split win rate by time window.", caption: "Reports: win rate by time." },
-      { stage: 2, seconds: 3.2, facts: ["timing.buckets"], narration: "The open: 106 trades, 71% win, $2,967.96.", takeaway: "The opening hour.", caption: "Open: 71% win." },
-      { stage: 3, seconds: 3.4, facts: ["timing.buckets"], narration: "But late morning: 25 trades, 24% win, -$1,406.00.", takeaway: "Late morning is far weaker.", caption: "Late morning: 24% win." },
-      { stage: 4, seconds: 4.6, facts: ["timing.buckets"], capability: true, narration: "Fillbook Reports show win rate and profit for each time window, from your synced trades.", takeaway: "Reports show each time window.", caption: "Win rate + profit per window." },
-      { stage: 5, seconds: 3.2, facts: ["timing.buckets"], closing: true, narration: "71% win at the open. Only 24% after 10:30. Fillbook shows your own hours.", takeaway: "Find your own strong hour.", caption: "Find your strong hour." },
+      { stage: 1, seconds: 3.0, facts: ["timing.buckets"], narration: "Fillbook shows win rate by time of day.", takeaway: "Reports split win rate by time window.", caption: "Reports: win rate by time." },
+      { stage: 2, seconds: 3.2, facts: ["timing.buckets"], narration: "The open wins 71%.", takeaway: "The opening hour.", caption: "Open: 71% win." },
+      { stage: 3, seconds: 3.4, facts: ["timing.buckets"], narration: "But late morning wins only 24%.", takeaway: "Late morning is far weaker.", caption: "Late morning: 24% win." },
+      { stage: 4, seconds: 4.6, facts: ["timing.buckets"], capability: true, narration: "Fillbook lists each window, from your synced trades.", takeaway: "Reports show each time window.", caption: "Win rate + profit per window." },
+      { stage: 5, seconds: 3.2, facts: ["timing.buckets"], closing: true, narration: "Check your own hours in Fillbook.", takeaway: "Find your own strong hour.", caption: "Find your strong hour." },
     ],
   });
 }
@@ -257,11 +259,11 @@ export function barsHabitCostPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["tags.all"], narration: "Tag each trade, and Fillbook Insights adds up every tag.", takeaway: "Insights total each tag.", caption: "Insights: net result by tag." },
-      { stage: 2, seconds: 3.2, facts: ["tags.all"], narration: "4 trades tagged Moved stop lost $655.84.", takeaway: "What Moved stop cost.", caption: "Moved stop: -$655.84." },
-      { stage: 3, seconds: 3.4, facts: ["tags.all"], narration: "But 12 trades tagged Good discipline made $828.48.", takeaway: "What discipline made.", caption: "Discipline: $828.48." },
-      { stage: 4, seconds: 4.6, facts: ["tags.all"], capability: true, narration: "Tag trades as you journal them, and Fillbook Insights ranks every habit by its net result, worst first.", takeaway: "Insights rank your tagged habits.", caption: "Habits ranked, worst first." },
-      { stage: 5, seconds: 3.2, facts: ["tags.all"], closing: true, narration: "Moved stops cost $656. Discipline made $828. Fillbook adds up your own tags.", takeaway: "Tag your own trades and see.", caption: "Add up your own tags." },
+      { stage: 1, seconds: 3.0, facts: ["tags.all"], narration: "Tag your trades, and Fillbook adds them up.", takeaway: "Insights total each tag.", caption: "Insights: net result by tag." },
+      { stage: 2, seconds: 3.2, facts: ["tags.all"], narration: "Trades tagged Moved stop lost $656.", takeaway: "What Moved stop cost.", caption: "Moved stop: -$655.84." },
+      { stage: 3, seconds: 3.4, facts: ["tags.all"], narration: "But Good discipline made $828.", takeaway: "What discipline made.", caption: "Discipline: $828.48." },
+      { stage: 4, seconds: 4.6, facts: ["tags.all"], capability: true, narration: "Fillbook ranks each tagged habit by net result.", takeaway: "Insights rank your tagged habits.", caption: "Habits ranked, worst first." },
+      { stage: 5, seconds: 3.2, facts: ["tags.all"], closing: true, narration: "Add up your own tags in Fillbook.", takeaway: "Tag your own trades and see.", caption: "Add up your own tags." },
     ],
   });
 }
@@ -307,11 +309,11 @@ export function barsConvictionPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["conviction.all"], narration: "In Fillbook, answer one question per trade: would you take it again?", takeaway: "Answer once per trade; Reports compare.", caption: "Reports: by conviction." },
-      { stage: 2, seconds: 3.2, facts: ["conviction.all"], narration: "75 trades you would take again made $3,822.00.", takeaway: "The trades you'd retake.", caption: "Would retake: $3,822." },
-      { stage: 3, seconds: 3.4, facts: ["conviction.all"], narration: "But 34 you wouldn't take again lost $2,575.96.", takeaway: "The trades you wouldn't.", caption: "Not again: -$2,575.96." },
-      { stage: 4, seconds: 4.6, facts: ["conviction.all"], capability: true, narration: "Fillbook Reports show win rate and profit for each answer you give while journaling.", takeaway: "Reports compare your answers.", caption: "Win rate for each answer." },
-      { stage: 5, seconds: 3.2, facts: ["conviction.all"], closing: true, narration: "Would take again: made $3,822. Would not: lost $2,576. Fillbook splits your own trades the same way.", takeaway: "Rate your own trades.", caption: "Rate your own trades." },
+      { stage: 1, seconds: 3.0, facts: ["conviction.all"], narration: "In Fillbook, would you take it again?", takeaway: "Answer once per trade; Reports compare.", caption: "Reports: by conviction." },
+      { stage: 2, seconds: 3.2, facts: ["conviction.all"], narration: "Trades you'd take again made $3,822.", takeaway: "The trades you'd retake.", caption: "Would retake: $3,822." },
+      { stage: 3, seconds: 3.4, facts: ["conviction.all"], narration: "But trades you wouldn't lost $2,576.", takeaway: "The trades you wouldn't.", caption: "Not again: -$2,575.96." },
+      { stage: 4, seconds: 4.6, facts: ["conviction.all"], capability: true, narration: "Fillbook splits results by your answers.", takeaway: "Reports compare your answers.", caption: "Win rate for each answer." },
+      { stage: 5, seconds: 3.2, facts: ["conviction.all"], closing: true, narration: "Rate your own trades in Fillbook.", takeaway: "Rate your own trades.", caption: "Rate your own trades." },
     ],
   });
 }
@@ -357,11 +359,11 @@ export function barsPlanWindowPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["plan.focus"], narration: "Set your trading window in your Fillbook plan, then compare it with what happened.", takeaway: "Fillbook compares the plan with what happened.", caption: "Plan vs what happened." },
-      { stage: 2, seconds: 3.2, facts: ["plan.focus"], narration: "Inside 09:30-11:30, trades average $21.13.", takeaway: "Results inside the window.", caption: "Inside the window: $21.13." },
-      { stage: 3, seconds: 3.4, facts: ["plan.focus"], narration: "But 20 trades outside it average -$39.16 each.", takeaway: "Results outside the window.", caption: "Outside it: -$39.16." },
-      { stage: 4, seconds: 4.6, facts: ["plan.adherence"], capability: true, narration: "Fillbook scores how closely your trades followed your own plan.", takeaway: "Fillbook scores plan adherence.", caption: "Adherence to your own plan." },
-      { stage: 5, seconds: 3.2, facts: ["plan.focus"], closing: true, narration: "In the plan: $21. Outside it: lost $39. Fillbook compares your own plan the same way.", takeaway: "Check your own plan.", caption: "Check your own plan." },
+      { stage: 1, seconds: 3.0, facts: ["plan.focus"], narration: "Set your trading window in your Fillbook plan.", takeaway: "Fillbook compares the plan with what happened.", caption: "Plan vs what happened." },
+      { stage: 2, seconds: 3.2, facts: ["plan.focus"], narration: "Inside it, trades average $21.", takeaway: "Results inside the window.", caption: "Inside the window: $21.13." },
+      { stage: 3, seconds: 3.4, facts: ["plan.focus"], narration: "But outside it, trades lost $39 on average.", takeaway: "Results outside the window.", caption: "Outside it: -$39.16." },
+      { stage: 4, seconds: 4.6, facts: ["plan.adherence"], capability: true, narration: "Fillbook scores how closely you followed your plan.", takeaway: "Fillbook scores plan adherence.", caption: "Adherence to your own plan." },
+      { stage: 5, seconds: 3.2, facts: ["plan.focus"], closing: true, narration: "Compare your own plan in Fillbook.", takeaway: "Check your own plan.", caption: "Check your own plan." },
     ],
   });
 }
@@ -407,11 +409,11 @@ export function barsSizedUpPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["behavior.revenge"], narration: "Fillbook Insights flagged 5 possible revenge trades.", takeaway: "Insights flag five trades for review.", caption: "5 possible revenge trades." },
-      { stage: 2, seconds: 3.2, facts: ["behavior.revenge"], narration: "Each opened minutes after a loss, bigger than your average size.", takeaway: "Each came soon after a loss, at a larger size.", caption: "Flagged: bigger after a loss." },
-      { stage: 3, seconds: 3.4, facts: ["behavior.revenge"], narration: "But the largest was 2.5x your average, 3 minutes after losing $127.", takeaway: "The largest flagged trade.", caption: "Flagged: 2.5x size." },
-      { stage: 4, seconds: 4.6, facts: ["behavior.revenge"], capability: true, narration: "Fillbook Insights lists each flagged trade with its size against your average, for you to review.", takeaway: "Insights list each flagged trade.", caption: "Each flagged trade, listed." },
-      { stage: 5, seconds: 3.2, facts: ["behavior.revenge"], closing: true, narration: "Lost $127. Then sized up 2.5x. Fillbook flags trades like these for your review.", takeaway: "Review your own flagged trades.", caption: "Review your flagged trades." },
+      { stage: 1, seconds: 3.0, facts: ["behavior.revenge"], narration: "Fillbook flagged 5 possible revenge trades.", takeaway: "Insights flag five trades for review.", caption: "5 possible revenge trades." },
+      { stage: 2, seconds: 3.2, facts: ["behavior.revenge"], narration: "Each opened minutes after a loss.", takeaway: "Each came soon after a loss, at a larger size.", caption: "Flagged: bigger after a loss." },
+      { stage: 3, seconds: 3.4, facts: ["behavior.revenge"], narration: "One was 2.5x your average, after losing $127.", takeaway: "The largest flagged trade.", caption: "Flagged: 2.5x size." },
+      { stage: 4, seconds: 4.6, facts: ["behavior.revenge"], capability: true, narration: "Fillbook lists each flagged trade for review.", takeaway: "Insights list each flagged trade.", caption: "Each flagged trade, listed." },
+      { stage: 5, seconds: 3.2, facts: ["behavior.revenge"], closing: true, narration: "Fillbook flags trades like this for review.", takeaway: "Review your own flagged trades.", caption: "Review your flagged trades." },
     ],
   });
 }
@@ -457,11 +459,11 @@ export function barsEdgeMapPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["edge.score", "edge.map"], narration: "Fillbook gives one score for how you trade: Edge Score 67.", takeaway: "One score, built from several parts.", caption: "Edge Score: 67." },
-      { stage: 2, seconds: 3.2, facts: ["edge.score", "edge.map"], narration: "Rule adherence is 87. Risk control is 69.", takeaway: "The strongest parts.", caption: "Rule adherence: 87." },
-      { stage: 3, seconds: 3.4, facts: ["edge.score", "edge.map"], narration: "But profitability is only 59, the lowest part.", takeaway: "The weakest part.", caption: "Profitability: only 59." },
-      { stage: 4, seconds: 4.6, facts: ["edge.score", "edge.map"], capability: true, narration: "Fillbook blends profitability, consistency, risk control, stop and rule adherence into one Edge Score.", takeaway: "Five parts make one score.", caption: "Five parts, one score." },
-      { stage: 5, seconds: 3.2, facts: ["edge.score", "edge.map"], closing: true, narration: "Edge Score 67. Profitability 59. Fillbook shows what yours is made of.", takeaway: "See your own score.", caption: "See your own score." },
+      { stage: 1, seconds: 3.0, facts: ["edge.score", "edge.map"], narration: "Fillbook gives you an Edge Score: 67.", takeaway: "One score, built from several parts.", caption: "Edge Score: 67." },
+      { stage: 2, seconds: 3.2, facts: ["edge.score", "edge.map"], narration: "Rule adherence is 87.", takeaway: "The strongest parts.", caption: "Rule adherence: 87." },
+      { stage: 3, seconds: 3.4, facts: ["edge.score", "edge.map"], narration: "But profitability is only 59.", takeaway: "The weakest part.", caption: "Profitability: only 59." },
+      { stage: 4, seconds: 4.6, facts: ["edge.score", "edge.map"], capability: true, narration: "Edge Score blends profitability and rule adherence.", takeaway: "Five parts make one score.", caption: "Five parts, one score." },
+      { stage: 5, seconds: 3.2, facts: ["edge.score", "edge.map"], closing: true, narration: "Fillbook shows what yours is made of.", takeaway: "See your own score.", caption: "See your own score." },
     ],
   });
 }
@@ -507,11 +509,11 @@ export function barsWinDriftPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["progress.win_rate"], narration: "Fillbook's Progress page compares your win rate now with your own baseline.", takeaway: "Progress compares recent with baseline.", caption: "Progress: recent vs baseline." },
-      { stage: 2, seconds: 3.2, facts: ["progress.win_rate"], narration: "The baseline is 76%.", takeaway: "The baseline.", caption: "Baseline: 76%." },
-      { stage: 3, seconds: 3.4, facts: ["progress.win_rate"], narration: "But recent trades win 55%, down 21%.", takeaway: "Recent trades have slipped.", caption: "Recent: 55%, down 21%." },
-      { stage: 4, seconds: 4.6, facts: ["progress.win_rate", "progress.behavior"], capability: true, narration: "Fillbook Progress compares win rate, possible revenge trades and overtrading days with your own baseline.", takeaway: "Progress tracks your habits.", caption: "Your habits vs your baseline." },
-      { stage: 5, seconds: 3.2, facts: ["progress.win_rate"], closing: true, narration: "Win rate 76%. Lately only 55%. Fillbook tracks yours against your own baseline.", takeaway: "Check your own drift.", caption: "Check your own drift." },
+      { stage: 1, seconds: 3.0, facts: ["progress.win_rate"], narration: "Fillbook compares your win rate with your baseline.", takeaway: "Progress compares recent with baseline.", caption: "Progress: recent vs baseline." },
+      { stage: 2, seconds: 3.2, facts: ["progress.win_rate"], narration: "Your baseline is 76%.", takeaway: "The baseline.", caption: "Baseline: 76%." },
+      { stage: 3, seconds: 3.4, facts: ["progress.win_rate"], narration: "But recent trades win 55%.", takeaway: "Recent trades have slipped.", caption: "Recent: 55%, down 21%." },
+      { stage: 4, seconds: 4.6, facts: ["progress.win_rate", "progress.behavior"], capability: true, narration: "Fillbook tracks your habits against your baseline.", takeaway: "Progress tracks your habits.", caption: "Your habits vs your baseline." },
+      { stage: 5, seconds: 3.2, facts: ["progress.win_rate"], closing: true, narration: "Track your own win rate in Fillbook.", takeaway: "Check your own drift.", caption: "Check your own drift." },
     ],
   });
 }
@@ -557,11 +559,11 @@ export function barsConsistencyPlan(): ScenePlan {
       },
     },
     beats: [
-      { stage: 1, seconds: 3.0, facts: ["health.consistency_action"], narration: "Fillbook's Account health shows one day made 46% of your total profit.", takeaway: "Account health shows one day's share of profit.", caption: "One day: 46% of profit." },
-      { stage: 2, seconds: 3.2, facts: ["health.consistency_action"], narration: "A consistency cap limits any one day to 40% of your total profit.", takeaway: "What the cap limits.", caption: "The cap: 40% of profit." },
-      { stage: 3, seconds: 3.4, facts: ["health.consistency_action"], narration: "But 46% is over the firm's cap.", takeaway: "That day is over the cap.", caption: "46% is over the cap." },
-      { stage: 4, seconds: 4.6, facts: ["health.consistency_action"], capability: true, narration: "Fillbook Account health names your most important action, such as a day over the consistency cap.", takeaway: "Account health names one action.", caption: "Health score + top action." },
-      { stage: 5, seconds: 3.2, facts: ["health.consistency_action"], closing: true, narration: "One day made 46%. The cap is 40%. Fillbook shows your own biggest day's share.", takeaway: "Check your biggest day.", caption: "Check your biggest day." },
+      { stage: 1, seconds: 3.0, facts: ["health.consistency_action"], narration: "Fillbook shows one day made 46% of profit.", takeaway: "Account health shows one day's share of profit.", caption: "One day: 46% of profit." },
+      { stage: 2, seconds: 3.2, facts: ["health.consistency_action"], narration: "A consistency cap limits any day to 40%.", takeaway: "What the cap limits.", caption: "The cap: 40% of profit." },
+      { stage: 3, seconds: 3.4, facts: ["health.consistency_action"], narration: "But 46% is over the cap.", takeaway: "That day is over the cap.", caption: "46% is over the cap." },
+      { stage: 4, seconds: 4.6, facts: ["health.consistency_action"], capability: true, narration: "Fillbook names your top action.", takeaway: "Account health names one action.", caption: "Health score + top action." },
+      { stage: 5, seconds: 3.2, facts: ["health.consistency_action"], closing: true, narration: "Check your biggest day's share in Fillbook.", takeaway: "Check your biggest day.", caption: "Check your biggest day." },
     ],
   });
 }

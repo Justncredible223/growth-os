@@ -349,9 +349,9 @@ describe("runRender", () => {
     expect(edgeTtsCalls.length).toBe(PILOT_2.scenes.length);
   }, 30_000);
 
-  it("a chart-card plan (voiceover none) renders via the verified-motion path with NO speech synthesis, reporting provenance none and the recording its numbers come from", async () => {
+  it("a narrated product-mock plan renders via the verified-motion path with one edge-tts call per beat at +8%, reporting the recording its numbers come from", async () => {
     const plan = chartAPlan();
-    const runner = createFakeRunner(plan.scenes.reduce((n, s) => n + s.durationSeconds, 0) + 0.3);
+    const runner = createFakeRunner();
     const workDir = tempWorkDir();
     const calls: { table: string; op: string }[] = [];
     const { campaignAssetsRow, contentVersionsRow } = makeRow({
@@ -372,13 +372,17 @@ describe("runRender", () => {
 
     expect(result.motionSelection.usedVerifiedScenePlan).toBe(true);
     expect(result.motionSelection.reason).toContain(plan.planId);
-    expect(result.motionSelection.narrationProvenance).toBe("none");
+    expect(result.motionSelection.narrationProvenance).toBe("edge_tts");
     expect(result.motionSelection.assetsUsed.map((a) => a.assetId)).toContain("rec.hs-payout-account.v1");
     expect(existsSync(join(workDir, "render-chart", "final.mp4"))).toBe(true);
-    // No edge-tts call at all: the audio is a silent track under the music bed.
+    // One edge-tts call per beat, all at the project voice's +8% pace (not the faster payoff pace).
     const runMock = runner.run as unknown as ReturnType<typeof vi.fn>;
     const edgeTtsCalls = runMock.mock.calls.filter((c: unknown[]) => c[0] === "python3" && !(c[1] as string[]).includes("--version"));
-    expect(edgeTtsCalls.length).toBe(0);
+    expect(edgeTtsCalls.length).toBe(plan.scenes.length);
+    for (const c of edgeTtsCalls) {
+      const args = c[1] as string[];
+      expect(args[args.indexOf("--rate") + 1]).toBe("+8%");
+    }
   }, 30_000);
 
   it("a valid scenePlanId+hash+hook, but approved script BODY/figures/claims text altered after generation, is rejected before any narration/rendering happens", async () => {

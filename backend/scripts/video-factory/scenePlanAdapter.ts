@@ -402,7 +402,16 @@ export async function synthesizeRealNarrationAudio(plan: ScenePlan, outDir: stri
  * is what render-single.ts's real ScenePlan-matched path calls -- the
  * offline SAPI version above is local-verification-only.
  */
-export async function synthesizeProductionNarrationAudio(plan: ScenePlan, outDir: string, runner: ProcessRunner, options: { rate?: string } = {}): Promise<RealNarrationResult> {
+export async function synthesizeProductionNarrationAudio(
+  plan: ScenePlan,
+  outDir: string,
+  runner: ProcessRunner,
+  options: {
+    rate?: string;
+    /** Pads a scene's audio with silence up to this length, so a one-line beat still holds long enough to read after its entrance animation. */
+    minSceneSeconds?: number;
+  } = {},
+): Promise<RealNarrationResult> {
   const wordCuesBySceneId: Record<string, WordCue[]> = {};
   const { voiceoverPath, durationsBySceneId } = await synthesizePerSceneAndConcat(
     plan,
@@ -414,6 +423,14 @@ export async function synthesizeProductionNarrationAudio(plan: ScenePlan, outDir
       const result = await generateVoiceover(text, sceneOutDir, runner, DEFAULT_VOICE, options.rate);
       copyFileSync(result.mp3Path, partPath);
       wordCuesBySceneId[sceneId] = result.wordCues;
+      const min = options.minSceneSeconds;
+      if (min !== undefined && result.durationSeconds < min) {
+        const paddedPath = partPath.replace(/\.mp3$/, ".padded.mp3");
+        const padded = await runner.run("ffmpeg", ["-y", "-i", partPath, "-af", `apad=whole_dur=${min.toFixed(3)}`, "-t", min.toFixed(3), "-c:a", "libmp3lame", paddedPath], {});
+        if (padded.exitCode !== 0) throw new VideoFactoryError(`Failed to pad narration for scene "${sceneId}": ${padded.stderr || padded.stdout}`);
+        copyFileSync(paddedPath, partPath);
+        return min;
+      }
       return result.durationSeconds;
     },
     "voiceover-production-narration.mp3",

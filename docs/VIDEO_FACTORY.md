@@ -378,6 +378,16 @@ frame is exactly the verified number. Motion only slides content from inside the
 area; the finished slide is the one measured against the platform overlays. A video
 takes about a minute to render locally because each beat is 30 screenshots.
 
+## Narration on product mocks
+
+Offered product-mock concepts are narrated (`voiceover: "narrated"`): `en-US-AndrewNeural` at
+`MOCK_SPEECH_RATE` (+8%, not the faster +18% payoff pace), one edge-tts call per beat. Each beat's
+`narration` is both the spoken line and the text the claim checks read, so a spoken sentence carries
+at most two figures (`test/narratedMocks.test.ts`). A beat's audio is padded with silence to
+`MOCK_MIN_BEAT_SECONDS` (1.8 s) so a one-line beat still holds after its 1 s entrance. The slide
+already carries its own text, so no word-by-word subtitles are burned over a mock. The older drawn
+bar charts stay silent. Spoken lines are 11 words or fewer, whole dollars only (a voice reads cents slowly), and a rendered concept runs about 12-16 s.
+
 ## Music rotation
 
 Each render takes the next bundled track in order: `runRender` counts the render rows
