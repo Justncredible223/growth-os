@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { needsDay7Stats } from "../src/posting/postingRepository";
 import { assessReplyVisibility, buildPostingPlan, phoenixDate, phoenixInstant, type PlanVideo } from "../src/posting/postingPlan";
 
 // 2026-09-25 10:00 Arizona = 17:00 UTC.
@@ -73,5 +74,20 @@ describe("assessReplyVisibility (X hid the account's replies on 2026-09-24)", ()
     const tooFresh = [1, 2, 3, 4].map((h) => ({ createdAt: hoursAgo(h), impressions: 0 }));
     expect(assessReplyVisibility([...tooFresh, ...baseline], NOW).status).toBe("not_enough_data");
     expect(assessReplyVisibility(baseline.slice(0, 3), NOW).status).toBe("not_enough_data");
+  });
+});
+
+describe("needsDay7Stats (asks again for the week-old TikTok/Instagram numbers)", () => {
+  const posted = "2026-09-18T12:00:00Z";
+  const now = new Date("2026-09-26T12:00:00Z");
+  it("asks when the typed numbers were taken in the first days and the post is a week old", () => {
+    expect(needsDay7Stats("tiktok", posted, { source: "manual", capturedAt: "2026-09-20T12:00:00Z" }, now)).toBe(true);
+  });
+  it("does not ask for YouTube, API numbers, a younger post, or numbers already taken near day 7", () => {
+    expect(needsDay7Stats("youtube_shorts", posted, { source: "manual", capturedAt: "2026-09-20T12:00:00Z" }, now)).toBe(false);
+    expect(needsDay7Stats("tiktok", posted, { source: "api", capturedAt: "2026-09-20T12:00:00Z" }, now)).toBe(false);
+    expect(needsDay7Stats("tiktok", "2026-09-22T12:00:00Z", { source: "manual", capturedAt: "2026-09-23T12:00:00Z" }, now)).toBe(false);
+    expect(needsDay7Stats("tiktok", posted, { source: "manual", capturedAt: "2026-09-25T12:00:00Z" }, now)).toBe(false);
+    expect(needsDay7Stats("instagram", posted, null, now)).toBe(false);
   });
 });

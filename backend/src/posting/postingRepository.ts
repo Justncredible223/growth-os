@@ -3,6 +3,7 @@ import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotio
 import { extractYoutubeVideoId } from "../video/youtubeUrl.js";
 import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import type { XOwnTweet } from "../signals/adapters/xAdapter.js";
+import { dayForTitle } from "../video/todaysVideo.js";
 import { POSTING_PLATFORMS, assessReplyVisibility, buildPostingPlan, type PlanVideo, type PostingPlan, type PostingPlatform, type ReplyVisibility } from "./postingPlan.js";
 
 /** How far back results are listed and YouTube stats refreshed. */
@@ -124,6 +125,18 @@ export async function recordManualStats(
   if (error) throw new Error(`Saving the stats failed: ${error.message}`);
 }
 
+/**
+ * True when a typed-in (TikTok/Instagram) post is a week old but its numbers were taken before day 6, so the owner is asked
+ * for the day-7 numbers. Views keep growing for days; a day-2 number alone makes an old video look worse than it did.
+ */
+export function needsDay7Stats(platform: PostingPlatform, postedAt: string, latest: { source: "api" | "manual"; capturedAt: string } | null, now: Date): boolean {
+  if (platform === "youtube_shorts" || !latest || latest.source !== "manual") return false;
+  const posted = new Date(postedAt).getTime();
+  const ageDays = (now.getTime() - posted) / DAY_MS;
+  const takenAtDays = (new Date(latest.capturedAt).getTime() - posted) / DAY_MS;
+  return ageDays >= 7 && takenAtDays < 6;
+}
+
 export interface PostResult {
   id: string;
   platform: PostingPlatform;
@@ -137,11 +150,15 @@ export interface PostResult {
   statsAt: string | null;
   /** TikTok/Instagram posts at least 2 days old with no numbers yet: the app asks for them. */
   needsManualStats: boolean;
+  /** TikTok/Instagram posts at least 7 days old whose typed numbers were taken in the first days: the app asks for the day-7 numbers. */
+  needsDay7Stats: boolean;
 }
 
 export interface VideoResult {
   campaignAssetId: string;
   title: string;
+  /** The concept's day in the fixed daily order (1-30), when the title matches one. */
+  day: number | null;
   firstPostedAt: string;
   totalViews: number | null;
   posts: PostResult[];
@@ -202,8 +219,9 @@ export async function loadResults(client: SupabaseClient, now: Date = new Date()
       statsSource: m?.source ?? null,
       statsAt: m?.captured_at ?? null,
       needsManualStats: p.platform !== "youtube_shorts" && !m && ageDays >= 2,
+      needsDay7Stats: needsDay7Stats(p.platform, p.posted_at, m ? { source: m.source, capturedAt: m.captured_at } : null, now),
     };
-    const video = byVideo.get(p.campaign_asset_id) ?? { campaignAssetId: p.campaign_asset_id, title: p.concept_title, firstPostedAt: p.posted_at, totalViews: null, posts: [] };
+    const video = byVideo.get(p.campaign_asset_id) ?? { campaignAssetId: p.campaign_asset_id, title: p.concept_title, day: dayForTitle(p.concept_title), firstPostedAt: p.posted_at, totalViews: null, posts: [] };
     video.posts.push(result);
     if (p.posted_at < video.firstPostedAt) video.firstPostedAt = p.posted_at;
     if (result.views !== null) video.totalViews = (video.totalViews ?? 0) + result.views;

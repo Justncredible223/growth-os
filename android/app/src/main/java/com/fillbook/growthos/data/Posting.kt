@@ -50,9 +50,11 @@ data class PostResult(
     /** "api" (read automatically), "manual" (typed in), or null (no numbers yet). */
     val statsSource: String?,
     val needsManualStats: Boolean,
+    /** A week old, but the typed numbers were taken in the first days: ask for the day-7 numbers. */
+    val needsDay7Stats: Boolean = false,
 )
 
-data class VideoResult(val campaignAssetId: String, val title: String, val firstPostedAt: String, val totalViews: Int?, val posts: List<PostResult>)
+data class VideoResult(val campaignAssetId: String, val title: String, val firstPostedAt: String, val totalViews: Int?, val posts: List<PostResult>, val day: Int? = null)
 
 data class XReplyResult(val tweetId: String, val text: String, val createdAt: String, val impressions: Int?, val likes: Int?, val replies: Int?)
 
@@ -107,6 +109,7 @@ internal fun JSONObject.toPostingOverview(): PostingOverview {
                     title = v.getString("title"),
                     firstPostedAt = v.getString("firstPostedAt"),
                     totalViews = v.intOrNull("totalViews"),
+                    day = v.intOrNull("day"),
                     posts = v.getJSONArray("posts").mapObjects { p ->
                         PostingPlatform.fromApi(p.getString("platform"))?.let { platform ->
                             PostResult(
@@ -120,6 +123,7 @@ internal fun JSONObject.toPostingOverview(): PostingOverview {
                                 shares = p.intOrNull("shares"),
                                 statsSource = p.stringOrNull("statsSource"),
                                 needsManualStats = p.optBoolean("needsManualStats"),
+                                needsDay7Stats = p.optBoolean("needsDay7Stats"),
                             )
                         }
                     }.filterNotNull(),

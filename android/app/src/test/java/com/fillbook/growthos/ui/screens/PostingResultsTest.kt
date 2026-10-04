@@ -29,6 +29,30 @@ class PostingResultsTest {
         assertEquals("No video ready" to StatusTone.SKIPPED, slotStatusLabel(PlanSlot("17:30", "empty", null, emptyList())))
     }
 
+    private fun result(id: String, views: Int?, day: Int? = null) =
+        com.fillbook.growthos.data.VideoResult(id, "Title $id", "2026-10-01T00:00:00Z", views, emptyList(), day)
+
+    @Test
+    fun leaderboardRanksByViewsAndSkipsVideosWithoutNumbers() {
+        val ranked = rankedVideos(listOf(result("a", 120), result("b", null), result("c", 900), result("d", 0), result("e", 450)))
+        assertEquals(listOf("c", "e", "a"), ranked.map { it.campaignAssetId })
+        assertEquals(5, rankedVideos((1..9).map { result("v$it", it * 10) }).size)
+    }
+
+    @Test
+    fun conceptHeadingShowsTheDayWhenKnown() {
+        assertEquals("Day 5 · Title a", conceptHeading(result("a", 1, day = 5)))
+        assertEquals("Title a", conceptHeading(result("a", 1)))
+    }
+
+    @Test
+    fun statsButtonAsksForTheDaySevenNumbers() {
+        fun post(first: Boolean, day7: Boolean) = com.fillbook.growthos.data.PostResult("p", PostingPlatform.TIKTOK, "u", "t", null, null, null, null, null, first, day7)
+        assertEquals("Add stats", statsButtonLabel(post(true, false)))
+        assertEquals("Add day-7 stats", statsButtonLabel(post(false, true)))
+        assertEquals("Update", statsButtonLabel(post(false, false)))
+    }
+
     @Test
     fun countsAreShortAndReadable() {
         assertEquals("—", formatCount(null))
