@@ -3,9 +3,9 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CHART, validateChartScene } from "../src/shortform/chart";
-import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea, cursorPath, heroFontSize, windowGeometry } from "../src/shortform/mockLayout";
+import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea, cursorPath, heroFontSize, mockFitProblems, windowGeometry } from "../src/shortform/mockLayout";
 import { PLATFORM_OVERLAY_ZONES, buildFfmpegArgs } from "../scripts/video-factory/render";
-import { BARS_PILOTS, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
+import { BARS_PILOTS, barsConvictionPlan, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { MOCK_CARD_PILOTS } from "../src/shortform/chartMockConcepts";
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
@@ -100,6 +100,27 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     const [x3, y3, , y3b] = cur(b3);
     expect([x3, y3]).toEqual([x2, y2]);
     expect(y3b).toBeGreaterThan(y2!); // moves down to the second row
+  });
+
+  it("the via pill appears between the figure and the window on beats 2 and 3 only, and only when the concept sets one", () => {
+    const conv = barsConvictionPlan();
+    const [b1, b2, b3, b4, b5] = conv.scenes.map((s) => buildMockHtml(frame(s)));
+    expect(b1).not.toMatch(/class="pill"/);
+    expect(b2).toMatch(/class="pill"[^>]*>\s*<span>FILLBOOK REPORTS/);
+    expect(b3).toMatch(/class="pill"/);
+    expect(b4).not.toMatch(/class="pill"/);
+    expect(b5).not.toMatch(/class="pill"/);
+    const [, plain] = plan.scenes.map((s) => buildMockHtml(frame(s)));
+    expect(plain).not.toMatch(/class="pill"/);
+    expect(MOCK_BOXES.pill.y).toBeGreaterThanOrEqual(MOCK_BOXES.hero.y + MOCK_BOXES.hero.h);
+    expect(MOCK_BOXES.pill.y + MOCK_BOXES.pill.h).toBeLessThanOrEqual(MOCK_BOXES.window.y);
+  });
+
+  it("refuses a via pill that is too long or carries a number", () => {
+    const m = barsConvictionPlan().scenes[1]!.chart!.mock!;
+    expect(mockFitProblems({ ...m, via: "Fillbook Reports" }, [], "x", null)).toEqual([]);
+    expect(mockFitProblems({ ...m, via: "Fillbook Reports and Insights page" }, [], "x", null).join()).toMatch(/via pill/);
+    expect(mockFitProblems({ ...m, via: "Reports 2" }, [], "x", null).join()).toMatch(/digit/);
   });
 
   it("hero figures shrink to fit the box", () => {

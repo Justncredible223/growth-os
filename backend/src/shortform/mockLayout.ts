@@ -48,9 +48,10 @@ export const MOCK_BOXES = {
   logo: { x: MOCK_SAFE.x, y: 170, w: 220, h: 58 },
   label: { x: MOCK_SAFE.x, y: 236, w: MOCK_SAFE.w, h: 46 },
   hero: { x: MOCK_SAFE.x, y: 280, w: MOCK_SAFE.w, h: 240 },
+  pill: { x: MOCK_SAFE.x, y: 526, w: MOCK_SAFE.w, h: 42 },
   label2: { x: MOCK_SAFE.x, y: 526, w: MOCK_SAFE.w, h: 46 },
   hero2: { x: MOCK_SAFE.x, y: 570, w: MOCK_SAFE.w, h: 240 },
-  window: { x: MOCK_SAFE.x, y: 540, w: MOCK_SAFE.w, h: 600 },
+  window: { x: MOCK_SAFE.x, y: 572, w: MOCK_SAFE.w, h: 568 },
   windowLow: { x: MOCK_SAFE.x, y: 820, w: MOCK_SAFE.w, h: 320 },
   big: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 320 },
   cta: { x: MOCK_SAFE.x, y: 640, w: MOCK_SAFE.w, h: 300 },
@@ -60,7 +61,7 @@ export const MOCK_BOXES = {
 export type MockBoxName = keyof typeof MOCK_BOXES;
 
 /** Font sizes (px) the template draws with. A hero figure shrinks to fit its box (see heroFontSize). */
-export const MOCK_FONT = { hero: 210, heroLabel: 34, big: 94, bigLine: 104, caption: 46, rowLabel: 44, rowSub: 26, rowValue: 46 } as const;
+export const MOCK_FONT = { hero: 210, heroLabel: 38, big: 94, bigLine: 104, caption: 46, rowLabel: 44, rowSub: 26, rowValue: 46 } as const;
 
 /** The size a hero figure is drawn at: 210px, or smaller so a long value ("-$1,201") still fits the box. Space Grotesk digits and the dollar sign run up to about 0.56em wide. */
 export function heroFontSize(value: string): number {
@@ -80,6 +81,7 @@ export const MOCK_LIMITS = {
   rowSub: 26,
   rowValue: 10,
   tag: 12,
+  via: 24,
   detailRowsMin: 3,
   detailRowsMax: 5,
   detailLabel: 24,
@@ -115,6 +117,7 @@ export function mockTexts(spec: MockSpec, _headlineLines: string[], caption: str
     t.push(["detail title", spec.details.title], ["detail footer", spec.details.footer]);
     spec.details.rows.forEach((r, i) => t.push([`detail row ${i + 1} label`, r.label], [`detail row ${i + 1} value`, r.value]));
   }
+  if (spec.via) t.push(["via pill", spec.via]);
   t.push(["caption", caption]);
   if (cta) t.push(["invitation", cta]);
   return t;
@@ -132,6 +135,10 @@ export function mockFitProblems(spec: MockSpec, _headlineLines: string[], captio
     over(`${what} value`, h.value, L.heroValue);
   };
   over("tag", spec.tag, L.tag);
+  if (spec.via) {
+    over("via pill", spec.via, L.via);
+    if (/\d/.test(spec.via)) p.push(`The via pill "${spec.via}" has a digit; it names where the figure came from and carries no number.`);
+  }
   if (spec.opening.length < 1 || spec.opening.length > L.openingHeroes) p.push(`The opening beat shows 1 to ${L.openingHeroes} figures, not ${spec.opening.length}.`);
   spec.opening.forEach((h, i) => hero(`opening figure ${i + 1}`, h));
   if (spec.windows.length < 1 || spec.windows.length > L.windows) p.push(`A mock has 1 to ${L.windows} windows, not ${spec.windows.length}.`);

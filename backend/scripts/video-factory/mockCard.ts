@@ -42,7 +42,8 @@ body{position:relative;color:var(--ink);font-family:MR,sans-serif;background:rad
 [data-box]{position:absolute}
 ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px}`).join("\n")}
 .logo{height:58px}
-.label{font:700 ${MOCK_FONT.heroLabel}px/46px MR;letter-spacing:.16em;color:var(--cyan);white-space:nowrap;overflow:hidden}
+.label{font:700 ${MOCK_FONT.heroLabel}px/44px SG;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;overflow:hidden}.label em{font-style:normal;color:var(--cyan)}
+.pill{display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden}.pill span{display:inline-flex;align-items:center;gap:12px;height:42px;padding:0 26px;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:999px;font:700 22px/1 MR;letter-spacing:.16em;color:var(--cyan)}
 .hero{font-family:SG;font-weight:700;letter-spacing:-.04em;line-height:${MOCK_FONT.hero}px;white-space:nowrap;overflow:hidden}
 .big{font:700 ${MOCK_FONT.big}px/${MOCK_FONT.bigLine}px SG;letter-spacing:-.02em;overflow:hidden}.big em{font-style:normal;color:var(--cyan)}
 .good{color:var(--good)}.bad{color:var(--bad)}
@@ -131,8 +132,14 @@ export function buildMockHtml(frame: MockFrame): string {
   const box = (name: MockBoxName): string => `data-box="${name}"`;
   // Entrance motion: each element that appears or changes on this beat carries data-a (kind) and data-d (delay, ms); seek() in the page draws it.
   const a = (kind: string, delay: number): string => ` data-a="${kind}" data-d="${delay}"`;
+  // The label reads like the site's headlines: sentence case in the ink colour, the last word in the accent.
+  const twoTone = (text: string): string => {
+    const words = text.split(" ");
+    const last = words.pop()!;
+    return `${words.length > 0 ? `${esc(words.join(" "))} ` : ""}<em>${esc(last)}</em>`;
+  };
   const heroHtml = (h: { label: string; value: string; tone: ChartTone }, labelBox: MockBoxName, heroBox: MockBoxName, delay: number): string =>
-    `<div ${box(labelBox)} class="label" data-fit${a("settle", delay)}>${esc(h.label.toUpperCase())}</div>` +
+    `<div ${box(labelBox)} class="label" data-fit${a("settle", delay)}>${twoTone(h.label)}</div>` +
     `<div ${box(heroBox)} class="hero ${toneClass(h.tone)}" data-fit style="font-size:${heroFontSize(h.value)}px"${a("settle", delay)}>${esc(h.value)}</div>`;
   const windowHtml = (w: { title: string; rows: MockRow[] }, kind: "window" | "windowLow", opts: { focus?: number; enter: "slideup" | "none"; rowDelay: number }): string => {
     const g = windowGeometry(w.rows.length, kind);
@@ -168,6 +175,7 @@ export function buildMockHtml(frame: MockFrame): string {
       const prev = stage === 3 ? m.focus[0] : undefined;
       const sameWindow = prev !== undefined && prev.window === f.window;
       content += heroHtml(f.hero, "label", "hero", 0);
+      if (m.via) content += `<div ${box("pill")} class="pill" data-fit${a("pop", 200)}><span>${esc(m.via.toUpperCase())}<svg width="16" height="20" viewBox="0 0 16 20"><path d="M8 2v14M2 10l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>`;
       content += windowHtml(m.windows[f.window]!, "window", { focus: f.row, enter: sameWindow ? "none" : "slideup", rowDelay: 300 });
       // The cursor travels to the ringed row; on beat 3 it starts where beat 2 left it when the window is the same one.
       const n = m.windows[f.window]!.rows.length;
