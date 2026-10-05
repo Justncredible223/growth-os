@@ -24,18 +24,18 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     expect(boxesOutsideSafeArea()).toEqual([]);
     for (const [name, b] of Object.entries(MOCK_BOXES)) {
       expect(b.x + b.w, name).toBeLessThanOrEqual(880);
-      expect(b.y + b.h, name).toBeLessThanOrEqual(1450);
+      expect(b.y + b.h, name).toBeLessThanOrEqual(1220);
       expect(b.y, name).toBeGreaterThanOrEqual(150);
     }
   });
 
-  it("clears the measured platform overlay zones (button column from x=930 down from y=740, caption block from y=1600)", () => {
+  it("clears the measured platform overlay zones (button column from x=930 down from y=740, caption block from y=1600; the ad preview from y=1250 is covered by the 1220 limit below)", () => {
     const { rightColumn, captionTop } = PLATFORM_OVERLAY_ZONES;
     for (const [name, b] of Object.entries(MOCK_BOXES)) {
       expect(b.x + b.w, name).toBeLessThanOrEqual(rightColumn.x);
       expect(b.y + b.h, name).toBeLessThanOrEqual(captionTop);
-      // About 100px of clearance above TikTok's account-name block (starts near y 1520), not a few pixels.
-      expect(b.y + b.h, name).toBeLessThanOrEqual(1450);
+      // Clear of the ad preview's promotion tag, which starts near y 1250.
+      expect(b.y + b.h, name).toBeLessThanOrEqual(1220);
     }
   });
 
@@ -103,9 +103,9 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
   });
 
   it("hero figures shrink to fit the box", () => {
-    expect(heroFontSize("$57")).toBe(250);
+    expect(heroFontSize("$57")).toBe(210);
     expect(heroFontSize("-$1,201") * 7 * 0.56).toBeLessThanOrEqual(MOCK_SAFE.w);
-    expect(heroFontSize("17 of 18")).toBeLessThan(250);
+    expect(heroFontSize("17 of 18")).toBeLessThan(210);
   });
 
   it("windows and the cursor stay inside the clear area", () => {
@@ -119,7 +119,7 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
           const { from, to } = cursorPath(n, row, kind);
           for (const pt of [from, to]) {
             expect(pt.x).toBeLessThanOrEqual(MOCK_SAFE.x + MOCK_SAFE.w);
-            expect(pt.y).toBeLessThanOrEqual(1450);
+            expect(pt.y).toBeLessThanOrEqual(1220);
           }
         }
       }
