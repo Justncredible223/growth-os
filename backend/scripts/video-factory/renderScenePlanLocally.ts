@@ -14,6 +14,7 @@
  *
  *   npx tsx scripts/video-factory/renderScenePlanLocally.ts pilot-3
  *   npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-sized-up   (motion-render concepts work too)
+ *   npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-conviction 5   (a mock concept in the look for rotation index 5)
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
@@ -44,7 +45,8 @@ async function main() {
     const outDir = join(OUT_ROOT, plan.planId);
     mkdirSync(outDir, { recursive: true });
 
-    const adapted = await buildRenderPlanScenes(plan, manifest, outDir, runner);
+    const styleIndex = process.argv[3] !== undefined ? Number(process.argv[3]) : undefined;
+    const adapted = await buildRenderPlanScenes(plan, manifest, outDir, runner, undefined, styleIndex);
 
     // adapted.captionCues already IS a full CaptionCue[] (headline+caption
     // text, per-scene timing) -- not built via the real buildCaptionCues

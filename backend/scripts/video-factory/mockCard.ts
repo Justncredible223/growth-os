@@ -35,7 +35,7 @@ const CSS = `
 @font-face{font-family:SG;src:url(${url("space-grotesk-latin-wght-normal.woff2")}) format('woff2');font-weight:300 700}
 @font-face{font-family:MR;src:url(${url("manrope-latin-wght-normal.woff2")}) format('woff2');font-weight:200 800}
 @font-face{font-family:JB;src:url(${url("jetbrains-mono-latin-wght-normal.woff2")}) format('woff2');font-weight:100 800}
-:root{--bg0:#07090d;--bg1:#0d1117;--bg2:#111720;--line:#1f2b35;--ink:#e7edf3;--mute:#a9b7c4;--dim:#7f8e9b;--cyan:#22b8dc;--good:#34d399;--bad:#f87171;--glow:#0c2a33;--glowat:88% 6%;--ctabg:#0b2b34;--ctaborder:#14566a;--dot:#252f3b;--meter:#1b2531}
+:root{--bg0:#07090d;--bg1:#0d1117;--bg2:#111720;--line:#1f2b35;--ink:#e7edf3;--mute:#a9b7c4;--dim:#7f8e9b;--cyan:#22b8dc;--good:#34d399;--bad:#f87171;--glow:#0c2a33;--glowat:88% 6%;--ctabg:#0b2b34;--ctaborder:#14566a;--dot:#252f3b;--meter:#1b2531;--shadow:rgba(0,0,0,.55)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:${MOCK_CANVAS.width}px;height:${MOCK_CANVAS.height}px;overflow:hidden}
 body{position:relative;color:var(--ink);font-family:MR,sans-serif;background:radial-gradient(1100px 800px at var(--glowat),var(--glow) 0%,var(--bg0) 62%)}
@@ -47,7 +47,7 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .hero{font-family:SG;font-weight:700;letter-spacing:-.04em;line-height:${MOCK_FONT.hero}px;white-space:nowrap;overflow:hidden}
 .big{font:700 ${MOCK_FONT.big}px/${MOCK_FONT.bigLine}px SG;letter-spacing:-.02em;overflow:hidden}.big em{font-style:normal;color:var(--cyan)}
 .good{color:var(--good)}.bad{color:var(--bad)}
-.win{border:2px solid var(--line);border-radius:28px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.win{border:2px solid var(--line);border-radius:28px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px var(--shadow)}
 .bar{display:flex;align-items:center;gap:12px;height:${WINDOW_BAR}px;padding:0 28px;border-bottom:2px solid var(--line);font:600 26px MR;color:var(--dim);white-space:nowrap}
 .dot{width:16px;height:16px;border-radius:50%;background:var(--dot);flex:none}
 .bar .t{margin-left:14px}.bar .g{margin-left:auto;font-size:22px;letter-spacing:.12em}
@@ -102,19 +102,19 @@ window.seek = (ms) => {
 };
 `;
 
-/** CSS that turns the base slide into this video's look: palette variables, window chrome, and text alignment inside the same boxes. */
+/** CSS that turns the base slide into this video's look: palette variables, window chrome, and text alignment inside the same boxes. The logo never moves: the "Demo data" badge the video adds sits just to its right at a fixed spot. */
 function styleCss(style: MockStyle): string {
   const p = style.palette;
-  const vars = `:root{--bg0:${p.bg0};--bg1:${p.bg1};--bg2:${p.bg2};--line:${p.line};--ink:${p.ink};--mute:${p.mute};--dim:${p.dim};--cyan:${p.accent};--good:${p.good};--bad:${p.bad};--glow:${p.glow};--glowat:${p.glowAt};--ctabg:${p.ctaBg};--ctaborder:${p.ctaBorder};--dot:${p.dot};--meter:${p.meter}}`;
+  const vars = `:root{--bg0:${p.bg0};--bg1:${p.bg1};--bg2:${p.bg2};--line:${p.line};--ink:${p.ink};--mute:${p.mute};--dim:${p.dim};--cyan:${p.accent};--good:${p.good};--bad:${p.bad};--glow:${p.glow};--glowat:${p.glowAt};--ctabg:${p.ctaBg};--ctaborder:${p.ctaBorder};--dot:${p.dot};--meter:${p.meter};--shadow:${p.shadow}}`;
   const chrome =
     style.chrome === "sharp"
       ? ".win{border-radius:10px}.row .ring{border-radius:6px}.cta{border-radius:10px}.dot{display:none}.bar .t{margin-left:0}"
       : style.chrome === "soft"
-        ? ".win{border-radius:46px;border-color:transparent;box-shadow:0 30px 90px rgba(0,0,0,.55),0 0 0 2px var(--line),0 0 70px color-mix(in srgb,var(--cyan) 14%,transparent)}.row .ring{border-radius:30px}.cta{border-radius:46px}"
+        ? ".win{border-radius:46px;border-color:transparent;box-shadow:0 30px 90px var(--shadow),0 0 0 2px var(--line),0 0 70px color-mix(in srgb,var(--cyan) 14%,transparent)}.row .ring{border-radius:30px}.cta{border-radius:46px}"
         : "";
   const align =
     style.align === "center"
-      ? `.label,.hero,.big,.caption{text-align:center}[data-box=logo]{left:${Math.round((MOCK_CANVAS.width - MOCK_BOXES.logo.w) / 2)}px}`
+      ? `.label,.hero,.big,.caption{text-align:center}`
       : "";
   return vars + chrome + align;
 }
@@ -198,7 +198,7 @@ export function buildMockHtml(frame: MockFrame): string {
     if (frame.cta) content += `<div ${box("cta")} class="cta"${a("pop", 200)}>${esc(frame.cta)}</div>`;
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="${style.align === "center" ? "center center" : "left center"}">
-<img ${box("logo")} class="logo" src="${url("fillbook-horizontal-white.svg")}">
+<img ${box("logo")} class="logo" src="${url(style.palette.light ? "fillbook-horizontal-dark.svg" : "fillbook-horizontal-white.svg")}">
 ${content}
 ${showCaption ? `<div ${box("caption")} class="caption" data-fit${a("fade", 300)}>${esc(frame.captionText)}</div>` : ""}
 <script>${PAGE_SCRIPT}</script>

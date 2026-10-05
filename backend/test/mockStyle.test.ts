@@ -20,15 +20,17 @@ describe("per-video mock style", () => {
     expect(buildMockHtml({ chart: s.chart!, headline: s.headline, captionText: s.captionText, cta: s.cta })).toBe(buildMockHtml(frame(s)));
   });
 
-  it("consecutive videos differ in palette, alignment and window chrome, and a style repeats only every 30", () => {
-    for (let i = 0; i < 60; i++) {
+  it("consecutive videos differ in palette, alignment and window chrome, and no exact look returns within 16 videos", () => {
+    for (let i = 0; i < 120; i++) {
       const a = mockStyleFor(i), b = mockStyleFor(i + 1);
       expect(a.palette.name, `${i}`).not.toBe(b.palette.name);
       expect(a.align, `${i}`).not.toBe(b.align);
       expect(a.chrome, `${i}`).not.toBe(b.chrome);
     }
-    expect(new Set(Array.from({ length: 30 }, (_, i) => mockStyleFor(i).id)).size).toBe(30);
-    expect(mockStyleFor(30)).toEqual(mockStyleFor(0));
+    // 24 distinct looks, and no exact look comes back within 16 videos.
+    const ids = Array.from({ length: 200 }, (_, i) => mockStyleFor(i).id);
+    expect(new Set(ids).size).toBe(24);
+    for (let i = 0; i < 16; i++) expect(ids.indexOf(ids[i]!), `${i}`).toBe(i);
     expect(mockStyleFor(-3)).toEqual(mockStyleFor(3));
     expect(mockStyleFor(Number.NaN)).toEqual(CLASSIC_MOCK_STYLE);
   });
@@ -45,24 +47,34 @@ describe("per-video mock style", () => {
   });
 
   it("the markup carries the style: palette variables, centred text, chrome", () => {
-    const sharp = buildMockHtml(frame(plan.scenes[0]!, mockStyleFor(7))); // 7: amber, centre, sharp
-    expect(mockStyleFor(7).id).toBe("amber/center/sharp");
-    expect(sharp).toContain("--cyan:#fbbf24");
+    const sharp = buildMockHtml(frame(plan.scenes[0]!, mockStyleFor(1)));
+    expect(mockStyleFor(1).id).toBe("violet/center/sharp");
+    expect(sharp).toContain("--cyan:#a78bfa");
     expect(sharp).toContain(".label,.hero,.big,.caption{text-align:center}");
     expect(sharp).toContain(".win{border-radius:10px}");
     expect(sharp).toContain('data-origin="center center"');
-    const soft = buildMockHtml(frame(plan.scenes[0]!, mockStyleFor(2))); // 2: amber, left, soft
-    expect(mockStyleFor(2).id).toBe("amber/left/soft");
+    const soft = buildMockHtml(frame(plan.scenes[0]!, mockStyleFor(2)));
+    expect(mockStyleFor(2).id).toBe("mono/left/soft");
     expect(soft).toContain("border-radius:46px");
     expect(soft).not.toContain(".label,.hero,.big,.caption{text-align:center}");
     expect(soft).toContain('data-origin="left center"');
+  });
+
+  it("only the light look draws the logo with a dark wordmark and a light window shadow", () => {
+    const light = mockStyleFor(5);
+    expect(light.palette.name).toBe("light");
+    const html = buildMockHtml(frame(plan.scenes[0]!, light));
+    expect(html).toContain("fillbook-horizontal-dark.svg");
+    expect(html).toContain("--shadow:rgba(15,23,42,.16)");
+    expect(buildMockHtml(frame(plan.scenes[0]!, mockStyleFor(0)))).toContain("fillbook-horizontal-white.svg");
+    expect(MOCK_PALETTES.filter((p) => p.light).map((p) => p.name)).toEqual(["light"]);
   });
 
   it.skipIf(!chromium)("renders every beat in each palette, alignment and chrome with all boxes measured clear of the overlays", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mock-style-"));
     const r = await createMockRenderer(dir);
     try {
-      for (const idx of [0, 1, 2, 3, 4, 5]) {
+      for (const idx of [0, 1, 2, 3, 4, 5, 6, 7]) {
         const style = mockStyleFor(idx);
         for (const [i, s] of plan.scenes.entries()) expect(existsSync(await r.render(frame(s, style), join(dir, `${style.id.replace(/\//g, "_")}-${i}.png`))), `${style.id} beat ${i + 1}`).toBe(true);
       }
