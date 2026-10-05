@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DETAIL_FOOTER, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, WINDOW_BAR, cursorPath, heroFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
+import { CLASSIC_MOCK_STYLE, type MockStyle } from "../../src/shortform/mockStyle.js";
 import type { ChartSpec, ChartTone, MockRow } from "../../src/shortform/types.js";
 import { VideoFactoryError } from "./types.js";
 
@@ -22,6 +23,8 @@ export interface MockFrame {
   headline: string;
   captionText: string;
   cta: string | null;
+  /** The video's look (palette, alignment, window chrome); the original look when omitted. Every beat of one video passes the same style. */
+  style?: MockStyle;
 }
 
 const esc = (t: string): string => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -32,10 +35,10 @@ const CSS = `
 @font-face{font-family:SG;src:url(${url("space-grotesk-latin-wght-normal.woff2")}) format('woff2');font-weight:300 700}
 @font-face{font-family:MR;src:url(${url("manrope-latin-wght-normal.woff2")}) format('woff2');font-weight:200 800}
 @font-face{font-family:JB;src:url(${url("jetbrains-mono-latin-wght-normal.woff2")}) format('woff2');font-weight:100 800}
-:root{--bg0:#07090d;--bg1:#0d1117;--bg2:#111720;--line:#1f2b35;--ink:#e7edf3;--mute:#a9b7c4;--dim:#7f8e9b;--cyan:#22b8dc;--good:#34d399;--bad:#f87171}
+:root{--bg0:#07090d;--bg1:#0d1117;--bg2:#111720;--line:#1f2b35;--ink:#e7edf3;--mute:#a9b7c4;--dim:#7f8e9b;--cyan:#22b8dc;--good:#34d399;--bad:#f87171;--glow:#0c2a33;--glowat:88% 6%;--ctabg:#0b2b34;--ctaborder:#14566a;--dot:#252f3b;--meter:#1b2531}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:${MOCK_CANVAS.width}px;height:${MOCK_CANVAS.height}px;overflow:hidden}
-body{position:relative;color:var(--ink);font-family:MR,sans-serif;background:radial-gradient(1100px 800px at 88% 6%,#0c2a33 0%,#07090d 62%)}
+body{position:relative;color:var(--ink);font-family:MR,sans-serif;background:radial-gradient(1100px 800px at var(--glowat),var(--glow) 0%,var(--bg0) 62%)}
 [data-box]{position:absolute}
 ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px}`).join("\n")}
 .logo{height:58px}
@@ -45,7 +48,7 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .good{color:var(--good)}.bad{color:var(--bad)}
 .win{border:2px solid var(--line);border-radius:28px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}
 .bar{display:flex;align-items:center;gap:12px;height:${WINDOW_BAR}px;padding:0 28px;border-bottom:2px solid var(--line);font:600 26px MR;color:var(--dim);white-space:nowrap}
-.dot{width:16px;height:16px;border-radius:50%;background:#252f3b;flex:none}
+.dot{width:16px;height:16px;border-radius:50%;background:var(--dot);flex:none}
 .bar .t{margin-left:14px}.bar .g{margin-left:auto;font-size:22px;letter-spacing:.12em}
 .row{position:relative;padding:0 30px;border-top:2px solid var(--line);white-space:nowrap;overflow:hidden}
 .row .in{display:flex;align-items:center;gap:20px;height:100%}
@@ -56,13 +59,13 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .row .v{font:700 ${MOCK_FONT.rowValue}px JB;margin-left:auto}
 .row .ring{position:absolute;inset:5px;border:5px solid var(--cyan);border-radius:18px;background:rgba(34,184,220,.08);opacity:0;pointer-events:none}
 .row .ring.bad{border-color:var(--bad);background:rgba(248,113,113,.09)}
-.meter{height:14px;border-radius:9px;background:#1b2531;margin-top:8px;position:relative;width:100%}
+.meter{height:14px;border-radius:9px;background:var(--meter);margin-top:8px;position:relative;width:100%}
 .meter i{position:absolute;left:0;top:0;bottom:0;width:100%;border-radius:9px;background:linear-gradient(90deg,#0891b2,#22b8dc)}
 .meter b{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--ink)}
 .det .row .l{font-size:34px;line-height:40px}.det .row .v{font-size:38px}
 .foot{height:${DETAIL_FOOTER}px;line-height:${DETAIL_FOOTER}px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 .caption{font:700 ${MOCK_FONT.caption}px/${MOCK_BOXES.caption.h}px MR;color:var(--ink);white-space:nowrap;overflow:hidden}
-.cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid #14566a;background:#0b2b34;border-radius:28px;padding:0 44px;font:700 50px/66px SG;color:var(--ink)}
+.cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:28px;padding:0 44px;font:700 50px/66px SG;color:var(--ink)}
 .cursor{position:absolute;width:64px;height:64px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));pointer-events:none}
 `;
 
@@ -80,7 +83,7 @@ const DUR = 460;
 window.seek = (ms) => {
   for (const el of document.querySelectorAll("[data-a]")) {
     const kind = el.dataset.a, p = Math.min(1, Math.max(0, (ms - Number(el.dataset.d)) / DUR)), e = ease(p);
-    if (kind === "settle") { el.style.opacity = "1"; el.style.transform = "translateY(" + (1 - e) * 26 + "px) scale(" + (1 + (1 - e) * 0.05) + ")"; el.style.transformOrigin = "left center"; }
+    if (kind === "settle") { el.style.opacity = "1"; el.style.transform = "translateY(" + (1 - e) * 26 + "px) scale(" + (1 + (1 - e) * 0.05) + ")"; el.style.transformOrigin = document.body.dataset.origin || "left center"; }
     else if (kind === "dimrow") el.style.opacity = String(1 - 0.65 * e);
     else if (kind === "ring") { el.style.opacity = String(e); el.style.transform = "scale(" + (1.03 - 0.03 * e) + ")"; }
     else if (kind === "rowin") { el.style.opacity = String(e); el.style.transform = "translateX(" + (1 - e) * -50 + "px)"; }
@@ -98,11 +101,29 @@ window.seek = (ms) => {
 };
 `;
 
+/** CSS that turns the base slide into this video's look: palette variables, window chrome, and text alignment inside the same boxes. */
+function styleCss(style: MockStyle): string {
+  const p = style.palette;
+  const vars = `:root{--bg0:${p.bg0};--bg1:${p.bg1};--bg2:${p.bg2};--line:${p.line};--ink:${p.ink};--mute:${p.mute};--dim:${p.dim};--cyan:${p.accent};--good:${p.good};--bad:${p.bad};--glow:${p.glow};--glowat:${p.glowAt};--ctabg:${p.ctaBg};--ctaborder:${p.ctaBorder};--dot:${p.dot};--meter:${p.meter}}`;
+  const chrome =
+    style.chrome === "sharp"
+      ? ".win{border-radius:10px}.row .ring{border-radius:6px}.cta{border-radius:10px}.dot{display:none}.bar .t{margin-left:0}"
+      : style.chrome === "soft"
+        ? ".win{border-radius:46px;border-color:transparent;box-shadow:0 30px 90px rgba(0,0,0,.55),0 0 0 2px var(--line),0 0 70px color-mix(in srgb,var(--cyan) 14%,transparent)}.row .ring{border-radius:30px}.cta{border-radius:46px}"
+        : "";
+  const align =
+    style.align === "center"
+      ? `.label,.hero,.big,.caption{text-align:center}[data-box=logo]{left:${Math.round((MOCK_CANVAS.width - MOCK_BOXES.logo.w) / 2)}px}`
+      : "";
+  return vars + chrome + align;
+}
+
 const CURSOR_SVG = `<svg viewBox="0 0 24 24"><path d="M3 2l7 19 3-8 8-3z" fill="#fff" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 
 /** The slide's HTML for one beat. Pure: the same frame always gives the same markup. */
 export function buildMockHtml(frame: MockFrame): string {
   const { chart } = frame;
+  const style = frame.style ?? CLASSIC_MOCK_STYLE;
   const m = chart.mock;
   if (!m) throw new VideoFactoryError("mockCard: a mock chart scene has no mock spec (validateScenePlan should have refused it).");
   const stage = chart.stage;
@@ -168,7 +189,7 @@ export function buildMockHtml(frame: MockFrame): string {
     content += bigText(frame.captionText);
     if (frame.cta) content += `<div ${box("cta")} class="cta"${a("pop", 200)}>${esc(frame.cta)}</div>`;
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body>
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="${style.align === "center" ? "center center" : "left center"}">
 <img ${box("logo")} class="logo" src="${url("fillbook-horizontal-white.svg")}">
 ${content}
 ${showCaption ? `<div ${box("caption")} class="caption" data-fit${a("fade", 300)}>${esc(frame.captionText)}</div>` : ""}

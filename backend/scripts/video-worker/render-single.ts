@@ -150,12 +150,12 @@ async function buildVerifiedMotionPlan(
       ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
       : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, isNarratedMockPlan(scenePlan) ? MOCK_NARRATION : payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
-  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId);
+  const seed = parseInt(outputPath.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
+  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId, musicRotation ?? seed);
 
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, buildAssFile(adapted.captionCues, adapted.sceneLabelCues), "utf-8");
 
-  const seed = parseInt(outputPath.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
   const music = await pickMusic(seed, adapted.totalDurationSeconds, runner, undefined, musicRotation);
   console.log(`[render-single] music: ${music ? `${music.file.split(/[\\/]/).pop()} from ${music.startSeconds}s` : "none"} (rotation index ${musicRotation ?? "unavailable, chosen from the render id"})`);
 
