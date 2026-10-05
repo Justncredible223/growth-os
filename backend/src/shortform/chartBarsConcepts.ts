@@ -306,6 +306,7 @@ export function barsConvictionPlan(): ScenePlan {
         ],
         footer: "From your synced trades.",
       },
+      via: "Fillbook Reports",
     },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["conviction.all"], narration: "Would you take it again?", takeaway: "Answer once per trade; Reports compare.", caption: "Reports: by conviction." },

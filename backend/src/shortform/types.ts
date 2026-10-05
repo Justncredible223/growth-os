@@ -286,6 +286,8 @@ export interface MockSpec {
   opening: MockHero[];
   windows: MockWindow[];
   focus: [MockFocus, MockFocus];
+  /** Optional "where this came from" pill drawn between the hero figure and the window on beats 2 and 3 (for example "Fillbook Reports"). No digits. */
+  via?: string;
   details?: { title: string; rows: MockDetailRow[]; footer: string };
 }
 export interface ChartSpec {
