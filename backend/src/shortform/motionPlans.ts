@@ -31,17 +31,28 @@ export function isMockPlan(plan: ScenePlan): boolean {
 }
 
 /**
+ * Concepts offered in addition to the 30 daily ones (owner decision, 2026-10-05: the conviction video is wanted again).
+ * They sit after day 30 in the order, so the daily refill reaches them last, but the app's picker lists them as soon as they
+ * are unused, so one can be requested by hand. Each must still be a product mock that clears the render bar and is not a
+ * near-copy of a concept already made or waiting; the narration rules in test/narratedMocks.test.ts apply to them too.
+ */
+export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = ["chart-bars-conviction"];
+
+/**
  * True when the app offers this plan for a new video: one of the 30 daily concepts (dailyConcepts.ts, owner decision
- * 2026-10-03). Every older concept, including the first twelve product mocks, stays resolvable so a script already drafted
- * or approved from it still renders, but none is offered again.
+ * 2026-10-03) or an extra offered concept (EXTRA_OFFERED_CONCEPT_IDS). Every other older concept, including the first twelve
+ * product mocks, stays resolvable so a script already drafted or approved from it still renders, but none is offered again.
  */
 export function isOfferedPlan(plan: ScenePlan): boolean {
-  return isMockPlan(plan) && DAILY_CONCEPT_ORDER.includes(plan.planId);
+  return isMockPlan(plan) && (DAILY_CONCEPT_ORDER.includes(plan.planId) || EXTRA_OFFERED_CONCEPT_IDS.includes(plan.planId));
 }
 
-/** The offered concepts' position in the daily order (0 = day 1), or -1 for a plan that is not offered. */
+/** The offered concepts' position in the order (0 = day 1; the extras follow day 30), or -1 for a plan that is not offered. */
 export function dailyPosition(planId: string): number {
-  return DAILY_CONCEPT_ORDER.indexOf(planId);
+  const daily = DAILY_CONCEPT_ORDER.indexOf(planId);
+  if (daily >= 0) return daily;
+  const extra = EXTRA_OFFERED_CONCEPT_IDS.indexOf(planId);
+  return extra >= 0 ? DAILY_CONCEPT_ORDER.length + extra : -1;
 }
 
 /** Spoken pace for a narrated product mock: the project voice (en-US-AndrewNeural) at +8%, brisk but not rushed. */

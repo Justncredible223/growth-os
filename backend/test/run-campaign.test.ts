@@ -178,12 +178,13 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     // 2026-10-03: only the 30 daily concepts are offered (dailyConcepts.ts). The first twelve product mocks and every older
     // concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
     expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["daily-01-brief-room", "daily-05-size-over-plan", "daily-08-weak-hour"]));
-    expect(body.motionConcepts.every((c) => c.id.startsWith("daily-"))).toBe(true);
-    expect(body.motionConcepts.length).toBe(30);
-    expect(body.motionConcepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
+    // 2026-10-05: plus the conviction video (EXTRA_OFFERED_CONCEPT_IDS), listed after day 30.
+    expect(body.motionConcepts.every((c) => c.id.startsWith("daily-") || c.id === "chart-bars-conviction")).toBe(true);
+    expect(body.motionConcepts.length).toBe(31);
+    expect(body.motionConcepts.filter((c) => c.id.startsWith("chart-")).map((c) => c.id)).toEqual(["chart-bars-conviction"]);
     // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
     const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
-    expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 31 }, (_, i) => i + 1));
     expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe("daily-01-brief-room");
     expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(0);
   });

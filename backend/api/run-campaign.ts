@@ -144,7 +144,7 @@ export function isAllowedAssetTypeOverride(value: unknown): value is AllowedAsse
  * through -- no separate pipeline, no separate budget/idempotency logic.
  */
 const planFor = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
-/** A concept's day in the fixed daily order (1-30), or 0 for a concept that is not in it. */
+/** A concept's day in the fixed order (1-30 daily, 31 for the extra offered conviction video), or 0 for a concept that is not in it. */
 const dayOf = (id: string): number => dailyPosition(id) + 1;
 /** Owner rule, 2026-10-01: a NEW video is only ever requested from a chart-card concept. Older concepts stay in the catalog (so an already drafted or approved script still renders) but are never offered or accepted again. */
 const isOffered = (id: string): boolean => { const p = planFor(id); return p ? isOfferedPlan(p) : false; };
@@ -167,7 +167,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Owner rule, 2026-10-02: never offer near-copies to choose between. A concept that says nearly what one already made or
       // waiting says, or what an earlier one in this list says, is left out (it stays in the catalog; see conceptVariety.ts).
       const used = listMotionConcepts().filter((c) => isOffered(c.id) && ["made", "waiting"].includes(states.get(manualMotionConceptTitle(c)) ?? "")).map((c) => c.id);
-      const motionConcepts = distinctConcepts(unused, used, planFor);
+      // Day order (1-30, then the extra offered concepts): the catalog order puts older concepts first, and nextConceptId is the first one listed.
+      const motionConcepts = distinctConcepts(unused, used, planFor).sort((x, y) => dailyPosition(x.id) - dailyPosition(y.id));
       const requestedToday = await motionRequestedToday(getServiceClient());
       const offeredIds = new Set(motionConcepts.map((c) => c.id));
       res.status(200).json({
