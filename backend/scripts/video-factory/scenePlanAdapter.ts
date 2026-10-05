@@ -36,6 +36,7 @@ import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLa
 import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./payoffCues.js";
 import { buildChartCues } from "./chartCues.js";
 import { createMockRenderer, type MockRenderer } from "./mockCard.js";
+import { mockStyleFor } from "../../src/shortform/mockStyle.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -128,6 +129,8 @@ export async function buildRenderPlanScenes(
   runner: ProcessRunner,
   /** Real per-scene word timings from the production voice. When given, the FIRST scene's headline is highlighted word by word as it is spoken; omitted (offline voice, silent previews), every headline stays plain static text. */
   wordCuesBySceneId?: Record<string, WordCue[]>,
+  /** Position of this video in the render rotation; picks its mock look (palette, alignment, window chrome). Omitted, the original look. */
+  styleIndex?: number,
 ): Promise<AdaptedScenes> {
   const validation = validateScenePlan(plan, manifest, { checkFiles: true });
   if (!validation.ok) {
@@ -149,6 +152,7 @@ export async function buildRenderPlanScenes(
 
   // A "mock" chart scene is an HTML slide screenshotted by Chromium; one browser serves every mock scene of the plan.
   let mockRenderer: MockRenderer | null = null;
+  const mockStyle = mockStyleFor(styleIndex);
   const scenes: RenderScene[] = [];
   const captionCues: CaptionCue[] = [];
   const sceneLabelCues: SceneLabelCue[] = [];
@@ -176,7 +180,7 @@ export async function buildRenderPlanScenes(
       let sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
       if (chart?.kind === "mock") {
         mockRenderer ??= await createMockRenderer(outDir);
-        const beat = await mockRenderer.renderBeat({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta }, outDir, `mock-${i}`);
+        const beat = await mockRenderer.renderBeat({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, style: mockStyle }, outDir, `mock-${i}`);
         sceneBackground = beat.stillPath;
         mockFrames = { pattern: beat.pattern, count: beat.count };
       }
