@@ -68,6 +68,7 @@ import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarratio
 import { findSuppliedVoice } from "../video-factory/suppliedVoice.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { isPayoffPlan, isNarratedMockPlan, MOCK_NARRATION } from "../../src/shortform/motionPlans.js";
+import { mockStyleFor } from "../../src/shortform/mockStyle.js";
 import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
 import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "../video-factory/payoffCues.js";
 import type { ScenePlan } from "../../src/shortform/types.js";
@@ -151,7 +152,9 @@ async function buildVerifiedMotionPlan(
       : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, isNarratedMockPlan(scenePlan) ? MOCK_NARRATION : payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
   const seed = parseInt(outputPath.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
-  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId, musicRotation ?? seed);
+  const styleIndex = musicRotation ?? seed;
+  if (scenePlan.scenes.some((s) => s.chart?.kind === "mock")) console.log(`[render-single] mock look: ${mockStyleFor(styleIndex).id} (rotation index ${styleIndex})`);
+  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId, styleIndex);
 
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, buildAssFile(adapted.captionCues, adapted.sceneLabelCues), "utf-8");
