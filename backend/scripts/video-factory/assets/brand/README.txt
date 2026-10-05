@@ -4,3 +4,4 @@ same typefaces as the site and its link-preview cards:
   Space Grotesk (headlines), Manrope (body), JetBrains Mono (figures) -- SIL Open Font License, see the OFL-*.txt files.
   fillbook-horizontal-white.svg -- the Fillbook logo.
 Do not edit; re-copy from the fillbook repo when the site's fonts or logo change.
+  fillbook-horizontal-dark.svg -- the same logo with a dark wordmark, for the light slide look (derived from the white one; only the wordmark colour changes).
