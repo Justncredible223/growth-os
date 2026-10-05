@@ -310,7 +310,7 @@ export function barsConvictionPlan(): ScenePlan {
     beats: [
       { stage: 1, seconds: 3.0, facts: ["conviction.all"], narration: "Would you take it again?", takeaway: "Answer once per trade; Reports compare.", caption: "Reports: by conviction." },
       { stage: 2, seconds: 3.2, facts: ["conviction.all"], narration: "Yes trades made $3,822.", takeaway: "The trades you'd retake.", caption: "Would retake: $3,822." },
-      { stage: 3, seconds: 3.4, facts: ["conviction.all"], narration: "But no trades lost $2,576.", takeaway: "The trades you wouldn't.", caption: "Not again: -$2,575.96." },
+      { stage: 3, seconds: 3.4, facts: ["conviction.all"], narration: "But no trades lost $2,576.", takeaway: "The trades you wouldn't.", caption: "Not again: -$2,576." },
       { stage: 4, seconds: 4.6, facts: ["conviction.all"], capability: true, narration: "Fillbook splits results by answer.", takeaway: "Reports compare your answers.", caption: "Win rate for each answer." },
       { stage: 5, seconds: 3.2, facts: ["conviction.all"], closing: true, narration: "Rate your own trades.", takeaway: "Rate your own trades.", caption: "Rate your own trades." },
     ],
