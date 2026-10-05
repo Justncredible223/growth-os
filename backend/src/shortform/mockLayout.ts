@@ -19,10 +19,12 @@ const LEFT_MARGIN = 100;
 /** The chart cards' right edge (CHART.safeRight in chart.ts, which a test keeps equal; chart.ts imports this file, so it cannot be imported back). */
 export const MOCK_RIGHT_LIMIT = 880;
 /**
- * Everything on a mock ends above this. TikTok's account name and caption block starts at about y 1520-1540 of the 1920px frame
- * (measured on a guest view, 2026-10-03), so the slide keeps roughly 100px clear of it instead of ending a few pixels short.
+ * Everything on a mock ends above this. A guest view of a normal post only covers the frame from about y 1520, but TikTok's
+ * "Suggested promotion" ad preview (and a promoted post) stacks a promotion tag, a longer caption and a Learn More button
+ * from about y 1250 (measured 2026-10-05), which hid the caption and the lower half of the slide. Ending above y 1220
+ * keeps the whole slide visible in both.
  */
-export const MOCK_BOTTOM_LIMIT = 1450;
+export const MOCK_BOTTOM_LIMIT = 1220;
 const TOP_MARGIN = 170; // 20px past TikTok's 150px top inset, which is the stricter of the two platforms
 
 export const MOCK_SAFE: Rect = (() => {
@@ -44,23 +46,23 @@ export const MOCK_CANVAS = { width: CANVAS.width, height: CANVAS.height } as con
  */
 export const MOCK_BOXES = {
   logo: { x: MOCK_SAFE.x, y: 170, w: 220, h: 58 },
-  label: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 46 },
-  hero: { x: MOCK_SAFE.x, y: 306, w: MOCK_SAFE.w, h: 290 },
-  label2: { x: MOCK_SAFE.x, y: 606, w: MOCK_SAFE.w, h: 46 },
-  hero2: { x: MOCK_SAFE.x, y: 650, w: MOCK_SAFE.w, h: 290 },
-  window: { x: MOCK_SAFE.x, y: 620, w: MOCK_SAFE.w, h: 700 },
-  windowLow: { x: MOCK_SAFE.x, y: 950, w: MOCK_SAFE.w, h: 370 },
+  label: { x: MOCK_SAFE.x, y: 236, w: MOCK_SAFE.w, h: 46 },
+  hero: { x: MOCK_SAFE.x, y: 280, w: MOCK_SAFE.w, h: 240 },
+  label2: { x: MOCK_SAFE.x, y: 526, w: MOCK_SAFE.w, h: 46 },
+  hero2: { x: MOCK_SAFE.x, y: 570, w: MOCK_SAFE.w, h: 240 },
+  window: { x: MOCK_SAFE.x, y: 540, w: MOCK_SAFE.w, h: 600 },
+  windowLow: { x: MOCK_SAFE.x, y: 820, w: MOCK_SAFE.w, h: 320 },
   big: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 320 },
   cta: { x: MOCK_SAFE.x, y: 640, w: MOCK_SAFE.w, h: 300 },
-  caption: { x: MOCK_SAFE.x, y: 1352, w: MOCK_SAFE.w, h: 72 },
+  caption: { x: MOCK_SAFE.x, y: 1146, w: MOCK_SAFE.w, h: 66 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;
 
 /** Font sizes (px) the template draws with. A hero figure shrinks to fit its box (see heroFontSize). */
-export const MOCK_FONT = { hero: 250, heroLabel: 34, big: 94, bigLine: 104, caption: 46, rowLabel: 44, rowSub: 26, rowValue: 46 } as const;
+export const MOCK_FONT = { hero: 210, heroLabel: 34, big: 94, bigLine: 104, caption: 46, rowLabel: 44, rowSub: 26, rowValue: 46 } as const;
 
-/** The size a hero figure is drawn at: 250px, or smaller so a long value ("-$1,201") still fits the box. Space Grotesk digits and the dollar sign run up to about 0.56em wide. */
+/** The size a hero figure is drawn at: 210px, or smaller so a long value ("-$1,201") still fits the box. Space Grotesk digits and the dollar sign run up to about 0.56em wide. */
 export function heroFontSize(value: string): number {
   return Math.min(MOCK_FONT.hero, Math.floor(MOCK_SAFE.w / (Math.max(value.length, 1) * 0.56)));
 }
@@ -182,7 +184,7 @@ export interface WindowGeometry {
 export function windowGeometry(rowCount: number, kind: "window" | "windowLow", detail = false): WindowGeometry {
   const box = MOCK_BOXES[kind];
   const footer = detail ? DETAIL_FOOTER : 0;
-  const rowH = Math.min(detail ? 116 : 190, Math.floor((box.h - WINDOW_BAR - footer) / Math.max(rowCount, 1)));
+  const rowH = Math.min(detail ? 90 : 190, Math.floor((box.h - WINDOW_BAR - footer) / Math.max(rowCount, 1)));
   const height = WINDOW_BAR + rowCount * rowH + footer;
   return { top: kind === "windowLow" ? box.y : box.y + Math.floor((box.h - height) / 2), height, rowH };
 }

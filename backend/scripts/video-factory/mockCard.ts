@@ -40,7 +40,7 @@ body{position:relative;color:var(--ink);font-family:MR,sans-serif;background:rad
 ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px}`).join("\n")}
 .logo{height:58px}
 .label{font:700 ${MOCK_FONT.heroLabel}px/46px MR;letter-spacing:.16em;color:var(--cyan);white-space:nowrap;overflow:hidden}
-.hero{font-family:SG;font-weight:700;letter-spacing:-.04em;line-height:250px;white-space:nowrap;overflow:hidden}
+.hero{font-family:SG;font-weight:700;letter-spacing:-.04em;line-height:${MOCK_FONT.hero}px;white-space:nowrap;overflow:hidden}
 .big{font:700 ${MOCK_FONT.big}px/${MOCK_FONT.bigLine}px SG;letter-spacing:-.02em;overflow:hidden}.big em{font-style:normal;color:var(--cyan)}
 .good{color:var(--good)}.bad{color:var(--bad)}
 .win{border:2px solid var(--line);border-radius:28px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}

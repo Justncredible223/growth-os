@@ -446,8 +446,10 @@ pin a comment, and nothing here posts to a platform without the owner.
 UI over the bottom of the frame: a comment-preview bubble, a "Promotional content" label and a
 promote/analytics bar (YouTube: "Promote this Short", "Analytics", "Share your video"). A guest view
 (TikTok web, signed out of the owner account) shows none of them, only the right-hand buttons and the
-account name and caption from about y 1540. The layout is therefore checked against what viewers see
-(everything on a mock ends above y 1450, about 100px clear of the account-name block that starts near y 1520-1540), not against the owner's view. An earlier change
-(#97) moved everything above y 1250 for the owner-view bubble and was reverted.
+account name and caption from about y 1540. TikTok's "Suggested promotion" ad preview (and a promoted post)
+is different: it stacks a promotion tag, a longer caption and a Learn More button from about y 1250 (measured 2026-10-05
+on a screenshot), which hid the caption and the lower half of the slide. Everything on a mock therefore ends above
+y 1220 (`MOCK_BOTTOM_LIMIT`), clear of both. An earlier change (#97) moved everything above y 1250 for the owner-view
+bubble and was reverted because normal viewers never see it; this one is for promoted posts, which viewers do see.
 
 **Daily loop, as of 2026-10-04.** One request a day -> draft in Approvals (push: "Script ready to approve"; optional reject reason, migration 0048) -> approve starts the render (push on ready or failed; Retry on a failed card) -> download, post by hand with the per-video tagged pinned comment, add each link in Video Status -> numbers in Results (leaderboard, day-7 prompt). Home shows where today's video is; Health checks stuck or failed renders, forgotten posts, YouTube stats and that the auto-publish flags stay off. The posting reminder is one a day at 12:00 Arizona.
