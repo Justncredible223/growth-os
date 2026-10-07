@@ -8,6 +8,7 @@ import { PLATFORM_OVERLAY_ZONES, buildFfmpegArgs } from "../scripts/video-factor
 import { BARS_PILOTS, barsConvictionPlan, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { MOCK_CARD_PILOTS } from "../src/shortform/chartMockConcepts";
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
+import { FRESH_PILOTS } from "../src/shortform/freshConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
 import { MOCK_ENTRANCE, buildMockHtml, chromiumAvailable, createMockRenderer, measuredProblems } from "../scripts/video-factory/mockCard";
@@ -161,7 +162,7 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     const dir = mkdtempSync(join(tmpdir(), "mock-"));
     const r = await createMockRenderer(dir);
     try {
-      for (const p of [...BARS_PILOTS, ...MOCK_CARD_PILOTS, ...DAILY_PILOTS]) {
+      for (const p of [...BARS_PILOTS, ...MOCK_CARD_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS]) {
         for (const [i, s] of p.scenes.entries()) expect(existsSync(await r.render(frame(s), join(dir, `${p.planId}-${i}.png`))), `${p.planId} beat ${i + 1}`).toBe(true);
       }
     } finally {

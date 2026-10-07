@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { CHART, barsPitch, chartGeometry, validateChartScene } from "../src/shortform/chart";
 import { BARS_PILOTS, buildBarsPlan } from "../src/shortform/chartBarsConcepts";
 import { DAILY_CONCEPT_ORDER } from "../src/shortform/dailyConcepts";
+import { FRESH_CONCEPT_ORDER } from "../src/shortform/freshConcepts";
 import { EXTRA_OFFERED_CONCEPT_IDS, MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
@@ -157,12 +158,13 @@ describe("bars drawing", () => {
 });
 
 describe("the daily queue", () => {
-  it("serves the 30 daily concepts in their fixed order, day 1 first, then the extra offered ones, and offers none of the first twelve", () => {
+  it("serves only the 9 fresh hook-first concepts in their fixed order, none of the 30 older daily ones and none of the first twelve", () => {
     const ids = offeredChartConcepts().map((c) => c.id);
-    expect(ids).toEqual([...DAILY_CONCEPT_ORDER, ...EXTRA_OFFERED_CONCEPT_IDS]);
-    expect(ids).toHaveLength(31);
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(["chart-bars-conviction"]);
-    expect(ids.some((id) => !EXTRA_OFFERED_CONCEPT_IDS.includes(id) && BARS_PILOTS.some((p) => p.planId === id))).toBe(false);
+    expect(ids).toEqual([...FRESH_CONCEPT_ORDER, ...EXTRA_OFFERED_CONCEPT_IDS]);
+    expect(ids).toHaveLength(9);
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
+    expect(ids.some((id) => DAILY_CONCEPT_ORDER.includes(id))).toBe(false);
+    expect(ids.some((id) => BARS_PILOTS.some((p) => p.planId === id))).toBe(false);
   });
 
   it("never serves two concepts about the same recording back to back", () => {

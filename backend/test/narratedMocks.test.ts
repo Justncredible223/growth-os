@@ -10,7 +10,7 @@ const sentences = (text: string) => text.split(/(?<=[.!?])\s+/).filter(Boolean);
 
 describe("narrated product mocks", () => {
   it("are the offered concepts, and all of them are narrated", () => {
-    expect(offered.length).toBeGreaterThanOrEqual(12);
+    expect(offered).toHaveLength(9);
     for (const p of offered) {
       expect(p.voiceover, p.planId).toBe("narrated");
       expect(isNarratedMockPlan(p), p.planId).toBe(true);

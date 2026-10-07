@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { dayForTitle, describeTodaysVideo, type TodaysVideoInput } from "../src/video/todaysVideo";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
-import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
+import { FRESH_PILOTS } from "../src/shortform/freshConcepts";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog";
 
 const START = "2026-10-04T04:00:00.000Z"; // midnight Eastern, Oct 4
-const concept = listMotionConcepts().find((c) => c.id === "daily-05-size-over-plan")!;
+const concept = listMotionConcepts().find((c) => c.id === "fresh-05-below-the-floor")!;
 const THESIS = manualMotionConceptTitle(concept);
 
 const input = (patch: Partial<TodaysVideoInput> = {}): TodaysVideoInput => ({
@@ -28,7 +28,7 @@ describe("the daily video's state for the Home card", () => {
   it("is 'drafting' while a request is queued or running, ahead of anything else", () => {
     const v = describeTodaysVideo(input({ pendingTitles: [THESIS], latest: { thesis: "x", status: "approved", createdAt: START } }));
     expect(v.state).toBe("drafting");
-    expect(v.title).toBe("5 contracts against a plan of 3");
+    expect(v.title).toBe("$60 below the floor");
     expect(v.day).toBe(5);
   });
 
@@ -60,7 +60,7 @@ describe("the daily video's state for the Home card", () => {
   it("does not call an earlier day's fully posted video today's", () => {
     const v = describeTodaysVideo(input({ latest: { thesis: THESIS, status: "approved", createdAt: "2026-10-03T13:00:00.000Z" }, render: { status: "ready", error: null }, platformsPosted: ["tiktok"] }));
     expect(v.state).toBe("none");
-    expect(v.detail).toContain("Last video: 5 contracts against a plan of 3");
+    expect(v.detail).toContain("Last video: $60 below the floor");
   });
 
   it("still shows an earlier day's video that is rendered but not posted yet", () => {
@@ -81,8 +81,8 @@ describe("the daily video's state for the Home card", () => {
 });
 
 describe("finding a request's day", () => {
-  it("maps every daily concept's request title to its day", () => {
-    DAILY_PILOTS.forEach((p, i) => {
+  it("maps every offered concept's request title to its day", () => {
+    FRESH_PILOTS.forEach((p, i) => {
       const c = listMotionConcepts().find((x) => x.id === p.planId)!;
       expect(dayForTitle(manualMotionConceptTitle(c)), p.planId).toBe(i + 1);
     });
