@@ -180,7 +180,7 @@ export async function buildRenderPlanScenes(
       let sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
       if (chart?.kind === "mock") {
         mockRenderer ??= await createMockRenderer(outDir);
-        const beat = await mockRenderer.renderBeat({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, style: mockStyle }, outDir, `mock-${i}`);
+        const beat = await mockRenderer.renderBeat({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, style: mockStyle, holdSeconds: s.durationSeconds }, outDir, `mock-${i}`);
         sceneBackground = beat.stillPath;
         mockFrames = { pattern: beat.pattern, count: beat.count };
       }

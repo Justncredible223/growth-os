@@ -56,12 +56,37 @@ export const MOCK_BOXES = {
   big: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 320 },
   cta: { x: MOCK_SAFE.x, y: 640, w: MOCK_SAFE.w, h: 300 },
   caption: { x: MOCK_SAFE.x, y: 1146, w: MOCK_SAFE.w, h: 66 },
+  /** hookFirst beat 1 only: the headline, drawn large (auto-fitted, up to 150px), then the opening figures as big tiles. */
+  hookText: { x: MOCK_SAFE.x, y: 240, w: MOCK_SAFE.w, h: 400 },
+  hookFigs: { x: MOCK_SAFE.x, y: 660, w: MOCK_SAFE.w, h: 470 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;
 
 /** Font sizes (px) the template draws with. A hero figure shrinks to fit its box (see heroFontSize). */
 export const MOCK_FONT = { hero: 210, heroLabel: 38, big: 94, bigLine: 104, caption: 46, rowLabel: 44, rowSub: 26, rowValue: 46 } as const;
+
+/**
+ * Motion allowances of a hookFirst slide: the hook block pushes in from 100% to this scale over the beat, the first figure pulses to
+ * HOOK_PULSE once, and the contradicting figure punches in from HOOK_PUNCH. Every one is scaled about the centre of its box, so a test can
+ * prove the grown box still clears the platform overlays (hookMotionExtent).
+ */
+export const HOOK_MOTION = { push: 1.04, pulse: 1.07, punch: 1.1, pulseAtMs: 600, pulseMs: 350, punchAtMs: 150, punchMs: 300, entranceSeconds: 0.5 } as const;
+
+/** The widest a hookFirst figure value may be drawn (px), so it can pulse inside a push-in and still be clear of x=930. */
+export const HOOK_VALUE_WIDTH = 700;
+
+/** Font size of a hookFirst tile's value: as large as fits HOOK_VALUE_WIDTH and the tile, capped at 150px. */
+export function hookValueFontSize(value: string, tileHeight: number): number {
+  return Math.max(60, Math.min(150, tileHeight - 90, Math.floor(HOOK_VALUE_WIDTH / (Math.max(value.length, 1) * 0.56))));
+}
+
+/** A box after scaling about its centre by `scale` (used to prove the motion stays clear of the overlays). */
+export function scaledAboutCentre(b: Rect, scale: number): Rect {
+  const w = b.w * scale;
+  const h = b.h * scale;
+  return { x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h };
+}
 
 /** The size a hero figure is drawn at: 210px, or smaller so a long value ("-$1,201") still fits the box. Space Grotesk digits and the dollar sign run up to about 0.56em wide. */
 export function heroFontSize(value: string): number {

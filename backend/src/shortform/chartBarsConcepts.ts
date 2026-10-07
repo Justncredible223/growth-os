@@ -56,6 +56,8 @@ export interface BarsConfig {
   highlight?: number;
   /** When set, the plan is drawn as an HTML product mock (chart kind "mock") instead of bars; lines may then be 1-3 short lines. */
   mock?: MockSpec;
+  /** Mock plans only: the hook-first look (see ChartSpec.hookFirst). */
+  hookFirst?: boolean;
   beats: BeatInput[];
 }
 
@@ -98,7 +100,7 @@ export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
       claims: b.closing ? [claim, { id: `${cfg.variationId}-invite`, type: "invitation" as const, text: "Invites the viewer to try it on their own account.", evidence: [] }] : [claim],
       masks: [],
       chart: cfg.mock
-        ? { kind: "mock" as const, lines: [...cfg.lines], accent: cfg.accent, mock: cfg.mock, stage: b.stage, ...(b.closing ? { dim: true } : {}) }
+        ? { kind: "mock" as const, lines: [...cfg.lines], accent: cfg.accent, mock: cfg.mock, stage: b.stage, ...(cfg.hookFirst ? { hookFirst: true } : {}), ...(b.closing ? { dim: true } : {}) }
         : { kind: "bars" as const, lines: [...cfg.lines], accent: cfg.accent, rows: cfg.rows!, highlight: cfg.highlight, stage: b.stage, ...(b.closing ? { dim: true } : {}) },
     };
   });

@@ -153,5 +153,5 @@ const FRESH: Daily[] = [
 ];
 
 /** The offered pool, in request order: fresh-01 first. */
-export const FRESH_PILOTS: ScenePlan[] = FRESH.map((c, i) => build(i + 1, c, "fresh"));
+export const FRESH_PILOTS: ScenePlan[] = FRESH.map((c, i) => build(i + 1, c, "fresh", { hookFirst: true }));
 export const FRESH_CONCEPT_ORDER: string[] = FRESH_PILOTS.map((p) => p.planId);
