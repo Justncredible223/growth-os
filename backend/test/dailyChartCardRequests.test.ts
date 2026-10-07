@@ -35,9 +35,9 @@ describe("the concepts the daily refill draws from", () => {
     expect(concepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
   });
 
-  it("are served in the fixed 30-day order of motionPlans.ts, fresh-06 (the possible revenge trades) first", () => {
+  it("are served in the fixed 30-day order of motionPlans.ts, the recording of fresh-06 (the possible revenge trades) first", () => {
     expect(concepts.map((c) => c.id)).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
-    expect(concepts[0]!.id).toBe("fresh-06-five-revenge");
+    expect(concepts[0]!.id).toBe("fresh-06b-five-revenge-recording");
     expect(concepts.map((c) => c.id)).toContain("fresh-09-win-rate-fell");
   });
 });

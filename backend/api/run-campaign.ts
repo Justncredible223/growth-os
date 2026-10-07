@@ -163,7 +163,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     try {
       const states = await motionConceptStates(getServiceClient());
-      const unused = listMotionConcepts().filter((c) => isOffered(c.id) && !states.has(manualMotionConceptTitle(c)) && meetsBar(c.id));
+      // In day order, so that of two near-copies (a card concept and its screen-recording alternative) the one earlier in the offered order is kept, exactly as in the daily refill (dailyChartCardRequests.ts).
+      const unused = listMotionConcepts().filter((c) => isOffered(c.id) && !states.has(manualMotionConceptTitle(c)) && meetsBar(c.id)).sort((x, y) => dailyPosition(x.id) - dailyPosition(y.id));
       // Owner rule, 2026-10-02: never offer near-copies to choose between. A concept that says nearly what one already made or
       // waiting says, or what an earlier one in this list says, is left out (it stays in the catalog; see conceptVariety.ts).
       const used = listMotionConcepts().filter((c) => isOffered(c.id) && ["made", "waiting"].includes(states.get(manualMotionConceptTitle(c)) ?? "")).map((c) => c.id);

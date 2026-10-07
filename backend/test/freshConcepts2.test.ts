@@ -15,7 +15,9 @@ const frame = (s: SceneSpec) => ({ chart: s.chart!, headline: s.headline, captio
 /** A screen-recording variant (ids like fresh-02b-...) stands in for the card version of the same idea (fresh-02-...): it keeps its number. */
 const ideaOf = (id: string) => id.replace(/^(fresh-\d{2})[a-z]?-.*$/, "$1");
 const own = [...FRESH_CONCEPT_ORDER, ...FRESH2_CONCEPT_ORDER];
-const pool = [...OFFERED_DAILY_CONCEPT_IDS];
+const offeredAll = [...OFFERED_DAILY_CONCEPT_IDS];
+/** The 30 requested days; the 3 card versions of the recorded ideas follow as hidden fallbacks (a near-copy of its recording, so never requested alongside it). */
+const pool = offeredAll.slice(0, 30);
 const planOf = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id)!;
 
 describe("the 21 more fresh hook-first concepts (freshConcepts2.ts) and the 30-day pool", () => {
@@ -26,13 +28,15 @@ describe("the 21 more fresh hook-first concepts (freshConcepts2.ts) and the 30-d
   });
 
   it("the offered pool is exactly 30 distinct ideas: the 9 + the 21, once each (a recording variant stands in for its card version), in one explicit order", () => {
+    expect(offeredAll).toHaveLength(33);
+    expect(offeredAll.slice(30)).toEqual(["fresh-02-plan-said-3", "fresh-04-setup-lost-422", "fresh-06-five-revenge"]);
     expect(pool).toHaveLength(30);
     expect(new Set(pool).size).toBe(30);
     expect(pool.map(ideaOf).sort()).toEqual(own.map(ideaOf).sort());
     expect(new Set(pool.map(ideaOf)).size).toBe(30);
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...pool].sort());
-    pool.forEach((id, i) => expect(dailyPosition(id)).toBe(i));
+    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...offeredAll].sort());
+    offeredAll.forEach((id, i) => expect(dailyPosition(id)).toBe(i));
   });
 
   it("opens with the strongest universal hooks in days 1-10", () => {
@@ -102,6 +106,8 @@ describe("the 21 more fresh hook-first concepts (freshConcepts2.ts) and the 30-d
     for (let i = 0; i < plans.length; i++) {
       for (let j = i + 1; j < plans.length; j++) expect(nearCopies(plans[i]!, plans[j]!), `${plans[i]!.planId} vs ${plans[j]!.planId}`).toBe(false);
     }
+    // Only a recording and its own card version are twins (that is how one hides the other).
+    for (const id of offeredAll.slice(30)) for (const other of pool) expect(nearCopies(planOf(id), planOf(other)), `${id} vs ${other}`).toBe(ideaOf(id) === ideaOf(other));
     const hooks = FRESH2_PILOTS.map((p) => p.hook.toLowerCase());
     expect(new Set(hooks).size).toBe(hooks.length);
     for (const p of FRESH_PILOTS) expect(hooks).not.toContain(p.hook.toLowerCase());

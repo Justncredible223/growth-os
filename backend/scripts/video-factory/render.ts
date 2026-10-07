@@ -425,7 +425,7 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
       // last digit of "-$257.40" at the card's edge -- caught by frame inspection) and never exceeds the layout the
       // safe-zone checks approved: it finishes at exactly e.width x e.height at e.x, e.y and is smaller before that.
       const settleSeconds = Math.max(inputDurations[i]!, 0.1).toFixed(3);
-      const settle = `(${1 - CARD_SETTLE_AMOUNT}+${CARD_SETTLE_AMOUNT}*min(t/${settleSeconds},1))`;
+      const settle = e.still ? "1" : `(${1 - CARD_SETTLE_AMOUNT}+${CARD_SETTLE_AMOUNT}*min(t/${settleSeconds},1))`;
       const cardCenterX = e.x + e.width / 2;
       const cardCenterY = e.y + e.height / 2;
       sceneFilterParts.push(

@@ -51,6 +51,8 @@ export function computeScenePlanHash(plan: ScenePlan): string {
       ...(s.payoff ? { payoff: s.payoff, layout: s.layout } : {}),
       // Only present on chart-layout scenes, so every existing plan's hash is unchanged.
       ...(s.chart ? { chart: s.chart, layout: s.layout } : {}),
+      // Only present on recording-layout scenes, so every existing plan's hash is unchanged.
+      ...(s.recording ? { recording: s.recording, layout: s.layout } : {}),
     })),
   };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");

@@ -3,6 +3,7 @@ import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "../src/shortform/freshConcept
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
 import { nearCopies } from "../src/shortform/conceptVariety";
 import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, EXTRA_OFFERED_CONCEPT_IDS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans";
+import { RECORDING_PILOTS } from "../src/shortform/freshRecordingConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { scoreStory, renderBar } from "../src/shortform/storyScore";
 
@@ -23,7 +24,7 @@ describe("the first 9 fresh hook-first concepts (part of the offered pool since 
   });
 
   it("are valid plans that clear the A/A+ render bar and cite verified facts on every beat", () => {
-    for (const p of FRESH_PILOTS) {
+    for (const p of [...FRESH_PILOTS, ...RECORDING_PILOTS]) {
       const v = validateScenePlan(p, manifest, { checkFiles: true });
       expect(v.issues.filter((i) => i.severity === "error"), p.planId).toEqual([]);
       expect(renderBar(p).ok, p.planId).toBe(true);
@@ -37,7 +38,7 @@ describe("the first 9 fresh hook-first concepts (part of the offered pool since 
   });
 
   it("open on the hook (a figure or a question in the first spoken line) and end on a question; no other beat is a question", () => {
-    for (const p of FRESH_PILOTS) {
+    for (const p of [...FRESH_PILOTS, ...RECORDING_PILOTS]) {
       const first = p.scenes[0]!.narration;
       expect(/\d|\?/.test(`${first} ${p.hook}`), `${p.planId} opening "${first}" / hook "${p.hook}"`).toBe(true);
       // The old pool's opening ("Fillbook's X shows...") described the screen; the hook must come first.
@@ -57,7 +58,7 @@ describe("the first 9 fresh hook-first concepts (part of the offered pool since 
   });
 
   it("name Fillbook, are labelled Demo data on every beat, keep lines to 7 words and whole dollars, and frame behavior labels as flags", () => {
-    for (const p of FRESH_PILOTS) {
+    for (const p of [...FRESH_PILOTS, ...RECORDING_PILOTS]) {
       expect(p.scenes.map((s) => s.narration).join(" "), p.planId).toMatch(/\bFillbook\b/);
       for (const s of p.scenes) {
         expect(s.disclosure, s.sceneId).toBe("Demo data");
@@ -69,7 +70,7 @@ describe("the first 9 fresh hook-first concepts (part of the offered pool since 
   });
 
   it("never claim the product is live or real-time, prevents a breach, promises a pass or a payout, or gives advice", () => {
-    for (const p of FRESH_PILOTS) {
+    for (const p of [...FRESH_PILOTS, ...RECORDING_PILOTS]) {
       const all = p.scenes.map((s) => `${s.narration} ${s.captionText} ${s.takeaway}`).join(" ") + ` ${p.title}`;
       expect(all, p.planId).not.toMatch(/\b(?:live|real[- ]?time|guarantee\w*|prevent\w*|you will pass|helps? you pass|payout|should|must)\b/i);
     }
