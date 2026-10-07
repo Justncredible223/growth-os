@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { distinctConcepts } from "../src/shortform/conceptVariety";
 import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
 import { DAILY_CONCEPT_ORDER } from "../src/shortform/dailyConcepts";
-import { FRESH_CONCEPT_ORDER } from "../src/shortform/freshConcepts";
-import { EXTRA_OFFERED_CONCEPT_IDS } from "../src/shortform/motionPlans";
+import { EXTRA_OFFERED_CONCEPT_IDS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
 import { LOW_SUPPLY_AT, MAX_CHART_CARDS_WAITING, offeredChartConcepts, runDailyChartCardRequests, type ConceptState, type DailyChartCardDeps } from "../src/video/dailyChartCardRequests";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
 
@@ -28,18 +27,19 @@ function deps(opts: { paused?: boolean; today?: string | null; states?: Array<[n
 }
 
 describe("the concepts the daily refill draws from", () => {
-  it("are the 9 fresh hook-first concepts only: no extras, none of the 30 older daily concepts, none of the first twelve, none of the illustrative win-rate ones", () => {
+  it("are the fresh hook-first pool only (9 ideas, 3 also as a screen recording): no extras, none of the 30 older daily concepts, none of the first twelve, none of the illustrative win-rate ones", () => {
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(concepts).toHaveLength(9);
+    expect(concepts).toHaveLength(12);
     expect(concepts.every((c) => c.id.startsWith("fresh-"))).toBe(true);
     expect(concepts.some((c) => DAILY_CONCEPT_ORDER.includes(c.id))).toBe(false);
     expect(concepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
   });
 
   it("are served in the fixed order of the voice-script sheet, fresh-01 first", () => {
-    expect(concepts.map((c) => c.id)).toEqual([...FRESH_CONCEPT_ORDER, ...EXTRA_OFFERED_CONCEPT_IDS]);
+    expect(concepts.map((c) => c.id)).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
     expect(concepts[0]!.id).toBe("fresh-01-two-limits");
     expect(concepts[8]!.id).toBe("fresh-09-win-rate-fell");
+    expect(concepts[1]!.id).toBe("fresh-02b-plan-said-3-recording");
   });
 });
 

@@ -9,6 +9,7 @@ import { OUTCOMES_PILOTS } from "./chartConcepts.js";
 import { BARS_PILOTS } from "./chartBarsConcepts.js";
 import { DAILY_PILOTS } from "./dailyConcepts.js";
 import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "./freshConcepts.js";
+import { RECORDING_PILOTS, cardVersionOf } from "./freshRecordingConcepts.js";
 
 /**
  * Every verified ScenePlan a motion concept can be requested for: the original pilots plus the payoff redesign
@@ -16,7 +17,7 @@ import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "./freshConcepts.js";
  * "Create Fillbook Video" list and the render worker use) and the campaign pipeline (which drafts the script)
  * resolve a concept id against, so they can never disagree about what exists.
  */
-export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS];
+export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...RECORDING_PILOTS];
 
 /**
  * True when this plan is a chart card (the "chart" layout). Since 2026-10-01 these are the only concepts the app offers
@@ -26,18 +27,28 @@ export function isChartPlan(plan: ScenePlan): boolean {
   return plan.scenes.some((s) => s.layout === "chart");
 }
 
+/** True when this plan is a screen-recording alternative of a fresh concept (every scene a real recording, "recording" layout). */
+export function isRecordingPlan(plan: ScenePlan): boolean {
+  return plan.scenes.length > 0 && plan.scenes.every((s) => s.layout === "recording");
+}
+
 /** True when this plan is a product mock (every scene a chart drawn as a Fillbook screen), whether or not it is still offered. */
 export function isMockPlan(plan: ScenePlan): boolean {
   return plan.scenes.length > 0 && plan.scenes.every((s) => s.layout === "chart" && s.chart?.kind === "mock");
 }
 
 /**
- * The concepts the app offers, in request order (owner decision, 2026-10-07: the old pool is cleared and replaced). Only the
- * nine hook-first concepts of freshConcepts.ts, each of which opens on a pain or a striking number. The 30 daily concepts
+ * The concepts the app offers, in request order (owner decision, 2026-10-07: the old pool is cleared and replaced). The nine
+ * hook-first concepts of freshConcepts.ts, each of which opens on a pain or a striking number, where three of them (02, 04, 06)
+ * stand as their screen-recording alternative (freshRecordingConcepts.ts) so the pool does not look like one template; the three
+ * card versions follow the nine. A recording alternative says exactly what its card version says, so the variety check
+ * (conceptVariety.ts) treats the two as one idea: whichever is requested first, or is already made or waiting, hides the other,
+ * and if the owner rejects the recording version the card version is offered in its place. The 30 daily concepts
  * (dailyConcepts.ts) and every other older concept stay in MOTION_SCENE_PLANS so a script already drafted or approved from
  * one still renders, but none is offered again.
  */
-export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = FRESH_CONCEPT_ORDER;
+const RECORDING_FOR_CARD = new Map(RECORDING_PILOTS.map((p) => [cardVersionOf(p.planId)!, p.planId] as const));
+export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = [...FRESH_CONCEPT_ORDER.map((id) => RECORDING_FOR_CARD.get(id) ?? id), ...FRESH_CONCEPT_ORDER.filter((id) => RECORDING_FOR_CARD.has(id))];
 
 /**
  * Concepts offered in addition to the daily pool. Empty since 2026-10-07 (the conviction video, offered by hand from 2026-10-05, is
@@ -51,7 +62,7 @@ export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = [];
  * concept, including the first twelve product mocks and the 30 earlier daily ones, stays resolvable but is never offered.
  */
 export function isOfferedPlan(plan: ScenePlan): boolean {
-  return isMockPlan(plan) && (OFFERED_DAILY_CONCEPT_IDS.includes(plan.planId) || EXTRA_OFFERED_CONCEPT_IDS.includes(plan.planId));
+  return (isMockPlan(plan) || isRecordingPlan(plan)) && (OFFERED_DAILY_CONCEPT_IDS.includes(plan.planId) || EXTRA_OFFERED_CONCEPT_IDS.includes(plan.planId));
 }
 
 /** The offered concepts' position in the order (0 = day 1; the extras follow the daily pool), or -1 for a plan that is not offered. */
@@ -72,10 +83,10 @@ export const MOCK_NARRATION = { rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MI
 
 /** True when this is an offered product-mock plan that is narrated (not the silent music-only form). */
 export function isNarratedMockPlan(plan: ScenePlan): boolean {
-  return isMockPlan(plan) && plan.voiceover !== "none";
+  return (isMockPlan(plan) || isRecordingPlan(plan)) && plan.voiceover !== "none";
 }
 
 /** True when this plan uses the payoff layout and therefore needs the payoff render settings (voice rate, crossfade). */
 export function isPayoffPlan(plan: ScenePlan): boolean {
-  return plan.scenes.some((s) => s.layout === "payoff" || s.layout === "chart");
+  return plan.scenes.some((s) => s.layout === "payoff" || s.layout === "chart" || s.layout === "recording");
 }
