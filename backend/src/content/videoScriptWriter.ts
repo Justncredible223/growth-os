@@ -486,6 +486,15 @@ export function countSpokenWords(script: string): number {
 }
 
 /**
+ * The recording version of a concept carries internal markers in its title and topic ("(screen recording)", "(shown on the real
+ * screen recording)") so the app can tell it from its card twin (it tracks a concept as made by its title). They are labels for
+ * the app, not words for viewers: strip them from every piece of text the owner copies into a post.
+ */
+export function publicConceptText(text: string): string {
+  return text.replace(/\s*\((?:shown on the real )?screen recording\)/gi, "").trim();
+}
+
+/**
  * Builds a full VideoScript DIRECTLY from a verified ScenePlan
  * (src/shortform/pilots.ts) -- no LLM call at all, so a request for a
  * supported motion concept costs nothing to draft (only the existing
@@ -501,6 +510,8 @@ export function countSpokenWords(script: string): number {
  * content.
  */
 export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
+  const title = publicConceptText(plan.title);
+  const topic = publicConceptText(plan.topic);
   const script = plan.scenes.map((s) => s.narration).join(" ");
   const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
@@ -509,11 +520,11 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
     hook: plan.hook,
     script,
     shotList,
-    youtubeTitle: plan.title,
+    youtubeTitle: title,
     // Plain about what the numbers are: a sample account's demo data, shown inside a trading journal -- never "real" results.
-    youtubeDescription: `${plan.topic}. Every number shown is demo data from a sample Fillbook account, not a real trader's results. Fillbook is a trading journal: log your own trades and check them against your own rules. ${OFFICIAL_HANDLE}`,
+    youtubeDescription: `${topic}. Every number shown is demo data from a sample Fillbook account, not a real trader's results. Fillbook is a trading journal: log your own trades and check them against your own rules. ${OFFICIAL_HANDLE}`,
     tiktokCaption: `${plan.hook} Demo account data. ${OFFICIAL_HANDLE}`,
-    instagramCaption: `${plan.hook} ${plan.topic}. Demo data from a sample account, not a real trader. ${OFFICIAL_HANDLE}`,
+    instagramCaption: `${plan.hook} ${topic}. Demo data from a sample account, not a real trader. ${OFFICIAL_HANDLE}`,
     hashtags,
     disclosureCta,
     youtubeThumbnailConcept: `${plan.hook} -- bold text overlay over the plan's own opening scene visual.`,
