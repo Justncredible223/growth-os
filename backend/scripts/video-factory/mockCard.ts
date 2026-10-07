@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DETAIL_FOOTER, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, WINDOW_BAR, cursorPath, heroFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
+import { DETAIL_FOOTER, HOOK_MOTION, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, WINDOW_BAR, cursorPath, heroFontSize, hookValueFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
 import { CLASSIC_MOCK_STYLE, type MockStyle } from "../../src/shortform/mockStyle.js";
 import type { ChartSpec, ChartTone, MockRow } from "../../src/shortform/types.js";
 import { VideoFactoryError } from "./types.js";
@@ -25,6 +25,8 @@ export interface MockFrame {
   cta: string | null;
   /** The video's look (palette, alignment, window chrome); the original look when omitted. Every beat of one video passes the same style. */
   style?: MockStyle;
+  /** hookFirst beat 1 only: how long the beat is on screen (s); the slow push-in is spread over it. */
+  holdSeconds?: number;
 }
 
 const esc = (t: string): string => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -67,6 +69,12 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .foot{height:${DETAIL_FOOTER}px;line-height:${DETAIL_FOOTER}px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 .caption{font:700 ${MOCK_FONT.caption}px/${MOCK_BOXES.caption.h}px MR;color:var(--ink);white-space:nowrap;overflow:hidden}
 .cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:28px;padding:0 44px;font:700 50px/66px SG;color:var(--ink)}
+.hookwrap{position:absolute;inset:0;transform-origin:490px 700px}
+.hooktxt{font:800 150px/1.04 SG;letter-spacing:-.025em;color:var(--ink);overflow:hidden;display:flex;flex-direction:column;justify-content:center}.hooktxt>div{display:block}.hooktxt em{font-style:normal;color:var(--good)}.hooktxt em.bad{color:var(--bad)}
+.figs{display:flex;flex-direction:column;gap:20px;justify-content:center}
+.tile{flex:none;border:2px solid var(--line);border-radius:28px;background:var(--bg1);box-shadow:0 24px 70px var(--shadow);padding:12px 30px 0;overflow:hidden}
+.tile .tl{display:flex;align-items:center;height:44px;font:700 36px/44px SG;color:var(--ink);white-space:nowrap}.tile .tl span{margin-left:auto;font:600 20px MR;letter-spacing:.14em;color:var(--dim)}
+.tile .tv{font-family:SG;font-weight:700;letter-spacing:-.04em;white-space:nowrap}
 .cursor{position:absolute;width:64px;height:64px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));pointer-events:none}
 `;
 
@@ -80,16 +88,35 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
  */
 const PAGE_SCRIPT = `
 const ease = (p) => 1 - Math.pow(1 - p, 3);
-const DUR = 460;
+const FAST = document.body.dataset.fast === "1";
+const DUR = FAST ? 200 : 460;
+const lerp = (a, b, p) => a + (b - a) * p;
+// Fits every [data-autofit] text to its box: the largest size (px) whose wrapped text neither overflows across nor down.
+window.fitText = () => {
+  for (const el of document.querySelectorAll("[data-autofit]")) {
+    for (let size = Number(el.dataset.autofit); size > 48; size -= 2) {
+      el.style.fontSize = size + "px";
+      if (el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight) break;
+    }
+  }
+};
 window.seek = (ms) => {
+  for (const el of document.querySelectorAll("[data-hook]")) {
+    // hookFirst: opacity is never touched, so every one of these is fully visible at t=0. They only move.
+    const kind = el.dataset.hook, hold = Math.max(Number(el.dataset.hold || 1000), 1);
+    const t = Math.min(ms, 1e9);
+    if (kind === "push") el.style.transform = "scale(" + lerp(1, ${HOOK_MOTION.push}, 1 - Math.pow(1 - Math.min(1, t / hold), 2)) + ")";
+    else if (kind === "pulse") { const p = Math.min(1, Math.max(0, (t - ${HOOK_MOTION.pulseAtMs}) / ${HOOK_MOTION.pulseMs})); el.style.transform = "scale(" + (1 + (${HOOK_MOTION.pulse} - 1) * Math.sin(Math.PI * p)) + ")"; el.style.transformOrigin = "left center"; }
+    else if (kind === "punch") { const p = Math.min(1, Math.max(0, (t - Number(el.dataset.d)) / ${HOOK_MOTION.punchMs})); el.style.transform = "scale(" + lerp(${HOOK_MOTION.punch}, 1, ease(p)) + ")"; el.style.transformOrigin = "center center"; }
+  }
   for (const el of document.querySelectorAll("[data-a]")) {
     const kind = el.dataset.a, p = Math.min(1, Math.max(0, (ms - Number(el.dataset.d)) / DUR)), e = ease(p);
-    if (kind === "settle") { el.style.opacity = "1"; el.style.transform = "translateY(" + (1 - e) * 26 + "px) scale(" + (1 + (1 - e) * 0.05) + ")"; el.style.transformOrigin = document.body.dataset.origin || "left center"; }
+    if (kind === "settle") { el.style.opacity = "1"; el.style.transform = FAST ? "none" : "translateY(" + (1 - e) * 26 + "px) scale(" + (1 + (1 - e) * 0.05) + ")"; el.style.transformOrigin = document.body.dataset.origin || "left center"; }
     else if (kind === "dimrow") el.style.opacity = String(1 - 0.65 * e);
     else if (kind === "ring") { el.style.opacity = String(e); el.style.transform = "scale(" + (1.03 - 0.03 * e) + ")"; }
     else if (kind === "rowin") { el.style.opacity = String(e); el.style.transform = "translateX(" + (1 - e) * -50 + "px)"; }
     else el.style.opacity = String(e);
-    if (kind === "slideup") el.style.transform = "translateY(" + (1 - e) * 70 + "px)";
+    if (kind === "slideup") el.style.transform = "translateY(" + (1 - e) * (FAST ? 24 : 70) + "px)";
     if (kind === "pop") el.style.transform = "scale(" + (0.9 + 0.1 * e) + ")";
   }
   for (const el of document.querySelectorAll("[data-cur]")) {
@@ -131,7 +158,9 @@ export function buildMockHtml(frame: MockFrame): string {
   const closing = chart.dim === true;
   const box = (name: MockBoxName): string => `data-box="${name}"`;
   // Entrance motion: each element that appears or changes on this beat carries data-a (kind) and data-d (delay, ms); seek() in the page draws it.
-  const a = (kind: string, delay: number): string => ` data-a="${kind}" data-d="${delay}"`;
+  const hookFirst = chart.hookFirst === true && chart.mock !== undefined;
+  // hookFirst: entrances are short (the page runs them in 200 ms rather than 460) and start sooner, so the figures are on screen at once.
+  const a = (kind: string, delay: number): string => ` data-a="${kind}" data-d="${hookFirst ? Math.round(delay * 0.25) : delay}"`;
   // The label reads like the site's headlines: sentence case in the ink colour, the last word in the accent.
   const twoTone = (text: string): string => {
     const words = text.split(" ");
@@ -164,7 +193,25 @@ export function buildMockHtml(frame: MockFrame): string {
   };
   let content = "";
   let showCaption = true;
-  if (stage === 1 || (stage >= 2 && stage <= 3 && !closing)) {
+  let hookBeat = false;
+  let punch = false;
+  if (hookFirst && stage === 1) {
+    // The hook beat: nothing fades or slides in. The headline and the opening figures are drawn large and are fully visible at t=0 (so the first frame is a valid cover); they only push in slowly and the first figure pulses once.
+    hookBeat = true;
+    const words = chart.lines;
+    const body = words.map((l, i) => (i === words.length - 1 ? `<em class="${chart.accent === "bad" ? "bad" : ""}">${esc(l)}</em>` : esc(l))).join(" ");
+    const figs = m.opening;
+    const gap = 20;
+    const tileH = Math.min(260, Math.floor((MOCK_BOXES.hookFigs.h - gap * (figs.length - 1)) / figs.length));
+    const tiles = figs
+      .map(
+        (fg, i) =>
+          `<div class="tile" style="height:${tileH}px"><div class="tl">${esc(fg.label)}<span>${esc(m.tag.toUpperCase())}</span></div><div class="tv ${toneClass(fg.tone)}" style="font-size:${hookValueFontSize(fg.value, tileH)}px;line-height:${tileH - 70}px"${i === 0 ? ` data-hook="pulse"` : ""}>${esc(fg.value)}</div></div>`,
+      )
+      .join("");
+    const hold = Math.round((frame.holdSeconds ?? 2.6) * 1000);
+    content += `<div class="hookwrap" data-hook="push" data-hold="${hold}"><div ${box("hookText")} class="hooktxt" data-autofit="150" data-fit><div>${body}</div></div><div ${box("hookFigs")} class="figs">${tiles}</div></div>`;
+  } else if (stage === 1 || (stage >= 2 && stage <= 3 && !closing)) {
     if (stage === 1) {
       const [h1, h2] = m.opening;
       content += heroHtml(h1!, "label", "hero", 0);
@@ -172,9 +219,12 @@ export function buildMockHtml(frame: MockFrame): string {
       content += windowHtml(m.windows[0]!, h2 ? "windowLow" : "window", { enter: "slideup", rowDelay: 360 });
     } else {
       const f = m.focus[stage - 2]!;
+      punch = hookFirst && stage === 3;
       const prev = stage === 3 ? m.focus[0] : undefined;
       const sameWindow = prev !== undefined && prev.window === f.window;
       content += heroHtml(f.hero, "label", "hero", 0);
+      // The pattern interrupt: on the "but" beat the contradicting figure punches in (10% bigger, settling over 0.3 s).
+      if (punch) content = content.replace(/(class="hero [a-z]+" data-fit style="[^"]*")/, `$1 data-hook="punch" data-d="${HOOK_MOTION.punchAtMs}"`);
       if (m.via) content += `<div ${box("pill")} class="pill" data-fit${a("pop", 200)}><span>${esc(m.via.toUpperCase())}<svg width="16" height="20" viewBox="0 0 16 20"><path d="M8 2v14M2 10l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>`;
       content += windowHtml(m.windows[f.window]!, "window", { focus: f.row, enter: sameWindow ? "none" : "slideup", rowDelay: 300 });
       // The cursor travels to the ringed row; on beat 3 it starts where beat 2 left it when the window is the same one.
@@ -197,10 +247,10 @@ export function buildMockHtml(frame: MockFrame): string {
     content += bigText(frame.captionText);
     if (frame.cta) content += `<div ${box("cta")} class="cta"${a("pop", 200)}>${esc(frame.cta)}</div>`;
   }
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="${style.align === "center" ? "center center" : "left center"}">
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="${style.align === "center" ? "center center" : "left center"}"${hookFirst && !hookBeat ? ` data-fast="1"` : ""}>
 <img ${box("logo")} class="logo" src="${url(style.palette.light ? "fillbook-horizontal-dark.svg" : "fillbook-horizontal-white.svg")}">
 ${content}
-${showCaption ? `<div ${box("caption")} class="caption" data-fit${a("fade", 300)}>${esc(frame.captionText)}</div>` : ""}
+${showCaption ? `<div ${box("caption")} class="caption" data-fit${hookBeat ? "" : a("fade", 300)}>${esc(frame.captionText)}</div>` : ""}
 <script>${PAGE_SCRIPT}</script>
 </body></html>`;
 }
@@ -252,6 +302,19 @@ export function measuredProblems(measured: Measured[]): string[] {
 /** The entrance of every beat: how long it takes and the frame rate it is drawn at. */
 export const MOCK_ENTRANCE = { seconds: 1.0, fps: 30 } as const;
 
+/**
+ * Frames drawn for a beat. The normal entrance is MOCK_ENTRANCE.seconds long. A hookFirst plan's later beats use a short one
+ * (HOOK_MOTION.entranceSeconds, long enough for the 0.3 s punch-in); its hook beat is drawn for its whole hold, because the slow push-in and the
+ * pulse run for as long as the beat is on screen (the last frame is held after that).
+ */
+export function beatFrameCount(frame: MockFrame): number {
+  if (frame.chart.hookFirst === true && frame.chart.mock !== undefined) {
+    const seconds = frame.chart.stage === 1 ? Math.min(Math.max(frame.holdSeconds ?? 2.6, 1), 6) : HOOK_MOTION.entranceSeconds;
+    return Math.round(seconds * MOCK_ENTRANCE.fps);
+  }
+  return Math.round(MOCK_ENTRANCE.seconds * MOCK_ENTRANCE.fps);
+}
+
 export interface MockRenderer {
   render(frame: MockFrame, outPath: string): Promise<string>;
   /** The finished slide plus its entrance as numbered frames (`<prefix>-000.png` ...). Returns the finished still and the frame pattern. */
@@ -279,6 +342,7 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
       await page.evaluate(() => document.fonts.ready);
       const fonts = await page.evaluate(() => [...document.fonts].map((f) => `${f.family}:${f.status}`));
       if (!["SG:loaded", "MR:loaded", "JB:loaded"].every((f) => fonts.includes(f))) throw new VideoFactoryError(`mockCard: the brand fonts did not load (${fonts.join(", ")}).`);
+      await page.evaluate(() => (window as unknown as { fitText(): void }).fitText());
       const measured: Measured[] = await page.evaluate(() =>
         [...document.querySelectorAll("[data-box]")]
           .filter((el) => getComputedStyle(el).visibility !== "hidden")
@@ -308,7 +372,7 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
       const stillPath = join(outDir, `${prefix}.png`);
       await load(frame, stillPath);
       await page.screenshot({ path: stillPath });
-      const count = Math.round(MOCK_ENTRANCE.seconds * MOCK_ENTRANCE.fps);
+      const count = beatFrameCount(frame);
       for (let i = 0; i < count; i++) {
         await page.evaluate((ms) => (window as unknown as { seek(ms: number): void }).seek(ms), (i * 1000) / MOCK_ENTRANCE.fps);
         await page.screenshot({ path: join(outDir, `${prefix}-${String(i).padStart(3, "0")}.png`) });

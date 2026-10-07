@@ -40,7 +40,7 @@ export const r = (label: string, sub: string | undefined, value: string, tone: C
 export const w = (title: string, rows: MockRow[]): MockWindow => ({ title, rows });
 export const f = (hero: MockHero, window: number, row: number): MockFocus => ({ hero, window, row });
 
-export function build(n: number, c: Daily, prefix = "daily"): ScenePlan {
+export function build(n: number, c: Daily, prefix = "daily", opts: { hookFirst?: boolean } = {}): ScenePlan {
   const id = String(n).padStart(2, "0");
   const details: MockSpec["details"] = {
     title: c.details.title,
@@ -58,6 +58,7 @@ export function build(n: number, c: Daily, prefix = "daily"): ScenePlan {
     lines: c.lines,
     accent: c.accent,
     mock: { tag: "Demo data", opening: c.opening, windows: c.windows, focus: c.focus, details },
+    ...(opts.hookFirst ? { hookFirst: true } : {}),
     beats: c.say.map((narration, i) => ({
       stage: i + 1,
       seconds: 2.6,

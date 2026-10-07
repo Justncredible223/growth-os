@@ -303,6 +303,8 @@ export interface ChartSpec {
   pair?: ChartPair;
   /** "outcomes" only: the total won and the total lost, drawn as two bars sized against each other. */
   bars?: [ChartBar, ChartBar];
+  /** "mock" only: hook-first look (mockCard.ts): beat 1 is the headline and opening figures drawn large and fully visible from t=0, entrances on the later beats are short, and the "but" beat punches in. */
+  hookFirst?: boolean;
   /** "mock" only: a product mock (source window, Fillbook step, result window) laid out in HTML and rendered to a still. */
   mock?: MockSpec;
   /** "bars" only: 2 to 5 labelled bars drawn from one recording's facts, sized against the largest. */
