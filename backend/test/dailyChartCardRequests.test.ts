@@ -27,19 +27,18 @@ function deps(opts: { paused?: boolean; today?: string | null; states?: Array<[n
 }
 
 describe("the concepts the daily refill draws from", () => {
-  it("are the fresh hook-first pool only (9 ideas, 3 also as a screen recording): no extras, none of the 30 older daily concepts, none of the first twelve, none of the illustrative win-rate ones", () => {
+  it("are the fresh hook-first concepts only: no extras, none of the 30 older daily concepts, none of the first twelve, none of the illustrative win-rate ones", () => {
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(concepts).toHaveLength(12);
+    expect(concepts).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length);
     expect(concepts.every((c) => c.id.startsWith("fresh-"))).toBe(true);
     expect(concepts.some((c) => DAILY_CONCEPT_ORDER.includes(c.id))).toBe(false);
     expect(concepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
   });
 
-  it("are served in the fixed order of the voice-script sheet, fresh-01 first", () => {
+  it("are served in the fixed 30-day order of motionPlans.ts, the recording of fresh-06 (the possible revenge trades) first", () => {
     expect(concepts.map((c) => c.id)).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
-    expect(concepts[0]!.id).toBe("fresh-01-two-limits");
-    expect(concepts[8]!.id).toBe("fresh-09-win-rate-fell");
-    expect(concepts[1]!.id).toBe("fresh-02b-plan-said-3-recording");
+    expect(concepts[0]!.id).toBe("fresh-06b-five-revenge-recording");
+    expect(concepts.map((c) => c.id)).toContain("fresh-09-win-rate-fell");
   });
 });
 

@@ -52,6 +52,8 @@ export interface BarsConfig {
   alsoTopics?: string[];
   lines: string[];
   accent: "good" | "bad";
+  /** The recording's data label when it is not "Demo data" (the older ui.* captures say "EXAMPLE DATA"); used as every scene's disclosure. */
+  dataLabel?: string;
   rows?: ChartRow[];
   highlight?: number;
   /** When set, the plan is drawn as an HTML product mock (chart kind "mock") instead of bars; lines may then be 1-3 short lines. */
@@ -91,7 +93,7 @@ export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
       captionText: b.caption,
       durationSeconds: b.seconds,
       transition: i === 0 ? { type: "cut" as const, durationSeconds: 0 } : { type: "fade" as const, durationSeconds: 0.15 },
-      disclosure: "Demo data",
+      disclosure: cfg.dataLabel ?? "Demo data",
       cta: b.closing ? CTA : null,
       platform: "both" as const,
       experimentId: PILOT_EXPERIMENT_ID,

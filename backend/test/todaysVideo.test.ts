@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { dayForTitle, describeTodaysVideo, type TodaysVideoInput } from "../src/video/todaysVideo";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
-import { OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
+import { OFFERED_DAILY_CONCEPT_IDS, dailyPosition } from "../src/shortform/motionPlans";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog";
 
 const START = "2026-10-04T04:00:00.000Z"; // midnight Eastern, Oct 4
@@ -29,7 +29,7 @@ describe("the daily video's state for the Home card", () => {
     const v = describeTodaysVideo(input({ pendingTitles: [THESIS], latest: { thesis: "x", status: "approved", createdAt: START } }));
     expect(v.state).toBe("drafting");
     expect(v.title).toBe("$60 below the floor");
-    expect(v.day).toBe(5);
+    expect(v.day).toBe(dailyPosition("fresh-05-below-the-floor") + 1);
   });
 
   it("is 'needs_approval' when the script is waiting in Approvals", () => {

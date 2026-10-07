@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
 
 // These tests exercise request states, pipeline mechanics and render paths with real pilots as their fixtures. The story
 // bar (only A and A+ concepts render) has its own tests in storyBar.test.ts, so it is switched off here: otherwise every
@@ -175,19 +176,19 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
-    // 2026-10-07: only the 9 fresh hook-first concepts are offered (freshConcepts.ts). The first twelve product mocks, the 30 earlier daily
+    // 2026-10-07: only the fresh hook-first concepts are offered (freshConcepts.ts, freshConcepts2.ts). The first twelve product mocks, the 30 earlier daily
     // concepts and every older concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
     expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["fresh-01-two-limits", "fresh-02b-plan-said-3-recording", "fresh-08-nobody-fines"]));
+    // The 30 distinct ideas in the 30-day order; the 3 card versions of the recorded ideas are hidden as near-copies.
+    expect(body.motionConcepts.map((c) => c.id)).toEqual(OFFERED_DAILY_CONCEPT_IDS.slice(0, 30));
     // 2026-10-07: nothing else is offered (EXTRA_OFFERED_CONCEPT_IDS is empty; the conviction video is cleared too).
     expect(body.motionConcepts.every((c) => c.id.startsWith("fresh-"))).toBe(true);
-    expect(body.motionConcepts.length).toBe(9);
+    expect(body.motionConcepts.length).toBe(30);
     expect(body.motionConcepts.filter((c) => !c.id.startsWith("fresh-"))).toEqual([]);
     // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
     const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
-    // The 9 ideas are days 1-9; days 10-12 are the card versions of the three ideas that stand as a screen recording (02, 04, 06), hidden as near-copies.
-    expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 9 }, (_, i) => i + 1));
-    expect(withDay.map((c) => c.id)).toEqual(expect.arrayContaining(["fresh-02b-plan-said-3-recording", "fresh-04b-setup-lost-422-recording", "fresh-06b-five-revenge-recording"]));
-    expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe("fresh-01-two-limits");
+    expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe(OFFERED_DAILY_CONCEPT_IDS[0]);
     expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds.sort()).toEqual(["fresh-02-plan-said-3", "fresh-04-setup-lost-422", "fresh-06-five-revenge"]);
   });
 

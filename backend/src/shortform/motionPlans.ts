@@ -8,8 +8,9 @@ import { MOCK_CARD_PILOTS } from "./chartMockConcepts.js";
 import { OUTCOMES_PILOTS } from "./chartConcepts.js";
 import { BARS_PILOTS } from "./chartBarsConcepts.js";
 import { DAILY_PILOTS } from "./dailyConcepts.js";
-import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "./freshConcepts.js";
-import { RECORDING_PILOTS, cardVersionOf } from "./freshRecordingConcepts.js";
+import { FRESH_PILOTS } from "./freshConcepts.js";
+import { FRESH2_PILOTS } from "./freshConcepts2.js";
+import { RECORDING_PILOTS } from "./freshRecordingConcepts.js";
 
 /**
  * Every verified ScenePlan a motion concept can be requested for: the original pilots plus the payoff redesign
@@ -17,7 +18,7 @@ import { RECORDING_PILOTS, cardVersionOf } from "./freshRecordingConcepts.js";
  * "Create Fillbook Video" list and the render worker use) and the campaign pipeline (which drafts the script)
  * resolve a concept id against, so they can never disagree about what exists.
  */
-export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...RECORDING_PILOTS];
+export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS];
 
 /**
  * True when this plan is a chart card (the "chart" layout). Since 2026-10-01 these are the only concepts the app offers
@@ -38,17 +39,52 @@ export function isMockPlan(plan: ScenePlan): boolean {
 }
 
 /**
- * The concepts the app offers, in request order (owner decision, 2026-10-07: the old pool is cleared and replaced). The nine
- * hook-first concepts of freshConcepts.ts, each of which opens on a pain or a striking number, where three of them (02, 04, 06)
- * stand as their screen-recording alternative (freshRecordingConcepts.ts) so the pool does not look like one template; the three
- * card versions follow the nine. A recording alternative says exactly what its card version says, so the variety check
- * (conceptVariety.ts) treats the two as one idea: whichever is requested first, or is already made or waiting, hides the other,
- * and if the owner rejects the recording version the card version is offered in its place. The 30 daily concepts
- * (dailyConcepts.ts) and every other older concept stay in MOTION_SCENE_PLANS so a script already drafted or approved from
- * one still renders, but none is offered again.
+ * The concepts the app offers, in request order (owner decision, 2026-10-07: the old pool is cleared and replaced): the nine hook-first
+ * concepts of freshConcepts.ts plus the twenty-one of freshConcepts2.ts, each of which opens on a pain or a striking number, ordered as the
+ * 30-day plan documented at the top of freshConcepts2.ts (strongest hooks first, never more than two of one lane in a row, never the same
+ * recording twice in a row). The 30 daily concepts (dailyConcepts.ts) and every other older concept stay in MOTION_SCENE_PLANS so a script
+ * already drafted or approved from one still renders, but none is offered again.
+ *
+ * ONE ordered array on purpose: the screen-recording alternatives (freshRecordingConcepts.ts) stand in place of fresh-02-plan-said-3 (day 2), fresh-04-setup-lost-422 (day 21) and
+ * fresh-06-five-revenge (day 1) as fresh-02b, fresh-04b and fresh-06b, so the pool is 30 distinct days; the three card versions follow the 30 as hidden fallbacks (a recording alternative and its card version are near-copies, so only one is ever offered).
  */
-const RECORDING_FOR_CARD = new Map(RECORDING_PILOTS.map((p) => [cardVersionOf(p.planId)!, p.planId] as const));
-export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = [...FRESH_CONCEPT_ORDER.map((id) => RECORDING_FOR_CARD.get(id) ?? id), ...FRESH_CONCEPT_ORDER.filter((id) => RECORDING_FOR_CARD.has(id))];
+export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = [
+  "fresh-06b-five-revenge-recording", // day 1
+  "fresh-02b-plan-said-3-recording", // day 2
+  "fresh-07-take-it-again", // day 3
+  "fresh-01-two-limits", // day 4
+  "fresh-12-one-red-day", // day 5
+  "fresh-19-biggest-leak", // day 6
+  "fresh-10-eight-contracts", // day 7
+  "fresh-14-won-then-lost", // day 8
+  "fresh-08-nobody-fines", // day 9
+  "fresh-11-two-accounts-one-trade", // day 10
+  "fresh-03-one-day-46", // day 11
+  "fresh-20-moved-stop", // day 12
+  "fresh-15-open-vs-late-morning", // day 13
+  "fresh-09-win-rate-fell", // day 14
+  "fresh-17-690-left", // day 15
+  "fresh-18-one-day-1788", // day 16
+  "fresh-21-edge-score-67", // day 17
+  "fresh-16-six-vs-norm", // day 18
+  "fresh-28-weak-hour", // day 19
+  "fresh-22-only-monday-lost", // day 20
+  "fresh-04b-setup-lost-422-recording", // day 21
+  "fresh-30-84-percent", // day 22
+  "fresh-29-24-wins-14-losses", // day 23
+  "fresh-23-52-vs-13", // day 24
+  "fresh-13-129-days", // day 25
+  "fresh-24-92-on-plan", // day 26
+  "fresh-26-98-percent", // day 27
+  "fresh-05-below-the-floor", // day 28
+  "fresh-25-overtrading-days-17", // day 29
+  "fresh-27-48-trades-88", // day 30
+  // Fallbacks, never requested while their recording version is made, waiting or on offer (conceptVariety.ts hides a near-copy): if the owner
+  // rejects a recording version, the card version of the same idea is offered in its place.
+  "fresh-02-plan-said-3",
+  "fresh-04-setup-lost-422",
+  "fresh-06-five-revenge",
+];
 
 /**
  * Concepts offered in addition to the daily pool. Empty since 2026-10-07 (the conviction video, offered by hand from 2026-10-05, is

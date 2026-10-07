@@ -10,24 +10,13 @@ import { scoreStory, renderBar } from "../src/shortform/storyScore";
 const manifest = loadManifest();
 const words = (t: string) => t.trim().split(/\s+/).length;
 
-/** The offered order: the nine fresh concepts, with 02, 04 and 06 standing as their screen-recording alternative, then those three card versions. */
-const OFFERED_ORDER = [
-  "fresh-01-two-limits", "fresh-02b-plan-said-3-recording", "fresh-03-one-day-46", "fresh-04b-setup-lost-422-recording", "fresh-05-below-the-floor",
-  "fresh-06b-five-revenge-recording", "fresh-07-take-it-again", "fresh-08-nobody-fines", "fresh-09-win-rate-fell",
-  "fresh-02-plan-said-3", "fresh-04-setup-lost-422", "fresh-06-five-revenge",
-];
-
-describe("the 9 fresh hook-first concepts and their 3 screen-recording alternatives (the whole offered pool since 2026-10-07)", () => {
-  it("are the only offered plans, in order, and every older plan stays resolvable but is not offered", () => {
+describe("the first 9 fresh hook-first concepts (part of the offered pool since 2026-10-07)", () => {
+  it("are all offered, and every older plan stays resolvable but is not offered", () => {
     expect(FRESH_PILOTS).toHaveLength(9);
-    expect(RECORDING_PILOTS).toHaveLength(3);
-    expect([...OFFERED_DAILY_CONCEPT_IDS]).toEqual(OFFERED_ORDER);
-    expect(OFFERED_DAILY_CONCEPT_IDS).toHaveLength(12);
-    // Every card concept is still in the pool, in its own order (the three that have a recording alternative follow the nine).
-    expect(FRESH_CONCEPT_ORDER.every((id) => OFFERED_ORDER.includes(id))).toBe(true);
+    // The offered pool is these 9 plus the 21 of freshConcepts2.ts; its size, order and lane mix are checked in freshConcepts2.test.ts.
+    for (const id of FRESH_CONCEPT_ORDER) expect(OFFERED_DAILY_CONCEPT_IDS, id).toContain(id);
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...OFFERED_ORDER].sort());
-    OFFERED_ORDER.forEach((id, i) => expect(dailyPosition(id)).toBe(i));
+    FRESH_PILOTS.forEach((p) => expect(dailyPosition(p.planId)).toBe(OFFERED_DAILY_CONCEPT_IDS.indexOf(p.planId)));
     for (const p of DAILY_PILOTS) {
       expect(MOTION_SCENE_PLANS).toContain(p);
       expect(dailyPosition(p.planId)).toBe(-1);

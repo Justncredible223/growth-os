@@ -157,10 +157,10 @@ describe("bars drawing", () => {
 });
 
 describe("the daily queue", () => {
-  it("serves only the fresh hook-first pool (9 ideas, 3 of them also as a screen recording) in its fixed order, none of the 30 older daily ones and none of the first twelve", () => {
+  it("serves only the fresh hook-first concepts in their fixed order, none of the 30 older daily ones and none of the first twelve", () => {
     const ids = offeredChartConcepts().map((c) => c.id);
     expect(ids).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
-    expect(ids).toHaveLength(12);
+    expect(ids).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length);
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
     expect(ids.some((id) => DAILY_CONCEPT_ORDER.includes(id))).toBe(false);
     expect(ids.some((id) => BARS_PILOTS.some((p) => p.planId === id))).toBe(false);
