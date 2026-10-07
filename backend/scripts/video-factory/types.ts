@@ -125,7 +125,7 @@ export interface CardPresentation {
   /** Optional entrance motion: numbered PNG frames (printf pattern, basename) played at the render frame rate before the background holds on its last frame. */
   frames?: { pattern: string; count: number };
   /** Evidence scenes only: where the scaled `sourceCrop` card sits, plus its rounded alpha mask and pre-blurred shadow. */
-  evidence?: { x: number; y: number; width: number; height: number; maskPath: string; shadowPath: string };
+  evidence?: { x: number; y: number; width: number; height: number; maskPath: string; shadowPath: string; /** True: the card holds its final size from the first frame (no gentle grow), so vector rings drawn over it stay exactly on the figure. */ still?: boolean };
 }
 
 export interface RenderPlan {

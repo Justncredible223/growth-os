@@ -177,16 +177,18 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
     // 2026-10-07: only the 9 fresh hook-first concepts are offered (freshConcepts.ts). The first twelve product mocks, the 30 earlier daily
     // concepts and every older concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
-    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["fresh-01-two-limits", "fresh-02-plan-said-3", "fresh-08-nobody-fines"]));
+    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["fresh-01-two-limits", "fresh-02b-plan-said-3-recording", "fresh-08-nobody-fines"]));
     // 2026-10-07: nothing else is offered (EXTRA_OFFERED_CONCEPT_IDS is empty; the conviction video is cleared too).
     expect(body.motionConcepts.every((c) => c.id.startsWith("fresh-"))).toBe(true);
     expect(body.motionConcepts.length).toBe(9);
     expect(body.motionConcepts.filter((c) => !c.id.startsWith("fresh-"))).toEqual([]);
     // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
     const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
+    // The 9 ideas are days 1-9; days 10-12 are the card versions of the three ideas that stand as a screen recording (02, 04, 06), hidden as near-copies.
     expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 9 }, (_, i) => i + 1));
+    expect(withDay.map((c) => c.id)).toEqual(expect.arrayContaining(["fresh-02b-plan-said-3-recording", "fresh-04b-setup-lost-422-recording", "fresh-06b-five-revenge-recording"]));
     expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe("fresh-01-two-limits");
-    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(0);
+    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds.sort()).toEqual(["fresh-02-plan-said-3", "fresh-04-setup-lost-422", "fresh-06-five-revenge"]);
   });
 
   it("POST for a retired (older-style) concept is refused with 409, and a custom-topic or Radar video request is refused too", async () => {

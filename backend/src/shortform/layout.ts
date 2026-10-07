@@ -1,4 +1,5 @@
 import type { AspectRatio, Platform, PlanIssue, Rect, SceneSpec, VerifiedAsset } from "./types.js";
+import { validateRecordingScene } from "./recordingLayout.js";
 import { PAYOFF, computePayoffCard, payoffWordCount, splitPayoffHeadline } from "./payoffLayout.js";
 
 /** Vertical short-form canvas for both TikTok and YouTube Shorts. */
@@ -214,6 +215,13 @@ export function validateSceneFraming(scene: SceneSpec, asset: VerifiedAsset): Pl
     }
   }
 
+  if (scene.layout === "recording") {
+    // A recording scene is framed by recordingLayout.ts (headline, card in the safe column, caption): the generic media-box
+    // aspect and scale checks below do not apply. Its rings must sit inside the crop and its whole block inside the safe zones.
+    issues.push(...validateRecordingScene(scene));
+    return issues;
+  }
+
   if (scene.layout === "payoff") {
     // A payoff card is a deliberate tight zoom on ONE element, framed by computePayoffCard, so the generic
     // media-box aspect and scale checks below do not apply. It instead shows a tiny card as a review item.
@@ -283,7 +291,7 @@ export function validateSceneText(scene: SceneSpec): PlanIssue[] {
 
   for (const platform of platformsOf(scene.platform)) {
     const boxes = layoutBoxes(platform);
-    if (scene.layout !== "payoff" && scene.layout !== "chart" && textOverflows(scene.headline, headlineFont, boxes.headline)) add("error", "headline_overflow", `Headline does not fit its box on ${platform} at ${headlineFont}px.`);
+    if (scene.layout !== "payoff" && scene.layout !== "chart" && scene.layout !== "recording" && textOverflows(scene.headline, headlineFont, boxes.headline)) add("error", "headline_overflow", `Headline does not fit its box on ${platform} at ${headlineFont}px.`);
     if (textOverflows(scene.captionText, captionFont, boxes.caption)) add("error", "caption_overflow", `Caption does not fit its box on ${platform} at ${captionFont}px.`);
     if (scene.disclosure && textOverflows(scene.disclosure, DEFAULT_FONT.disclosure, boxes.disclosure)) add("error", "disclosure_overflow", `Disclosure does not fit its box on ${platform}.`);
   }

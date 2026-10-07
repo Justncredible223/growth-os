@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { dayForTitle, describeTodaysVideo, type TodaysVideoInput } from "../src/video/todaysVideo";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
-import { FRESH_PILOTS } from "../src/shortform/freshConcepts";
+import { OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog";
 
 const START = "2026-10-04T04:00:00.000Z"; // midnight Eastern, Oct 4
@@ -82,9 +82,9 @@ describe("the daily video's state for the Home card", () => {
 
 describe("finding a request's day", () => {
   it("maps every offered concept's request title to its day", () => {
-    FRESH_PILOTS.forEach((p, i) => {
-      const c = listMotionConcepts().find((x) => x.id === p.planId)!;
-      expect(dayForTitle(manualMotionConceptTitle(c)), p.planId).toBe(i + 1);
+    OFFERED_DAILY_CONCEPT_IDS.forEach((id, i) => {
+      const c = listMotionConcepts().find((x) => x.id === id)!;
+      expect(dayForTitle(manualMotionConceptTitle(c)), id).toBe(i + 1);
     });
   });
 

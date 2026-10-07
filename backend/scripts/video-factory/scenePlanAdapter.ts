@@ -37,6 +37,8 @@ import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./pa
 import { buildChartCues } from "./chartCues.js";
 import { createMockRenderer, type MockRenderer } from "./mockCard.js";
 import { mockStyleFor } from "../../src/shortform/mockStyle.js";
+import { computeRecordingLayout, recordingSafetyProblems, type RecordingLayout } from "../../src/shortform/recordingLayout.js";
+import { buildRecordingCues } from "./recordingCues.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -175,6 +177,7 @@ export async function buildRenderPlanScenes(
       const renderScene: RenderScene = { kind, label, durationSeconds: s.durationSeconds, backgroundColor, narration: s.narration };
       let cardLayout: CardLayout | null = null;
       let payoffCard: PayoffCard | null = null;
+      let recordingLayout: RecordingLayout | null = null;
       const payoff = s.layout === "payoff" ? s.payoff : undefined;
       let mockFrames: { pattern: string; count: number } | undefined;
       let sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
@@ -201,7 +204,15 @@ export async function buildRenderPlanScenes(
           renderScene.clipTimeRangeSeconds = s.clipTimeRangeSeconds;
           if (s.crop) renderScene.sourceCrop = s.crop;
           if (asset.privateRegions?.length) renderScene.privacyMasks = asset.privateRegions.map((pr) => pr.region);
-          if (s.crop && payoff) {
+          if (s.crop && s.layout === "recording" && s.recording) {
+            // A recording scene: the crop in a rounded card inside the safe column, under a large headline; no grow-in, so the rings stay on the figure.
+            recordingLayout = computeRecordingLayout(s.crop, { headline: s.headline, captionText: s.captionText, cta: s.cta, hook: s.recording.hook }, s.recording.lines);
+            const problems = recordingSafetyProblems(recordingLayout);
+            if (problems.length > 0) throw new VideoFactoryError(`Adapter: recording scene "${s.sceneId}" is unsafe: ${problems.join("; ")}.`);
+            const { maskPath, shadowPath } = await buildCardMaskAndShadow(recordingLayout.card, outDir, runner, i);
+            const c = recordingLayout.card;
+            renderScene.card = { backgroundPath, evidence: { x: c.x, y: c.y, width: c.width, height: c.height, maskPath, shadowPath, still: true } };
+          } else if (s.crop && payoff) {
             payoffCard = computePayoffCard(s.crop);
             const right = payoffCard.x + payoffCard.width;
             const bottom = payoffCard.y + payoffCard.height;
@@ -243,6 +254,9 @@ export async function buildRenderPlanScenes(
       } else if (chart) {
         // Chart layout: the headline, the chart up to this scene's beat, and the beat's caption, all drawn as vector cues.
         captionCues.push(...buildChartCues({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, start, end }));
+      } else if (recordingLayout && s.recording && s.crop) {
+        // Recording layout: the headline from frame one, the rings on the figure, the caption and (closing beat) the invitation, all vector cues.
+        captionCues.push(...buildRecordingCues({ spec: s.recording, layout: recordingLayout, crop: s.crop, captionText: s.captionText, cta: s.cta, start, end }));
       } else if (renderScene.card && payoff) {
         // Payoff layout: the big figure + line + caption block (animated), drawn above the zoomed card, in the top band.
         captionCues.push(...buildPayoffCues({ headline: s.headline, captionText: s.captionText, cta: s.cta, start, end, spec: payoff, hasCard: Boolean(payoffCard) }));

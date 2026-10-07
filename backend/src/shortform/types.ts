@@ -165,7 +165,26 @@ export interface Mask {
   label?: string;
 }
 
-export type SceneLayout = "full_card" | "fill" | "payoff" | "chart";
+export type SceneLayout = "full_card" | "fill" | "payoff" | "chart" | "recording";
+
+/**
+ * "recording" scenes (2026-10-07, the screen-recording alternatives of the fresh concepts, see freshRecordingConcepts.ts): a REAL
+ * screen recording of the demo account, cropped to the part that proves the line being spoken, in a rounded card under a large
+ * on-screen headline (visible from the first frame, no fade) with the figure being spoken about ringed in amber. The text,
+ * the Demo data label and the rings are all ASS vector cues (recordingCues.ts), so the picture stays the unaltered recording.
+ *
+ * `highlights` are rectangles in the SOURCE recording's pixel coordinates (like `crop`); every one must sit inside the crop.
+ */
+export interface RecordingSpec {
+  /** Rings drawn over the figure(s) the beat is about. */
+  highlights: Rect[];
+  /** Colour of the last headline line. */
+  accent: ChartTone;
+  /** The headline split into display lines; joined with spaces they must equal the scene headline. */
+  lines: string[];
+  /** The opening beat: the headline is drawn at hook size. */
+  hook: boolean;
+}
 
 /**
  * "chart" scenes (the 2026-10 chart-card format): no screenshot at all. One short paradox line on a dark background and
@@ -367,6 +386,8 @@ export interface SceneSpec {
   payoff?: PayoffSpec;
   /** Required when `layout` is "chart"; ignored otherwise. */
   chart?: ChartSpec;
+  /** Required when `layout` is "recording"; ignored otherwise. */
+  recording?: RecordingSpec;
   /** Opt-ins for the rare deliberate exceptions. */
   allowChrome?: boolean;
   keepSidebar?: boolean;
