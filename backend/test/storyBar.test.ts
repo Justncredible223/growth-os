@@ -117,7 +117,7 @@ describe("the app's request handler", () => {
 });
 
 describe("the bar still applies to an offered chart concept", () => {
-  const WEAKENED = "daily-01-brief-room";
+  const WEAKENED = "fresh-01-two-limits";
   let handler: typeof import("../api/run-campaign").default;
   let state: ReturnType<typeof createFakeClient>;
 

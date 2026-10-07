@@ -2,7 +2,9 @@ import { buildBarsPlan } from "./chartBarsConcepts.js";
 import type { ChartTone, MockDetailRow, MockFocus, MockHero, MockRow, MockSpec, MockWindow, ScenePlan } from "./types.js";
 
 /**
- * The 30 concepts the app offers (owner decision, 2026-10-03: one new video a day, replacing the first twelve). Each is drawn
+ * The 30 older concepts. NO LONGER OFFERED since 2026-10-07 (owner decision: they open on "what the screen is", averaged ~100 views
+ * and 1.9-4.1 s watch time; the offered pool is now freshConcepts.ts), but they stay in the catalog so a script already drafted or approved from
+ * one still renders. Originally the concepts the app offered (owner decision, 2026-10-03: one new video a day, replacing the first twelve). Each is drawn
  * from a verified recording's facts only -- no figure here is invented -- and runs through the same checks as every
  * product-mock concept (claims, fit, story bar). They are listed in the order they are requested: DAILY_CONCEPT_ORDER is
  * "day 1" to "day 30", and the voice-script sheet (scripts/printVoiceScripts.ts) prints them in that order.
@@ -12,7 +14,7 @@ import type { ChartTone, MockDetailRow, MockFocus, MockHero, MockRow, MockSpec, 
  *   4 what else the screen shows   5 the invitation
  * Each spoken line is 7 words or fewer, whole dollars only (test/narratedMocks.test.ts).
  */
-interface Daily {
+export interface Daily {
   slug: string;
   title: string;
   topic: string;
@@ -33,12 +35,12 @@ interface Daily {
   take: [string, string, string, string, string];
 }
 
-const h = (label: string, value: string, tone: ChartTone): MockHero => ({ label, value, tone });
-const r = (label: string, sub: string | undefined, value: string, tone: ChartTone, meter?: number): MockRow => ({ label, ...(sub ? { sub } : {}), value, tone, ...(meter !== undefined ? { meter: { markAt: meter } } : {}) });
-const w = (title: string, rows: MockRow[]): MockWindow => ({ title, rows });
-const f = (hero: MockHero, window: number, row: number): MockFocus => ({ hero, window, row });
+export const h = (label: string, value: string, tone: ChartTone): MockHero => ({ label, value, tone });
+export const r = (label: string, sub: string | undefined, value: string, tone: ChartTone, meter?: number): MockRow => ({ label, ...(sub ? { sub } : {}), value, tone, ...(meter !== undefined ? { meter: { markAt: meter } } : {}) });
+export const w = (title: string, rows: MockRow[]): MockWindow => ({ title, rows });
+export const f = (hero: MockHero, window: number, row: number): MockFocus => ({ hero, window, row });
 
-function build(n: number, c: Daily): ScenePlan {
+export function build(n: number, c: Daily, prefix = "daily"): ScenePlan {
   const id = String(n).padStart(2, "0");
   const details: MockSpec["details"] = {
     title: c.details.title,
@@ -46,10 +48,10 @@ function build(n: number, c: Daily): ScenePlan {
     footer: c.details.footer ?? "From your synced trades.",
   };
   return buildBarsPlan({
-    planId: `daily-${id}-${c.slug}`,
+    planId: `${prefix}-${id}-${c.slug}`,
     title: c.title,
     topic: c.topic,
-    variationId: `daily-${id}`,
+    variationId: `${prefix}-${id}`,
     assetId: c.assetId,
     expectedTopic: c.expectedTopic,
     ...(c.also ? { alsoTopics: c.also } : {}),

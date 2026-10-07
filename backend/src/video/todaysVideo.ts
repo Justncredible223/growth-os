@@ -26,7 +26,7 @@ export interface TodaysVideo {
   state: TodaysVideoState;
   /** The concept's own title, without the request prefix. */
   title: string | null;
-  /** Its day in the fixed daily order (1-30). */
+  /** Its day in the fixed daily order (1 = the first concept of the offered pool). */
   day: number | null;
   headline: string;
   detail: string;

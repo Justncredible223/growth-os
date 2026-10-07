@@ -8,14 +8,14 @@ import { renderBar } from "../src/shortform/storyScore";
 const manifest = loadManifest();
 const words = (t: string) => t.trim().split(/\s+/).length;
 
-describe("the 30 daily concepts", () => {
-  it("are 30 distinct plans in the catalog, offered, and listed in day order", () => {
+describe("the 30 older daily concepts (cleared from the offered pool 2026-10-07, still resolvable)", () => {
+  it("are 30 distinct plans that stay in the catalog but are no longer offered, and are listed in day order", () => {
     expect(DAILY_PILOTS).toHaveLength(30);
     expect(new Set(DAILY_CONCEPT_ORDER).size).toBe(30);
     DAILY_PILOTS.forEach((p, i) => {
       expect(p.planId, `day ${i + 1}`).toMatch(new RegExp(`^daily-${String(i + 1).padStart(2, "0")}-`));
       expect(MOTION_SCENE_PLANS).toContain(p);
-      expect(isOfferedPlan(p)).toBe(true);
+      expect(isOfferedPlan(p), p.planId).toBe(false);
     });
   });
 
