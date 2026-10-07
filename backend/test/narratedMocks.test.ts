@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MOTION_SCENE_PLANS, isOfferedPlan, isNarratedMockPlan, MOCK_NARRATION, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, isOfferedPlan, isNarratedMockPlan, MOCK_NARRATION, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../src/shortform/motionPlans";
 import { DEFAULT_VOICE } from "../scripts/video-factory/voiceover";
 
 const offered = MOTION_SCENE_PLANS.filter(isOfferedPlan);
@@ -10,7 +10,7 @@ const sentences = (text: string) => text.split(/(?<=[.!?])\s+/).filter(Boolean);
 
 describe("narrated product mocks", () => {
   it("are the offered concepts, and all of them are narrated", () => {
-    expect(offered).toHaveLength(9);
+    expect(offered).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length);
     for (const p of offered) {
       expect(p.voiceover, p.planId).toBe("narrated");
       expect(isNarratedMockPlan(p), p.planId).toBe(true);

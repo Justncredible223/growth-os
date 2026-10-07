@@ -23,6 +23,8 @@ export interface Daily {
   /** Other topics of the cited facts on the same recording. */
   also?: string[];
   accent: "good" | "bad";
+  /** The recording's own data label when it is not "Demo data" (the older ui.* captures say "EXAMPLE DATA"); drawn on the slide and used as the disclosure. */
+  dataLabel?: string;
   lines: string[];
   opening: MockHero[];
   windows: MockWindow[];
@@ -57,7 +59,8 @@ export function build(n: number, c: Daily, prefix = "daily", opts: { hookFirst?:
     ...(c.also ? { alsoTopics: c.also } : {}),
     lines: c.lines,
     accent: c.accent,
-    mock: { tag: "Demo data", opening: c.opening, windows: c.windows, focus: c.focus, details },
+    ...(c.dataLabel ? { dataLabel: c.dataLabel } : {}),
+    mock: { tag: c.dataLabel ?? "Demo data", opening: c.opening, windows: c.windows, focus: c.focus, details },
     ...(opts.hookFirst ? { hookFirst: true } : {}),
     beats: c.say.map((narration, i) => ({
       stage: i + 1,

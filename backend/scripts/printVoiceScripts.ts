@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Prints the voice-script sheet: the offered concepts (9 fresh hook-first ones; 30 older daily ones with --legacy) in request order, with the exact lines to record and the file name each
+ * Prints the voice-script sheet: the offered concepts (the fresh hook-first pool, 30; 30 older daily ones with --legacy) in request order, with the exact lines to record and the file name each
  * recording must have (see scripts/video-factory/suppliedVoice.ts). The sheet is generated from the concepts, so it can never
  * disagree with what the video says. The text is plain: the recordings are cut at the pauses between sentences afterwards
  * (scripts/splitVoiceRecordings.ts), so no timing markup is asked for.
@@ -8,11 +8,11 @@
  *   npx tsx scripts/printVoiceScripts.ts > ../docs/VOICE_SCRIPTS.md
  */
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts.js";
-import { FRESH_PILOTS } from "../src/shortform/freshConcepts.js";
+import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans.js";
 
-/** Default: the offered pool (the 9 fresh hook-first concepts). `--legacy` prints the 30 older daily concepts, which are no longer offered. */
+/** Default: the offered pool in request order (the fresh hook-first concepts, motionPlans.ts). `--legacy` prints the 30 older daily concepts, which are no longer offered. */
 const LEGACY = process.argv.includes("--legacy");
-const PILOTS = LEGACY ? DAILY_PILOTS : FRESH_PILOTS;
+const PILOTS = LEGACY ? DAILY_PILOTS : OFFERED_DAILY_CONCEPT_IDS.map((id) => MOTION_SCENE_PLANS.find((p) => p.planId === id)!);
 
 /** Plain paragraph text for a text-to-speech box: the five lines in order, nothing else (no timing markup). */
 const SETTINGS = [

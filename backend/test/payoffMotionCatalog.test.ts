@@ -10,6 +10,7 @@ import { OUTCOMES_PILOTS } from "../src/shortform/chartConcepts";
 import { BARS_PILOTS } from "../src/shortform/chartBarsConcepts";
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
 import { FRESH_PILOTS } from "../src/shortform/freshConcepts";
+import { FRESH2_PILOTS } from "../src/shortform/freshConcepts2";
 import { listMotionConcepts, resolveMotionScenePlan } from "../scripts/video-factory/motionCatalog";
 import { buildVideoScriptFromScenePlan } from "../src/content/videoScriptWriter";
 import { manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept";
@@ -21,7 +22,7 @@ describe("the motion catalog includes the payoff variants", () => {
   it("lists every original pilot, the three payoff variants and the story rebuilds, once each", () => {
     const ids = listMotionConcepts().map((c) => c.id);
     expect(ids).toEqual(MOTION_SCENE_PLANS.map((p) => p.planId));
-    expect(ids.length).toBe(PILOTS.length + PAYOFF_PILOTS.length + STORY_PILOTS.length + MORE_STORY_PILOTS.length + PILOT7_STORY_PILOTS.length + CHART_PILOTS.length + BARS_PILOTS.length + OUTCOMES_PILOTS.length + DAILY_PILOTS.length + FRESH_PILOTS.length);
+    expect(ids.length).toBe(PILOTS.length + PAYOFF_PILOTS.length + STORY_PILOTS.length + MORE_STORY_PILOTS.length + PILOT7_STORY_PILOTS.length + CHART_PILOTS.length + BARS_PILOTS.length + OUTCOMES_PILOTS.length + DAILY_PILOTS.length + FRESH_PILOTS.length + FRESH2_PILOTS.length);
     for (const p of PAYOFF_PILOTS) expect(ids).toContain(p.planId);
     expect(new Set(ids).size).toBe(ids.length);
   });

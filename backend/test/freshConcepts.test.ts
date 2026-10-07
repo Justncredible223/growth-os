@@ -9,13 +9,13 @@ import { scoreStory, renderBar } from "../src/shortform/storyScore";
 const manifest = loadManifest();
 const words = (t: string) => t.trim().split(/\s+/).length;
 
-describe("the 9 fresh hook-first concepts (the whole offered pool since 2026-10-07)", () => {
-  it("are the only offered plans, in order, and every older plan stays resolvable but is not offered", () => {
+describe("the first 9 fresh hook-first concepts (part of the offered pool since 2026-10-07)", () => {
+  it("are all offered, and every older plan stays resolvable but is not offered", () => {
     expect(FRESH_PILOTS).toHaveLength(9);
-    expect([...OFFERED_DAILY_CONCEPT_IDS]).toEqual(FRESH_CONCEPT_ORDER);
+    // The offered pool is these 9 plus the 21 of freshConcepts2.ts; its size, order and lane mix are checked in freshConcepts2.test.ts.
+    for (const id of FRESH_CONCEPT_ORDER) expect(OFFERED_DAILY_CONCEPT_IDS, id).toContain(id);
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId)).toEqual(FRESH_CONCEPT_ORDER);
-    FRESH_PILOTS.forEach((p, i) => expect(dailyPosition(p.planId)).toBe(i));
+    FRESH_PILOTS.forEach((p) => expect(dailyPosition(p.planId)).toBe(OFFERED_DAILY_CONCEPT_IDS.indexOf(p.planId)));
     for (const p of DAILY_PILOTS) {
       expect(MOTION_SCENE_PLANS).toContain(p);
       expect(dailyPosition(p.planId)).toBe(-1);
