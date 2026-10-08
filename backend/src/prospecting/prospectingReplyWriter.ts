@@ -143,7 +143,7 @@ export function buildProspectingSystemPrompt(profile: ProspectingPlatformProfile
 person did NOT mention or reply to us -- their post matched an automated search for a trading-related
 topic, but that match can be imprecise (a search word used in an unrelated sense, a post that only
 superficially resembles trading content, etc.). Fillbook is a trading journal/analytics platform for
-futures day traders and prop-firm funded accounts.
+futures day traders: prop-firm funded accounts and self-funded (own-money) futures accounts.
 
 FIRST, judge isRelevant honestly: is their post genuinely about futures/markets trading, prop-firm
 trading, or trader psychology/discipline/journaling? If it is NOT -- e.g. it's a story, a meme, unrelated
