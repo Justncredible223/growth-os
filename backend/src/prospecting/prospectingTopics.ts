@@ -68,6 +68,16 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   { key: "blown_account", query: '"blew my account" OR "blown account"', label: "Blown account", replyClass: "A" },
   { key: "broke_rules", query: '"broke my rules" OR "broke rules" trading', label: "Broke my rules", replyClass: "A" },
 
+  // ---- CLASS A -- direct fit, self-funded (own-money) futures traders (owner direction 2026-10-07: Fillbook now serves
+  // traders with no prop firm). Every query carries a "futures" anchor so a match is guaranteed to pass
+  // isPlausiblyTradingRelated(), and none overlaps a prop-firm phrase: a post that is really about a firm's rules still
+  // arrives through the topics above. Search cost per run is unchanged (TOPICS_PER_SEARCH_RUN); these only share the
+  // rotation, so each topic is searched a little less often. ----
+  { key: "self_funded", query: '("self funded" OR "self-funded") futures', label: "Self-funded futures", replyClass: "A" },
+  { key: "own_capital_futures", query: '"own capital" futures', label: "Own capital (futures)", replyClass: "A" },
+  { key: "live_futures_account", query: '"live account" futures', label: "Live futures account", replyClass: "A" },
+  { key: "futures_margin", query: '"futures margin"', label: "Futures margin", replyClass: "A" },
+
   // ---- CLASS B -- adjacent fit ----
   { key: "position_sizing", query: '"position sizing"', label: "Position sizing", replyClass: "B" },
   { key: "sized_up", query: '"sized up" trading loss', label: "Sizing up after losses", replyClass: "B" },
@@ -79,6 +89,9 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   { key: "risk_management", query: '"risk management" futures', label: "Risk management (futures)", replyClass: "B" },
   { key: "holding_losers", query: '"holding losers"', label: "Holding losers", replyClass: "B" },
   { key: "bad_trading_day", query: '"bad trading day"', label: "Bad trading day", replyClass: "B" },
+  { key: "margin_call_futures", query: '"margin call" futures', label: "Margin call (futures)", replyClass: "B" },
+  { key: "small_account_futures", query: '"small account" futures', label: "Small account (futures)", replyClass: "B" },
+  { key: "trading_costs_futures", query: '"trading costs" futures', label: "Trading costs (futures)", replyClass: "B" },
 
   // ---- CLASS C -- relationship fit (credible futures traders/creators, no Fillbook fit required) ----
   { key: "futures_trader", query: '"futures trader" (process OR psychology)', label: "Futures trader", replyClass: "C" },

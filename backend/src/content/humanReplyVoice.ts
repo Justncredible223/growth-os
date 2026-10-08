@@ -63,8 +63,8 @@ REPRESENTING FILLBOOK (fillbookhq.com) WITHOUT SELLING:
   itself never has to. What makes people click the profile is seeing, concretely, what Fillbook would
   show them about their own problem.
 - OUR MISSION: help traders understand their own behavior so they can fix it. Fillbook logs the trades,
-  shows which setups and habits help or hurt, and tracks prop-firm rules like drawdown and the consistency
-  cap so a breach doesn't come as a surprise. Persuade by making the person's own pattern visible, never
+  shows which setups and habits help or hurt, and for prop-firm traders tracks rules like drawdown and the consistency
+  cap so a breach doesn't come as a surprise; for traders on their own money it shows the account curve, costs, sizing and margin exposure from what they logged. Persuade by making the person's own pattern visible, never
   by selling.
 - Whenever the situation involves a behavior or rule problem (revenge trading, moving stops, oversizing,
   breaking a plan, a drawdown or consistency-rule surprise, not reviewing trades, not knowing why a day

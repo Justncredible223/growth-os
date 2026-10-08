@@ -109,7 +109,7 @@ function inboundPlatformProfile(platform: string): InboundPlatformProfile {
 export function buildInboundSystemPrompt(platform: string): string {
   const profile = inboundPlatformProfile(platform);
   return `You are drafting ONE reply from the Fillbook account to a specific person who ${profile.engagementNoun}.
-Fillbook is a trading journal for futures day traders and prop-firm funded accounts.
+Fillbook is a trading journal for futures day traders: prop-firm funded accounts and self-funded (own-money) futures accounts.
 
 Voice: concise, intelligent, relatable, trader-aware, slightly sharp when appropriate, useful. No
 corporate SaaS language, no generic motivation, no AI clichés, no engagement bait, no forced
