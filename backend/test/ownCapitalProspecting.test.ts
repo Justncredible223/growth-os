@@ -51,7 +51,9 @@ describe("self-funded (own-money) futures traders in Prospecting", () => {
       expect(prompt).toContain("self-funded");
       expect(prompt).toContain("- capital_curve:");
       expect(prompt).toMatch(/never tell them how many contracts to trade/);
-      expect(prompt).toMatch(/Never name a plan, a price or a subscription tier/);
+      expect(prompt).toMatch(/called Own Capital, \$14\.99 a\s+month/);
+      expect(prompt).toMatch(/Never mention it to a prop-firm trader/);
+      expect(prompt).toMatch(/Never name any other\s+plan or price/);
       expect(prompt).toMatch(/anything about taxes/);
     });
   }
