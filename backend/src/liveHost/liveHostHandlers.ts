@@ -9,7 +9,7 @@ import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseReposi
 import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../signals/adapters/youtubeLiveChatAdapter.js";
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
-import { LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
+import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
 import type {
@@ -600,6 +600,22 @@ async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession,
   }
 }
 
+/** True when a line lifts a run of words from one of the prompt's example lines (the model likes to copy them). */
+export function copiesExampleLine(text: string, runLength = 6): boolean {
+  const words = (value: string) => value.toLowerCase().replace(/[^a-z0-9' ]+/g, " ").split(/\s+/).filter(Boolean);
+  const candidate = words(text);
+  if (candidate.length < runLength) return false;
+  const grams = new Set<string>();
+  for (let i = 0; i + runLength <= candidate.length; i++) grams.add(candidate.slice(i, i + runLength).join(" "));
+  return LIVE_HOST_EXAMPLE_LINES.some((example) => {
+    const exampleWords = words(example);
+    for (let i = 0; i + runLength <= exampleWords.length; i++) {
+      if (grams.has(exampleWords.slice(i, i + runLength).join(" "))) return true;
+    }
+    return false;
+  });
+}
+
 /** The owner's typed prompts as chat rows (platform "tiktok"), carrying the reserved id prefixes. */
 export function duoMessages(input: TickInput): IncomingChatMessage[] {
   const hostName = typeof input.hostName === "string" && input.hostName.trim() ? input.hostName : "Host";
@@ -816,6 +832,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       generate: async (retryFeedback) => {
         const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, retryFeedback }, grounding, joinWelcome || (input.duo === true && batch.length > 0) ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
+        if (!problem && draft.reply.length > 0 && copiesExampleLine(draft.reply)) problem = "copies a line from the character examples; write a fresh one";
         if (!problem && draft.reply.length > 0) {
           const violations = await brandConstitution.checkVocabulary(draft.reply);
           if (violations[0]) problem = `breaks a brand rule (uses "${violations[0].matchedPhrase}")`;
@@ -960,7 +977,9 @@ async function buildRecentExchanges(client: SupabaseClient, recentUtterances: Li
   }
   const exchanges: RecentExchange[] = [];
   for (const utterance of [...recentUtterances].reverse()) {
-    for (const message of byUtterance.get(utterance.id) ?? []) exchanges.push({ speaker: "viewer", name: message.authorName, text: message.body });
+    for (const message of byUtterance.get(utterance.id) ?? []) {
+      exchanges.push({ speaker: message.externalId.startsWith(DUO_HOST_ID_PREFIX) ? "cohost" : "viewer", name: message.authorName, text: message.body });
+    }
     exchanges.push({ speaker: "tilt", text: utterance.spokenText });
   }
   return exchanges;

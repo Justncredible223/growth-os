@@ -11,6 +11,7 @@ import {
   setLiveHostDesiredState,
   updateLiveHostSettings,
   viewerAskedAboutFillbook,
+  copiesExampleLine,
 } from "../src/liveHost/liveHostHandlers";
 import { isLiveHostAutomationRequest, tickInputFromBody } from "../src/liveHost/liveHostApi";
 import type { YoutubeLiveChatAdapter } from "../src/signals/adapters/youtubeLiveChatAdapter";
@@ -440,6 +441,24 @@ describe("runLiveHostTick", () => {
     expect(sent.messages[0]!.content).toContain("end by turning to him");
   });
 
+  it("memory: the co-host's earlier words and Tilt's own words are labelled so he cannot swap them", async () => {
+    const earlier = new Date(NOW.getTime() - 60_000).toISOString();
+    const client = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ id: "s1", status: "live", started_at: earlier, last_heartbeat_at: NOW.toISOString(), last_utterance_at: earlier }],
+      live_host_utterances: [{ id: "u1", session_id: "s1", kind: "reply", segment: null, spoken_text: "I do not rank firms, because a candle has no account.", mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: earlier, spoken_at: earlier }],
+      live_host_messages: [{ id: "m1", session_id: "s1", platform: "tiktok", external_id: "duo-host-a1", author_name: "Justin", body: "Which firm is best?", received_at: earlier, status: "answered", status_reason: null, utterance_id: "u1" }],
+    });
+    const llm = scriptedLlm([line("Another joke, and a fresh angle.")]);
+    await runLiveHostTick(asSupabase(client), { duo: true, hostName: "Justin", hostMessages: [{ id: "a2", text: "Tilt, tease me." }] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    const content = sent.messages[0]!.content;
+    expect(content).toContain("Justin (CO-HOST, the person next to you): Which firm is best?");
+    expect(content).toContain("Tilt (you): I do not rank firms");
+    expect(content).toContain("never attribute your own words to anyone else");
+    expect(content).toContain("Never invent specifics");
+  });
+
   it("duo mode: relayed viewer questions are answered as viewer messages, not as the co-host", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })] });
     const llm = scriptedLlm([line("Dana, a consistency rule caps how much of your profit can come from one day.")]);
@@ -657,5 +676,28 @@ describe("tickInputFromBody", () => {
     expect(input).toMatchObject({ busy: true, audienceOnly: true, platform: "tiktok" });
     expect(input.joins).toHaveLength(50);
     expect(input.hostMessages).toHaveLength(10);
+  });
+});
+
+describe("copiesExampleLine", () => {
+  it("flags a line that lifts a run of words from an example, and passes an original one", () => {
+    expect(copiesExampleLine("Honestly, revenge trading is just paying the market a subscription fee to be insulted, every single time.")).toBe(true);
+    expect(copiesExampleLine("Honestly a stop you keep moving is a hostage negotiation with your own account.")).toBe(false);
+    expect(copiesExampleLine("Too short.")).toBe(false);
+  });
+
+  it("makes the tick retry with feedback when the first draft copies an example", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([
+      line("Journaling is flossing for traders: nobody enjoys it, everyone lies about doing it, and the problems all show up at once."),
+      line("A trailing drawdown is a bouncer who moves the velvet rope every time you win."),
+    ]);
+    const result = await runLiveHostTick(
+      asSupabase(client),
+      { messages: [tiktokMessage("m1", "Mike", "what is a trailing drawdown?")] },
+      { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING },
+    );
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.utterance?.spokenText).toContain("bouncer");
   });
 });
