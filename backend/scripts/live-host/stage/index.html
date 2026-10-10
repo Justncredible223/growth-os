@@ -96,12 +96,12 @@
    * there is covered on a viewer's phone, so in this mode everything sits in the clear band between them:
    * header lower, Tilt smaller and higher, captions directly under him, and the footer above the chat area.
    */
-  body.safe-tiktok .topbar { top: 236px; }
+  body.safe-tiktok .topbar { top: 236px; left: 110px; right: 110px; }
   body.safe-tiktok .brand { font-size: 34px; }
   body.safe-tiktok .brand svg { width: 52px; height: 52px; }
   body.safe-tiktok .badge { font-size: 21px; padding: 10px 18px; }
-  body.safe-tiktok .segment { top: 330px; font-size: 30px; }
-  body.safe-tiktok .asks { top: 408px; }
+  body.safe-tiktok .segment { top: 330px; left: 110px; font-size: 30px; }
+  body.safe-tiktok .asks { top: 408px; left: 110px; right: 110px; }
   body.safe-tiktok .ask { padding: 16px 24px 20px; max-width: 900px; }
   body.safe-tiktok .ask .who { font-size: 24px; margin-bottom: 4px; }
   body.safe-tiktok .ask .text { font-size: 32px; }
@@ -113,9 +113,9 @@
   body.safe-tiktok .card { top: 720px; right: 28px; width: 270px; padding: 18px 20px; }
   body.safe-tiktok .card li { font-size: 23px; padding: 8px 0; }
   body.safe-tiktok .card h3 { font-size: 21px; }
-  body.safe-tiktok .captions { top: 1120px; min-height: 150px; }
-  body.safe-tiktok .captions p { font-size: 52px; line-height: 1.2; }
-  body.safe-tiktok .footer { bottom: auto; top: 1292px; font-size: 22px; }
+  body.safe-tiktok .captions { top: 1120px; min-height: 150px; left: 130px; right: 130px; }
+  body.safe-tiktok .captions p { font-size: 48px; line-height: 1.2; }
+  body.safe-tiktok .footer { bottom: auto; top: 1292px; font-size: 22px; left: 110px; right: 110px; }
   body.safe-tiktok .footer .fine { font-size: 19px; margin-top: 4px; }
 
   .offline { position: absolute; inset: 0; display: none; place-items: center; background: rgba(4, 8, 16, 0.86); text-align: center; font-size: 46px; font-weight: 800; }
@@ -412,7 +412,7 @@
    * moves. (A window that slid forward on every word made the whole block reflow constantly and was hard to
    * read.) A phrase ends at sentence punctuation, or when it would no longer fit on two lines.
    */
-  const CAPTION_MAX_CHARS = 46;
+  const CAPTION_MAX_CHARS = 40;
   const CAPTION_MAX_WORDS = 9;
   function captionPhrases(words) {
     const phraseOf = [];
