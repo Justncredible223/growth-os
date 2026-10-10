@@ -127,6 +127,28 @@ interface GrowthOsRepository {
     /** Turns TikTok LIVE chat reading on or off, for the given TikTok username. Owner-only, like the switch. */
     suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String)
 
+    /**
+     * The Engage tab (engagement assistant): other creators' videos with drafted comments. Nothing here posts to
+     * a platform; the owner posts by hand and [doneEngagement] only records that they did. Refusals from the
+     * server's guardrails (daily cap, spacing, creator cooldown, quota) arrive as [EngagementActionException].
+     */
+    suspend fun getEngagementStatus(): EngagementStatus
+    /** Adds a pasted TikTok or YouTube video link to the queue. */
+    suspend fun addEngagementLink(url: String): EngagementItem
+    /** Adds a watchlist entry: an @handle or channel id, or a search query. */
+    suspend fun addEngagementWatch(value: String)
+    /** Pulls fresh YouTube candidates for the watchlist through the official Data API. */
+    suspend fun discoverEngagement(): EngagementDiscoverResult
+    /** Drafts two or three comment options for one video. */
+    suspend fun draftEngagement(id: String): EngagementItem
+    /** Records that the owner opened the video; returns the link to open. */
+    suspend fun openEngagement(id: String): String
+    /** Records a copy of a draft (or the owner's edited text) and returns the text to put on the clipboard. */
+    suspend fun copyEngagement(id: String, draftId: String?, text: String?): EngagementCopyResult
+    /** Records that the owner posted and/or liked: did is "commented", "liked" or "both". */
+    suspend fun doneEngagement(id: String, did: String, draftId: String?, finalText: String?)
+    suspend fun skipEngagement(id: String)
+
     /** The active Inbound Engagement Queue -- everything not yet resolved (new/needs_response/draft_ready/follow_up/review_needed). */
     suspend fun getInboundQueue(): List<InboundEngagement>
     /** Command Center counts: needs response / follow-ups / repeat engagers / overdue. */
@@ -540,6 +562,56 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    private val fakeEngagementItem = EngagementItem(
+        id = "engage-fake-1",
+        platform = "youtube",
+        url = "https://www.youtube.com/shorts/abcdefghijk",
+        title = "Why I stopped moving my stop",
+        creatorName = "Example Trader",
+        thumbnailUrl = null,
+        topComments = listOf("Best advice I got on stops"),
+        drafts = listOf(EngagementDraft("d1", "Moving the stop at the first sign of red is the habit I could not break either.")),
+        status = "drafted",
+        blockMessage = null,
+    )
+
+    override suspend fun getEngagementStatus() = EngagementStatus(
+        configured = true,
+        message = null,
+        youtubeConfigured = true,
+        minSpacingSeconds = 90,
+        nextActionInSeconds = 0,
+        youtubeToday = EngagementPlatformCount(0, 25),
+        tiktokToday = EngagementPlatformCount(0, 25),
+        quotaUsed = 0,
+        quotaBudget = 3000,
+        queue = listOf(fakeEngagementItem),
+        watchlistCount = 0,
+    )
+
+    override suspend fun addEngagementLink(url: String) = fakeEngagementItem
+
+    override suspend fun addEngagementWatch(value: String) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun discoverEngagement() = EngagementDiscoverResult(added = 0, stoppedReason = null, errors = emptyList())
+
+    override suspend fun draftEngagement(id: String) = fakeEngagementItem
+
+    override suspend fun openEngagement(id: String) = fakeEngagementItem.url
+
+    override suspend fun copyEngagement(id: String, draftId: String?, text: String?) =
+        EngagementCopyResult(text = text ?: fakeEngagementItem.drafts.first().text, warnings = emptyList())
+
+    override suspend fun doneEngagement(id: String, did: String, draftId: String?, finalText: String?) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun skipEngagement(id: String) {
         // No backend to call in fake mode -- no-op.
     }
 

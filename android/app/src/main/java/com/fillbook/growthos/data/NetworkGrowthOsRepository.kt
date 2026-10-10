@@ -454,6 +454,62 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=live-host", JSONObject().put("action", "update-settings").put("settings", settings))
     }
 
+    /**
+     * Engagement actions: the server answers a refusal (daily cap, spacing, cooldown: HTTP 429) or a bad request
+     * (HTTP 400/409) with a readable `{error}` body. Surface that text instead of a generic network message.
+     */
+    private suspend fun postEngagement(body: JSONObject): JSONObject =
+        try {
+            post("/api/approvals?resource=engagement", body)
+        } catch (e: NetworkException) {
+            val message = extractEngagementErrorMessage(e.httpCode, e.message)
+            if (message != null) throw EngagementActionException(message)
+            throw e
+        }
+
+    override suspend fun getEngagementStatus(): EngagementStatus = parseEngagementStatus(get("/api/approvals?resource=engagement"))
+
+    override suspend fun addEngagementLink(url: String): EngagementItem =
+        parseEngagementItem(postEngagement(JSONObject().put("action", "add-link").put("url", url.trim())).getJSONObject("item"))
+
+    override suspend fun addEngagementWatch(value: String) {
+        postEngagement(JSONObject().put("action", "add-watch").put("kind", engagementWatchKind(value)).put("value", value.trim()))
+    }
+
+    override suspend fun discoverEngagement(): EngagementDiscoverResult {
+        val json = postEngagement(JSONObject().put("action", "discover"))
+        return EngagementDiscoverResult(
+            added = json.optInt("added", 0),
+            stoppedReason = if (json.isNull("stoppedReason")) null else json.optString("stoppedReason").takeIf { it.isNotEmpty() },
+            errors = json.optJSONArray("errors")?.mapStrings() ?: emptyList(),
+        )
+    }
+
+    override suspend fun draftEngagement(id: String): EngagementItem =
+        parseEngagementItem(postEngagement(JSONObject().put("action", "draft").put("id", id)).getJSONObject("item"))
+
+    override suspend fun openEngagement(id: String): String =
+        postEngagement(JSONObject().put("action", "open").put("id", id)).getString("url")
+
+    override suspend fun copyEngagement(id: String, draftId: String?, text: String?): EngagementCopyResult {
+        val body = JSONObject().put("action", "copy").put("id", id)
+        if (draftId != null) body.put("draftId", draftId)
+        if (text != null) body.put("text", text)
+        val json = postEngagement(body)
+        return EngagementCopyResult(text = json.getString("text"), warnings = json.optJSONArray("warnings")?.mapStrings() ?: emptyList())
+    }
+
+    override suspend fun doneEngagement(id: String, did: String, draftId: String?, finalText: String?) {
+        val body = JSONObject().put("action", "done").put("id", id).put("did", did)
+        if (draftId != null) body.put("draftId", draftId)
+        if (finalText != null) body.put("finalText", finalText)
+        postEngagement(body)
+    }
+
+    override suspend fun skipEngagement(id: String) {
+        postEngagement(JSONObject().put("action", "skip").put("id", id))
+    }
+
     override suspend fun handOffAsset(campaignAssetId: String): HandOffResult {
         val body = JSONObject().put("action", "hand-off").put("campaignAssetId", campaignAssetId)
         val json = post("/api/approvals", body)
@@ -1154,6 +1210,18 @@ fun extractResearchRequestErrorMessage(httpCode: Int?, networkExceptionMessage: 
     val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
     val error = unescapeJsonString(raw)
     return error.takeIf { it.isNotBlank() }
+}
+
+/**
+ * The engagement resource answers a guardrail refusal with HTTP 429 and its own validation failures with 400 (or
+ * 409 when its migration is missing), each carrying a readable `{error}` body worth showing to the owner as-is.
+ */
+fun extractEngagementErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400 && httpCode != 409 && httpCode != 429) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    return unescapeJsonString(raw).takeIf { it.isNotBlank() }
 }
 
 fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {

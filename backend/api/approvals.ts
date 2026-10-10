@@ -60,6 +60,7 @@ import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/v
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
 import { handleLiveHost, isLiveHostAutomationRequest } from "../src/liveHost/liveHostApi.js";
+import { handleEngagement } from "../src/engagement/engagementApi.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -638,6 +639,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res, { allowAutomation })) return;
   if (req.query.resource === "live-host") {
     await handleLiveHost(req, res);
+    return;
+  }
+  // The engagement assistant is owner-token only: allowAutomation above is never true for it.
+  if (req.query.resource === "engagement") {
+    await handleEngagement(req, res);
     return;
   }
   if (req.query.resource === "inbound") {
