@@ -211,6 +211,25 @@ const TRADE_CALL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\b(?:worth (?:the|your|every) (?:money|penny|dollar)|the best (?:prop firm|firm|broker|platform|eval|indicator|course) (?:is|would be|has to be)|go with (?:apex|topstep|tradeify|lucid|ftmo|take ?profit ?trader|my ?funded ?futures|bulenox|earn2trade)\b)/i, reason: "recommends a product or a firm" },
 ];
 
+const NAMED_FIRMS = "apex|topstep|tradeify|lucid|ftmo|take ?profit ?trader|my ?funded ?futures|bulenox|earn2trade|tradovate|ninjatrader|rithmic|tradingview|tradezella|tradersync|edgewonk|webull|robinhood|interactive brokers";
+/**
+ * Lines that could create legal exposure whatever their intent (owner rule, 2026-10-10): a verdict on a named
+ * company, a claim about customers' results, a giveaway or offer, or a request for a viewer's personal details.
+ */
+const LEGAL_RISK_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: new RegExp(`\\b(?:${NAMED_FIRMS})\\b[^.!?]{0,60}\\b(?:scam\\w*|fraud\\w*|rigged|rug ?pull\\w*|ponzi|steal\\w*|cheat\\w*|shady|sketchy|crooks?|legit|trustworthy|the best|the worst|garbage|trash|terrible|awful|don't pay|doesn't pay|won't pay|never pays?)\\b`, "i"), reason: "gives a verdict on a named company" },
+  { pattern: new RegExp(`\\b(?:scam\\w*|fraud\\w*|rigged|ponzi|crooks?|shady|sketchy|legit|trustworthy|the best|the worst)\\b[^.!?]{0,40}\\b(?:${NAMED_FIRMS})\\b`, "i"), reason: "gives a verdict on a named company" },
+  { pattern: /\b(?:fill-?book|our|the journal's) (?:users|customers|traders|members)\b[^.!?]{0,60}\b(?:pass|passed|earn|earned|make|made|profit\w*|win|won|funded|payouts?|lose less|more consistent)\b/i, reason: "makes a claim about customers' results" },
+  { pattern: /\b\d{1,3} ?(?:percent|%) of (?:our |fill-?book )?(?:users|customers|traders|members)\b/i, reason: "quotes a statistic about customers" },
+  { pattern: /\b(?:giveaway|give away|giving away|win a|prize|raffle|sweepstakes|contest|promo code|discount code|coupon|\d{1,2} ?(?:percent|%) off|free (?:eval|account|month|trial|subscription))\b/i, reason: "offers a giveaway, prize or discount" },
+  { pattern: /\b(?:what(?:'s| is) your|tell me your|send me your|drop your|share your|type your)\s+(?:real name|full name|age|email|e-mail|phone|number|address|location|account number|account balance|balance|income|salary|login|password|broker login)\b/i, reason: "asks a viewer for personal details" },
+];
+
+/** The reason a line carries legal risk, or null. */
+export function findLegalRisk(text: string): string | null {
+  return LEGAL_RISK_PATTERNS.find(({ pattern }) => pattern.test(text))?.reason ?? null;
+}
+
 /** The reason a text reads as a trade call or prediction, or null. */
 export function findTradeCall(text: string): string | null {
   return TRADE_CALL_PATTERNS.find(({ pattern }) => pattern.test(text))?.reason ?? null;
@@ -281,6 +300,8 @@ export function checkSpokenLine(text: string, context: SpokenLineContext): strin
 
   const tradeCall = findTradeCall(line);
   if (tradeCall) return tradeCall;
+  const legalRisk = findLegalRisk(line);
+  if (legalRisk) return legalRisk;
 
   const withoutDenials = line.replace(DENIAL, " ");
   const unverified = containsUnverifiedClaim(withoutDenials);

@@ -259,3 +259,32 @@ describe("first real stream regressions", () => {
   });
 });
 
+describe("legal-risk lines (owner rule)", () => {
+  it("rejects verdicts on named companies, result claims, offers and requests for personal details", () => {
+    for (const text of [
+      "Honestly Apex is a scam, everybody knows it.",
+      "Topstep never pays out, be careful.",
+      "The most legit firm out there is Tradeify.",
+      "Fillbook users pass their evals faster.",
+      "80 percent of our users get funded.",
+      "Stick around, we're doing a giveaway at the end.",
+      "Use my discount code for 20 percent off.",
+      "Mike, what's your account balance right now?",
+    ]) {
+      expect(checkSpokenLine(text, open), text).not.toBeNull();
+    }
+  });
+
+  it("still lets him explain without rating anyone", () => {
+    for (const text of [
+      "I don't rate companies. What I can tell you is how to read a drawdown rule before you sign up for anything.",
+      "Rules differ between firms, so check the firm's own page for the current numbers.",
+      "Fillbook is the trading journal I live in. The link is in the bio.",
+      "A payout rule usually sets a minimum number of trading days and a buffer above the starting balance.",
+      "Which contract do you trade, micros or minis?",
+    ]) {
+      expect(checkSpokenLine(text, open), text).toBeNull();
+    }
+  });
+});
+
