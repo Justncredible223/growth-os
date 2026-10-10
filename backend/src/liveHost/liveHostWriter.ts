@@ -113,7 +113,26 @@ ${grounding.verifiedKnowledgeSummary || "(none on file: say you do not want to g
 Submit every line through the submit_line tool.`;
 }
 
-export function buildLiveLineUserMessage(request: LiveLineRequest): string {
+/**
+ * Whether futures are trading right now, in words the host can use. CME futures run from Sunday 6pm to
+ * Friday 5pm New York time, with an hour off at 5pm each day; he must not ask what someone traded "today"
+ * on a Saturday.
+ */
+export function marketStatusNote(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", hour: "numeric", hourCycle: "h23" }).formatToParts(now);
+  const day = parts.find((part) => part.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const weekendClosed = day === "Saturday" || (day === "Friday" && hour >= 17) || (day === "Sunday" && hour < 18);
+  if (weekendClosed) {
+    return `RIGHT NOW: it is ${day} in New York and the futures market is CLOSED for the weekend (it reopens Sunday at 6pm New York time). Nobody traded today. Never ask what anyone traded today, how their session went today, or what the market is doing right now. Ask about their week, their last session, or their weekend instead, and the closed market is fair game for jokes (a candle with nothing to do).`;
+  }
+  if (hour === 17) {
+    return `RIGHT NOW: it is ${day} in New York and futures are in the one-hour daily break (5pm to 6pm New York time). Do not talk as if the market is moving this minute.`;
+  }
+  return `RIGHT NOW: it is ${day} in New York and the futures market is open.`;
+}
+
+export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = new Date()): string {
   const lines: string[] = [];
 
   if (request.recent.length > 0) {
@@ -154,6 +173,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
   }
 
   lines.push("");
+  lines.push(marketStatusNote(now));
   lines.push(
     request.fillbookMentionAllowed
       ? "Fillbook: mention it only if it is the honest answer to what was asked, or if the segment brief calls for it."

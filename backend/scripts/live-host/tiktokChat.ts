@@ -90,6 +90,9 @@ export class TiktokChatReader {
    */
   onReaction: (kind: "like" | "gift" | "follow" | "share") => void = () => {};
 
+  /** Called with the room's viewer count whenever TikTok reports it. */
+  onViewerCount: (count: number) => void = () => {};
+
   constructor(private log: (line: string) => void = () => {}) {}
 
   get connected(): boolean {
@@ -153,6 +156,10 @@ export class TiktokChatReader {
         if (this.buffer.length > MAX_BUFFERED) this.buffer.splice(0, this.buffer.length - MAX_BUFFERED);
       });
       connection.on(events.MEMBER ?? "member", (data) => this.noteJoin(joinerName(data)));
+      connection.on(events.ROOM_USER ?? "roomUser", (data) => {
+        const count = Number((data as { viewerCount?: unknown }).viewerCount);
+        if (Number.isFinite(count)) this.onViewerCount(count);
+      });
       connection.on(events.LIKE ?? "like", () => this.onReaction("like"));
       connection.on(events.GIFT ?? "gift", () => this.onReaction("gift"));
       connection.on(events.FOLLOW ?? "follow", () => this.onReaction("follow"));

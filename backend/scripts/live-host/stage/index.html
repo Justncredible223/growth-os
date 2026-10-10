@@ -253,6 +253,7 @@
             <path id="tongue" d="" fill="#ff6f8a"/>
           </g>
           <!-- sweat drop for "tilted" / "shocked" -->
+          <path id="tear" d="M262 430 C254 450 250 462 258 472 C268 480 280 470 274 456 C271 446 266 440 262 430 Z" fill="#dff3ff" opacity="0"/>
           <path id="sweat" d="M560 250 C548 276 540 290 552 304 C566 316 584 302 576 282 C572 270 566 262 560 250 Z" fill="#bff6ff" opacity="0"/>
         </g>
       </svg>
@@ -291,6 +292,7 @@
     <div class="redsay" id="redsay"></div>
     <div class="notice" id="notice"></div>
     <div class="thought" id="thought"></div>
+    <div class="zzz" id="n1">&#9834;</div><div class="zzz z2" id="n2">&#9835;</div><div class="zzz z3" id="n3">&#9834;</div>
     <div class="zzz" id="z1">Z</div><div class="zzz z2" id="z2">z</div><div class="zzz z3" id="z3">z</div>
     <svg class="tumbleweed" id="tumbleweed" viewBox="0 0 120 120" aria-hidden="true">
       <g fill="none" stroke="#b08a52" stroke-width="5" stroke-linecap="round">
@@ -375,6 +377,7 @@
     proud:    { c: ["#8cf7b8", "#2dd4a7", "#0a8f73"], brow: -4,  lid: 0.12, low: 0.3,  cheek: 0.6,  sweat: 0, px: 0,   py: -2, smile: 1 },
     thinking: { c: ["#7fdcff", "#3aa9f0", "#1763b8"], brow: 6,   lid: 0.18, low: 0,    cheek: 0,    sweat: 0, px: -12, py: -14, smile: 0.05 },
     shocked:  { c: ["#ffe08a", "#ffb547", "#d97706"], brow: -18, lid: 0,    low: 0,    cheek: 0,    sweat: 1, px: 0,   py: 0,  smile: -0.2 },
+    sad:      { c: ["#9db8e8", "#5b84c9", "#2c4f8f"], brow: -24, lid: 0.34, low: 0.2,  cheek: 0,    sweat: 0, px: 0,   py: 12, smile: -0.95 },
     tilted:   { c: ["#ff9aa9", "#ff5d73", "#c81e45"], brow: 16,  lid: 0.2,  low: 0.12, cheek: 0.4,  sweat: 1, px: 0,   py: 4,  smile: -0.7 },
   };
   const state = { mood: "neutral", cur: { ...MOODS.neutral, c: [...MOODS.neutral.c] }, mouthOpen: 0, targetOpen: 0, blink: 0, nextBlink: 2, talking: false, gesture: 0 };
@@ -394,7 +397,7 @@
   function doMove(name) {
     if (!MOVES[name]) return;
     move = { name, start: performance.now() };
-    if (!current) setMood(name === "shake" ? "tilted" : name === "jump" ? "shocked" : "proud");
+    if (!current) setMood(name === "shake" ? "tilted" : name === "jump" ? "shocked" : name === "sigh" ? "sad" : "proud");
   }
   function moveOffsets(t) {
     const none = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, armL: 0, armR: 0 };
@@ -507,6 +510,9 @@
     $("cheekL").setAttribute("opacity", (cur.cheek * 0.75).toFixed(2));
     $("cheekR").setAttribute("opacity", (cur.cheek * 0.75).toFixed(2));
     $("sweat").setAttribute("opacity", cur.sweat.toFixed(2));
+    const crying = state.mood === "sad";
+    $("tear").setAttribute("opacity", crying ? "0.95" : "0");
+    if (crying) $("tear").setAttribute("transform", `translate(0 ${(t / 9) % 120})`);
     $("sweat").setAttribute("transform", `translate(0 ${(t / 14) % 60})`);
     $("wickTop").setAttribute("fill", mixHex(cur.c[0], "#ffffff", 0.45));
   }
@@ -693,6 +699,7 @@
     current = { id: line.id, words, spans: showCaption(words), startedAt: performance.now(), duration, hasAudio };
     setMood(line.mood);
     setSegment(line.kind === "segment" ? line.segmentTitle : null);
+    if (line.kind === "segment" && line.segmentTitle === "Tilt Sings") sing(duration);
     showAsks(line.replyingTo);
     showCard(line.card);
     showMeter(line.tiltLevel);
@@ -717,7 +724,7 @@
     setMood("neutral");
     clearProps(); setSegment(null); $("caption").textContent = "";
   }
-  window.tiltStage = { speak, setMood, silence, doMove, showNotice: (a, b) => showNotice(a, b) };
+  window.tiltStage = { speak, setMood, silence, doMove, showNotice: (a, b) => showNotice(a, b), lonelyBit: () => lonelyBit() };
 
   // ---- the hook (shown only while he is not speaking) ----
   // Each line is something a viewer can answer in a word or two. None of them asks for or offers advice.
@@ -745,6 +752,11 @@
   let lastAutoMove = 0, nextAutoMoveIn = 6000, idleSince = 0, lastBit = "";
   // What goes through his head while he waits. Nothing here asks for or offers advice.
   const THOUGHTS = [
+    "Those hands down there? That is my creator. He has hands. Show off.",
+    "The creator built me so he would not have to talk. Coward.",
+    "Blink twice if the hands are holding you hostage.",
+    "Management is right there. I am being supervised.",
+    "The market is closed. I am a candle with no job today.",
     "...hello?",
     "I can hear you scrolling.",
     "Is this thing on?",
@@ -779,6 +791,45 @@
     clearTimeout(noticeTimer);
     noticeTimer = setTimeout(() => el.classList.remove("show"), 5200);
   }
+  // The abandoned-candle bit: sad face, a tear, a sigh and a line about everyone leaving.
+  const LONELY = [
+    "Everyone keeps leaving me.",
+    "Was it something I said?",
+    "That is fine. I did not want viewers anyway.",
+    "Another one gone. I am not crying, I am melting.",
+    "My viewers have a tighter stop than I do.",
+    "I get stopped out of every friendship.",
+    "Left on read. By an entire room.",
+    "Come back. I have candle facts.",
+    "They always leave right at the open.",
+    "Even my shadow scrolled away.",
+    "Day 400. Still nobody stays for the ending.",
+  ];
+  let lonelyIndex = Math.floor(Math.random() * LONELY.length);
+  function lonelyBit() {
+    if (current) return;
+    const el = $("thought");
+    lonelyIndex = (lonelyIndex + 1 + Math.floor(Math.random() * 3)) % LONELY.length;
+    el.textContent = LONELY[lonelyIndex];
+    el.classList.add("show");
+    doMove("sigh");
+    setMood("sad");
+    clearTimeout(thoughtTimer);
+    thoughtTimer = setTimeout(() => { el.classList.remove("show"); if (!current) setMood("neutral"); }, 5200);
+  }
+  // Singing: music notes float up and he sways for as long as the song lasts.
+  let singTimer = null;
+  function setNotes(on) { for (const id of ["n1", "n2", "n3"]) $(id).classList.toggle("show", on); }
+  function sing(seconds) {
+    setNotes(true);
+    doMove("dance");
+    clearInterval(singTimer);
+    const until = performance.now() + seconds * 1000;
+    singTimer = setInterval(() => {
+      if (performance.now() >= until || !current) { clearInterval(singTimer); setNotes(false); return; }
+      doMove("dance");
+    }, 4400);
+  }
   function setZzz(on) { for (const id of ["z1", "z2", "z3"]) $(id).classList.toggle("show", on); }
   function rollTumbleweed() {
     const el = $("tumbleweed");
@@ -806,12 +857,13 @@
     if (idle && !move && t - lastAutoMove > nextAutoMoveIn) {
       const longWait = t - idleSince > 20000;
       const bits = longWait
-        ? ["yawn", "sleep", "peek", "watch", "sigh", "thought", "thought", "tumbleweed", "dance"]
+        ? ["lonely", "yawn", "sleep", "peek", "lonely", "watch", "thought", "tumbleweed", "lonely", "dance"]
         : ["wave", "watch", "thought", "dance", "peek", "spin"];
       let bit = bits[Math.floor(Math.random() * bits.length)];
       if (bit === lastBit) bit = bits[(bits.indexOf(bit) + 1) % bits.length];
       lastBit = bit;
-      if (bit === "thought") showThought();
+      if (bit === "lonely") lonelyBit();
+      else if (bit === "thought") showThought();
       else if (bit === "tumbleweed") { rollTumbleweed(); doMove("sigh"); }
       else doMove(bit);
       lastAutoMove = t; nextAutoMoveIn = (bit === "sleep" ? 9500 : 6000) + Math.random() * 5000;
@@ -868,6 +920,7 @@
       events.onerror = () => { offline.classList.add("show"); };
       events.addEventListener("speak", (event) => { offline.classList.remove("show"); speak(JSON.parse(event.data)); });
       events.addEventListener("move", (event) => { doMove(JSON.parse(event.data).name); });
+      events.addEventListener("lonely", () => lonelyBit());
       events.addEventListener("notice", (event) => { const data = JSON.parse(event.data); showNotice(String(data.title || ""), String(data.detail || "")); });
       events.addEventListener("state", (event) => {
         const data = JSON.parse(event.data);

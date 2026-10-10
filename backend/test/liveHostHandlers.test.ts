@@ -492,3 +492,25 @@ describe("isLiveHostAutomationRequest", () => {
     expect(isLiveHostAutomationRequest(req("POST", "inbound", { action: "tick" }))).toBe(false);
   });
 });
+
+describe("market hours awareness", () => {
+  it("tells the host the market is closed over the weekend and open in the week", async () => {
+    const { marketStatusNote, buildLiveLineUserMessage } = await import("../src/liveHost/liveHostWriter");
+    // Saturday 10 Oct 2026, 3pm New York.
+    expect(marketStatusNote(new Date("2026-10-10T19:00:00Z"))).toContain("CLOSED for the weekend");
+    // Friday after the 5pm close, and Sunday before the 6pm open.
+    expect(marketStatusNote(new Date("2026-10-09T21:30:00Z"))).toContain("CLOSED for the weekend");
+    expect(marketStatusNote(new Date("2026-10-11T20:00:00Z"))).toContain("CLOSED for the weekend");
+    // Sunday evening after the open, and a Wednesday morning.
+    expect(marketStatusNote(new Date("2026-10-11T22:30:00Z"))).toContain("is open");
+    expect(marketStatusNote(new Date("2026-10-07T14:00:00Z"))).toContain("is open");
+    // The daily break.
+    expect(marketStatusNote(new Date("2026-10-07T21:30:00Z"))).toContain("daily break");
+    const message = buildLiveLineUserMessage(
+      { recent: [], messages: [], viewersWaiting: 0, joiners: ["Sam"], fillbookMentionAllowed: false } as never,
+      new Date("2026-10-10T19:00:00Z"),
+    );
+    expect(message).toContain("Never ask what anyone traded today");
+  });
+});
+

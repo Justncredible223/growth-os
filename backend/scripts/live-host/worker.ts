@@ -41,6 +41,9 @@ export const LIVE_HOST_DEFAULT_VOICE = "en-US-AndrewNeural";
 /** Red, the foil, speaks in a different voice and faster, so nobody mistakes him for Tilt. */
 export const RED_VOICE = "en-US-ChristopherNeural";
 export const RED_RATE = "+22%";
+/** The singing segment is voiced slower, so the rhyme lands, and he dances through it. */
+export const SINGING_TITLE = "Tilt Sings";
+export const SINGING_RATE = "-12%";
 export const LIVE_HOST_DEFAULT_RATE = "+4%";
 // Halved after the first real stream: three seconds of waiting before a joiner was even noticed was too slow.
 const TICK_MS = 1_500;
@@ -366,6 +369,16 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     lastMoveAt = Date.now();
     broadcast("move", { name });
   };
+  // When the viewer count drops, he takes it personally (the "everyone keeps leaving me" bit). At most every 25s.
+  let lastViewerCount = -1;
+  let lastLonelyAt = 0;
+  tiktok.onViewerCount = (count) => {
+    if (lastViewerCount >= 0 && count < lastViewerCount && Date.now() - lastLonelyAt > 25_000 && speaking === null) {
+      lastLonelyAt = Date.now();
+      broadcast("lonely", {});
+    }
+    lastViewerCount = count;
+  };
   tiktok.onReaction = (kind) => sendMove(kind === "gift" ? "dance" : kind === "follow" ? "flex" : kind === "share" ? "spin" : "jump");
 
   let lastNote: string | null = null;
@@ -463,7 +476,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     }
     if (stageClients.size === 0 || Date.now() < voiceRetryAt) return;
     try {
-      const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText);
+      const singing = line.kind === "segment" && line.segmentTitle === SINGING_TITLE;
+      const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, singing ? SINGING_RATE : config.rate);
       // Red's interruption, when there is one, is voiced separately and played first. If his voice fails he is
       // simply left out.
       let sidekick: { text: string; audioUrl: string; durationSeconds: number } | null = null;
