@@ -21,4 +21,13 @@ object ProspectingPostLink {
         val handle = authorHandle?.trim()?.removePrefix("@")
         return if (handle != null && HANDLE_PATTERN.matches(handle)) "https://x.com/$handle/status/$id" else "https://x.com/i/status/$id"
     }
+
+    /**
+     * The snackbar after Prospecting's "Copy + Open". X 12.32 (2026-10) shows a linked post as the first card of the For You
+     * feed instead of the thread, so for X the owner is told where to tap. Every other case (failure, other platforms,
+     * nothing copied) keeps PlatformActions' own wording.
+     */
+    fun copyAndOpenMessage(platform: String, copied: Boolean, opened: Boolean): String? =
+        if (platform.lowercase() == "x" && copied && opened) "Copied. Tap the reply icon on the top post, then paste."
+        else PlatformActions.copyAndOpenMessage(platform, copied = copied, hadLink = true, opened = opened)
 }

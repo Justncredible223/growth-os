@@ -193,7 +193,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         val opened = openExternalUrl(context, ProspectingPostLink.buildOpenUrl(candidate.platform, candidate.postUrl, candidate.authorHandle))
         scope.launch {
             if (opened) runCatching { repo.openProspectingCandidate(candidate.id) }
-            PlatformActions.copyAndOpenMessage(candidate.platform, copied = text != null, hadLink = true, opened = opened)
+            ProspectingPostLink.copyAndOpenMessage(candidate.platform, copied = text != null, opened = opened)
                 ?.let { snackbarHostState.showSnackbar(it) }
         }
     }

@@ -45,4 +45,17 @@ class ProspectingPostLinkTest {
         assertEquals("https://x.com/i/web/status/fake-searched-3", ProspectingPostLink.buildOpenUrl("x", "https://x.com/i/web/status/fake-searched-3", "a"))
         assertEquals("https://x.com/someone", ProspectingPostLink.buildOpenUrl("x", "https://x.com/someone", "someone"))
     }
+
+    @Test
+    fun `X says where to tap once copied and opened`() {
+        assertEquals("Copied. Tap the reply icon on the top post, then paste.", ProspectingPostLink.copyAndOpenMessage("x", copied = true, opened = true))
+    }
+
+    @Test
+    fun `failures and other platforms keep the standard wording`() {
+        assertEquals("Copied, but no app could open X", ProspectingPostLink.copyAndOpenMessage("x", copied = true, opened = false))
+        assertEquals("No app could open X", ProspectingPostLink.copyAndOpenMessage("x", copied = false, opened = false))
+        assertEquals("Opened in X", ProspectingPostLink.copyAndOpenMessage("x", copied = false, opened = true))
+        assertEquals("Copied — paste in YouTube", ProspectingPostLink.copyAndOpenMessage("youtube", copied = true, opened = true))
+    }
 }
