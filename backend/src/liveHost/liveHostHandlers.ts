@@ -11,6 +11,7 @@ import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../si
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
 import { LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
+import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
 import type {
   IncomingChatMessage,
   LiveHostCard,
@@ -472,6 +473,15 @@ export interface TickInput {
    * joins). Raw display names; they are cleaned here before anything is said. Never stored.
    */
   joins?: Array<{ name?: unknown }>;
+  /**
+   * Duo mode (TikTok co-host): the owner is on camera and types prompts for Tilt. When true the host speaks only
+   * when addressed: no idle segments and no join welcomes, whatever the other flags say.
+   */
+  duo?: boolean;
+  /** What the owner typed since the last tick. `relayedFrom` marks a viewer's question the owner passed on. */
+  hostMessages?: Array<{ id?: unknown; text?: unknown; relayedFrom?: unknown }>;
+  /** The name the co-host goes by on stream. Cleaned like any name. */
+  hostName?: unknown;
 }
 
 export interface TickUtterance {
@@ -585,6 +595,25 @@ async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession,
   }
 }
 
+/** The owner's typed prompts as chat rows (platform "tiktok"), carrying the reserved id prefixes. */
+export function duoMessages(input: TickInput): IncomingChatMessage[] {
+  const hostName = typeof input.hostName === "string" && input.hostName.trim() ? input.hostName : "Host";
+  const out: IncomingChatMessage[] = [];
+  for (const entry of (input.hostMessages ?? []).slice(0, 10)) {
+    if (typeof entry?.id !== "string" || !entry.id || typeof entry.text !== "string" || !entry.text.trim()) continue;
+    const relayed = typeof entry.relayedFrom === "string" && entry.relayedFrom.trim() ? entry.relayedFrom : null;
+    const safeId = entry.id.replace(/[^A-Za-z0-9-]/g, "").slice(0, 60);
+    if (!safeId) continue;
+    out.push({
+      platform: "tiktok",
+      externalId: `${relayed ? DUO_RELAY_ID_PREFIX : DUO_HOST_ID_PREFIX}${safeId}`,
+      authorName: relayed ?? hostName,
+      body: entry.text.slice(0, 500),
+    });
+  }
+  return out;
+}
+
 /** Viewer asked about the product, the site or what the stream is for: a Fillbook mention is the honest answer. */
 export function viewerAskedAboutFillbook(body: string): boolean {
   return /fill-?book|\bjournal(?:ing|s)?\b|\bwhat (?:is|'s) this\b|\bwhat app\b|\bwhich app\b|\bthe app\b|\bwebsite\b|\blink\b|\bsign ?up\b|\bprice\b|\bpricing\b|\bhow much\b|\bcost\b|\bfree trial\b/i.test(body.replace(/\[link\]/g, " "));
@@ -644,7 +673,12 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
 
   // Take in chat first, even while the host is mid-sentence, so nothing typed is lost.
   if (settings.tiktokChatEnabled && input.messages?.length) {
-    await storeIncoming(client, session.id, input.messages.filter((m) => m.platform === "tiktok"), now);
+    // The duo prefixes are reserved for the owner's typed prompts; chat that carries one is not trusted as chat.
+    const fromChat = input.messages.filter((m) => m.platform === "tiktok" && typeof m.externalId === "string" && !m.externalId.startsWith(DUO_HOST_ID_PREFIX) && !m.externalId.startsWith(DUO_RELAY_ID_PREFIX));
+    await storeIncoming(client, session.id, fromChat, now);
+  }
+  if (input.duo && input.hostMessages?.length) {
+    await storeIncoming(client, session.id, duoMessages(input), now);
   }
   const youtube = deps.youtube === undefined ? createYoutubeLiveChatAdapter() : deps.youtube;
   if (youtube) base.note = await pollYoutubeChat(client, session, settings, youtube, now);
@@ -695,7 +729,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   // People who just joined are welcomed by name, but only when nobody is waiting on an answer (and never
   // mid-sentence: this point is only reached when the worker is not speaking). Names are cleaned first, and a
   // name that is not safe to say is simply counted among "the others".
-  const rawJoins = settings.tiktokChatEnabled && Array.isArray(input.joins) ? input.joins : [];
+  const rawJoins = settings.tiktokChatEnabled && !input.duo && Array.isArray(input.joins) ? input.joins : [];
   const cleanJoiners = [...new Set(rawJoins.map((join) => safeAuthorName(typeof join?.name === "string" ? join.name : "")))];
   const namedJoiners = cleanJoiners.filter((name) => name !== FALLBACK_AUTHOR_NAME).slice(0, JOIN_WELCOME_MAX_NAMES);
   const otherJoiners = Math.max(0, rawJoins.length - namedJoiners.length);
@@ -707,6 +741,8 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   if (joinWelcome) base.joinsWelcomed = true;
 
   let segment = null;
+  // Duo mode: Tilt speaks when he is spoken to. Nothing typed, nothing said.
+  if (input.duo && batch.length === 0) return base;
   if (batch.length === 0 && !joinWelcome) {
     const quietSince = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : 0;
     const gapMs = input.audienceOnly ? Math.min(settings.idleSeconds * 1000, ENGAGED_GAP_MS) : settings.idleSeconds * 1000;
@@ -745,6 +781,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     authorName: m.authorName,
     body: m.body,
     isFirstMessage: (authorCounts.get(`${m.platform}:${m.authorName}`) ?? 1) <= 1,
+    isCoHost: m.externalId.startsWith(DUO_HOST_ID_PREFIX),
   }));
 
   const recent = await buildRecentExchanges(client, recentUtterances);

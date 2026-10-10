@@ -33,6 +33,7 @@ import { screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js"
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
+const HOST_PAGE_FILE = join(HERE, "stage", "host.html");
 const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py");
 
 /** Same voice the videos use; the only one verified by ear to say "Fillbook" correctly (see voiceover.ts). */
@@ -65,6 +66,49 @@ export interface WorkerConfig {
   /** Where OBS is streaming: "youtube", "tiktok" or "both". Only "youtube" lets the host say the website. */
   platform: string;
   pythonCommand: string;
+  /**
+   * Duo mode (TikTok co-host): the owner is on camera next to Tilt and types what Tilt should answer on
+   * http://127.0.0.1:<port>/host. Tilt then speaks only when addressed: no idle segments, no unprompted welcomes.
+   */
+  duo: boolean;
+  /** What Tilt calls the co-host on stream. */
+  hostName: string;
+}
+
+/** Longest typed prompt the host page accepts, and how many can wait for the next tick. */
+export const DUO_MAX_PROMPT_CHARS = 400;
+export const DUO_MAX_QUEUED = 10;
+
+export interface DuoPrompt {
+  id: string;
+  text: string;
+  relayedFrom?: string;
+}
+
+/**
+ * Turns what the host page posted into a queued prompt, or null when it is empty. Plain text only, trimmed and
+ * length-capped; the server screens it again like any chat message.
+ */
+export function parseDuoPrompt(raw: unknown, id: string): DuoPrompt | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { text, relayedFrom } = raw as { text?: unknown; relayedFrom?: unknown };
+  if (typeof text !== "string") return null;
+  const clean = text.replace(/\s+/g, " ").trim().slice(0, DUO_MAX_PROMPT_CHARS);
+  if (clean.length === 0) return null;
+  const from = typeof relayedFrom === "string" ? relayedFrom.replace(/\s+/g, " ").trim().slice(0, 40) : "";
+  return from ? { id, text: clean, relayedFrom: from } : { id, text: clean };
+}
+
+/**
+ * The host page is local-only, but a web page open in the owner's browser can still make requests to 127.0.0.1.
+ * Accept a prompt only from a request that names this host, carries the page's own header, and has no foreign Origin.
+ */
+export function isTrustedHostRequest(headers: Record<string, string | string[] | undefined>, port: number): boolean {
+  const host = String(headers.host ?? "");
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
+  const origin = headers.origin;
+  if (origin !== undefined && origin !== `http://127.0.0.1:${port}` && origin !== `http://localhost:${port}`) return false;
+  return headers["x-live-host"] === "1";
 }
 
 export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
@@ -87,6 +131,8 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     // Not stated means the careful choice: the host points to the bio instead of saying the website.
     platform: (env.LIVE_HOST_PLATFORM || "unknown").toLowerCase(),
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
+    duo: (env.LIVE_HOST_MODE || "").toLowerCase() === "duo",
+    hostName: env.LIVE_HOST_COHOST_NAME || "Host",
   };
 }
 
@@ -219,6 +265,11 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   mkdirSync(workDir, { recursive: true });
 
   const stageClients = new Set<ServerResponse>();
+  /** Browser tabs showing the duo host page. Kept apart from the stage clients: a host tab is not a stage. */
+  const hostClients = new Set<ServerResponse>();
+  /** Prompts typed on the host page, waiting for the next tick (duo mode). */
+  let hostQueue: DuoPrompt[] = [];
+  let promptCounter = 0;
   let live = false;
   /** The line currently being spoken, with the timer that gives up on it if the stage never reports back. */
   let speaking: { id: string; timer: NodeJS.Timeout } | null = null;
@@ -226,6 +277,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   const broadcast = (event: string, data: unknown) => {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const client of stageClients) client.write(payload);
+    if (event === "speak" || event === "state") for (const client of hostClients) client.write(payload);
   };
 
   async function api(body: Record<string, unknown>): Promise<unknown> {
@@ -287,6 +339,54 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
       res.write(`event: state\ndata: ${JSON.stringify({ live })}\n\n`);
       stageClients.add(res);
       req.on("close", () => stageClients.delete(res));
+      return;
+    }
+    if (config.duo && req.method === "GET" && url.pathname === "/host") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      createReadStream(HOST_PAGE_FILE).pipe(res);
+      return;
+    }
+    if (config.duo && req.method === "GET" && url.pathname === "/host-events") {
+      if (!isTrustedHostRequest({ ...req.headers, "x-live-host": "1" }, config.port)) {
+        res.writeHead(403).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
+      res.write(`event: state
+data: ${JSON.stringify({ live, queued: hostQueue.length })}
+
+`);
+      hostClients.add(res);
+      req.on("close", () => hostClients.delete(res));
+      return;
+    }
+    if (config.duo && req.method === "POST" && url.pathname === "/ask") {
+      if (!isTrustedHostRequest(req.headers, config.port)) {
+        res.writeHead(403).end();
+        return;
+      }
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+        if (raw.length > 4_000) req.destroy();
+      });
+      req.on("end", () => {
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          // Falls through to the 400 below.
+        }
+        const prompt = parseDuoPrompt(parsed, `${Date.now().toString(36)}-${++promptCounter}`);
+        if (!prompt) {
+          res.writeHead(400).end();
+        } else if (hostQueue.length >= DUO_MAX_QUEUED) {
+          res.writeHead(429).end();
+        } else {
+          hostQueue.push(prompt);
+          res.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ queued: hostQueue.length }));
+        }
+      });
       return;
     }
     const audio = /^\/audio\/([A-Za-z0-9-]+)\.mp3$/.exec(url.pathname);
@@ -421,7 +521,9 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     // YouTube chat).
     // Only while the reader is actually connected: if it cannot see the room, staying silent would mean dead air for
     // the whole stream, so the host falls back to running segments.
-    const emptyRoom = !config.idleSegments && config.platform !== "youtube" && tiktok.connected && Date.now() - lastAudienceAt > 3 * 60_000;
+    const emptyRoom = !config.duo && !config.idleSegments && config.platform !== "youtube" && tiktok.connected && Date.now() - lastAudienceAt > 3 * 60_000;
+    // Duo mode: take the typed prompts now; they go back in the queue if the tick fails.
+    const hostMessages = config.duo ? hostQueue.splice(0, hostQueue.length) : [];
     let result: TickResult;
     try {
       result = (await api({
@@ -434,11 +536,13 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
         joins,
+        ...(config.duo ? { duo: true, hostName: config.hostName, hostMessages } : {}),
         workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
       })) as TickResult;
     } catch (err) {
       // Put chat back so a network blip loses nothing.
       tiktok.restore(messages);
+      hostQueue = [...hostMessages, ...hostQueue].slice(0, DUO_MAX_QUEUED);
       log(`tick failed: ${err instanceof Error ? err.message : String(err)}`);
       return;
     }
@@ -527,6 +631,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   process.on("SIGINT", () => void shutdown());
   process.on("SIGTERM", () => void shutdown());
 
+  if (config.duo) log(`Duo mode: type prompts for Tilt at http://127.0.0.1:${config.port}/host . He answers only when addressed.`);
   log(`Connected to ${config.baseUrl}. Waiting for the switch in the Growth OS app.`);
   while (!stopping) {
     await tick();

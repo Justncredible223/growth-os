@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { captionWords, loadWorkerConfig, prepareSpeechText } from "../scripts/live-host/worker";
+import { DUO_MAX_PROMPT_CHARS, captionWords, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -29,6 +29,38 @@ describe("live host worker", () => {
   it("computes the OBS WebSocket auth string the way the protocol defines it", () => {
     const secret = createHash("sha256").update("pw" + "salt").digest("base64");
     expect(obsAuthResponse("pw", "salt", "challenge")).toBe(createHash("sha256").update(secret + "challenge").digest("base64"));
+  });
+});
+
+describe("live host duo mode", () => {
+  it("is off unless LIVE_HOST_MODE is duo", () => {
+    const base = { GROWTH_OS_AUTOMATION_TOKEN: "a".repeat(40) };
+    expect(loadWorkerConfig(base).duo).toBe(false);
+    expect(loadWorkerConfig({ ...base, LIVE_HOST_MODE: "duo", LIVE_HOST_COHOST_NAME: "Justin" })).toMatchObject({ duo: true, hostName: "Justin" });
+  });
+
+  it("turns a typed prompt into plain, trimmed, capped text and drops empty ones", () => {
+    expect(parseDuoPrompt({ text: "  hello\n  there  " }, "a")).toEqual({ id: "a", text: "hello there" });
+    expect(parseDuoPrompt({ text: "q", relayedFrom: " Dana  K " }, "b")).toEqual({ id: "b", text: "q", relayedFrom: "Dana K" });
+    expect(parseDuoPrompt({ text: "x".repeat(2000) }, "c")!.text).toHaveLength(DUO_MAX_PROMPT_CHARS);
+    expect(parseDuoPrompt({ text: "   " }, "d")).toBeNull();
+    expect(parseDuoPrompt({ text: 5 }, "e")).toBeNull();
+    expect(parseDuoPrompt(null, "f")).toBeNull();
+  });
+
+  it("only trusts requests from the host page itself, not from other web pages", () => {
+    const ok = { host: "127.0.0.1:8790", "x-live-host": "1" };
+    expect(isTrustedHostRequest(ok, 8790)).toBe(true);
+    expect(isTrustedHostRequest({ ...ok, origin: "http://127.0.0.1:8790" }, 8790)).toBe(true);
+    expect(isTrustedHostRequest({ ...ok, origin: "https://evil.example" }, 8790)).toBe(false);
+    expect(isTrustedHostRequest({ ...ok, host: "evil.example:8790" }, 8790)).toBe(false);
+    expect(isTrustedHostRequest({ host: "127.0.0.1:8790" }, 8790)).toBe(false);
+  });
+
+  it("ships a host page that loads nothing from the internet", () => {
+    const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
+    expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
+    expect(html).toContain("/ask");
   });
 });
 
