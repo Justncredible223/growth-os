@@ -21,8 +21,11 @@ export interface AutoDraftStepResult {
 }
 
 export interface AutoDraftStepDeps {
-  runCampaignDeps: RunCampaignDeps;
-  usageLog: LlmUsage[];
+  /** Ready-made drafting deps. Production passes `loadRunCampaignDeps` instead so none of its setup reads happen on a day the step skips. */
+  runCampaignDeps?: RunCampaignDeps;
+  usageLog?: LlmUsage[];
+  /** Builds the drafting deps on demand, only once every guard has passed and an opportunity is actually about to be drafted. */
+  loadRunCampaignDeps?: () => Promise<{ runCampaignDeps: RunCampaignDeps; usageLog: LlmUsage[] }>;
   opportunityRepo: OpportunityRepository;
   runRepo: AutoDraftRunRepository;
   countReadyForOwnerAssets: () => Promise<number>;
@@ -96,9 +99,12 @@ export async function runAutoDraftStep(deps: AutoDraftStepDeps, runDate: string,
 
     const selected = eligible[0]!;
     deps.onOpportunitySelected?.(selected.id);
-    const usageBefore = deps.usageLog.length;
-    const result = await runCampaignForOpportunity(deps.runCampaignDeps, selected);
-    const newUsage = deps.usageLog.slice(usageBefore);
+    const loaded = deps.loadRunCampaignDeps
+      ? await deps.loadRunCampaignDeps()
+      : { runCampaignDeps: deps.runCampaignDeps as RunCampaignDeps, usageLog: deps.usageLog as LlmUsage[] };
+    const usageBefore = loaded.usageLog.length;
+    const result = await runCampaignForOpportunity(loaded.runCampaignDeps, selected);
+    const newUsage = loaded.usageLog.slice(usageBefore);
     const aiCalls = newUsage.length;
     const costUsd = newUsage.reduce((sum, u) => sum + estimateCostUsd(u), 0);
 
