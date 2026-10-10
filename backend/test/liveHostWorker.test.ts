@@ -173,3 +173,35 @@ describe("chat floods", () => {
   });
 });
 
+describe("signal-seller bots", () => {
+  it("recognises the usual pitches and leaves real questions alone", async () => {
+    const { isPromoSpam } = await import("../scripts/live-host/worker");
+    for (const text of [
+      "Join my VIP signals group on telegram",
+      "I made $4,500 this week thanks to Mr Daniel, check my bio",
+      "DM me for free signals daily",
+      "My mentor helped me pass, message me",
+      "I can help you recover your lost funds",
+      "whatsapp +1 555 010 0000 for accurate signals",
+    ]) expect(isPromoSpam(text), text).toBe(true);
+    for (const text of [
+      "how does a trailing drawdown work?",
+      "I moved my stop three times lol",
+      "is my eval over if I hit the daily loss limit?",
+      "what signals a trend change in order flow?",
+      "dance",
+    ]) expect(isPromoSpam(text), text).toBe(false);
+  });
+
+  it("the warning signs are fixed text that passes the speech checks, and the bot is muted", async () => {
+    const { SIGNAL_SPAM_NOTICES, SpamWatch } = await import("../scripts/live-host/worker");
+    const { checkSpokenLine } = await import("../src/liveHost/liveHostGuardrails");
+    for (const notice of SIGNAL_SPAM_NOTICES) {
+      expect(checkSpokenLine(`${notice.title}. ${notice.detail}`, { fillbookMentionAllowed: true, websiteMentionAllowed: false }), notice.title).toBeNull();
+    }
+    const watch = new SpamWatch();
+    watch.mute("SignalBot", 600_000, 0);
+    expect(watch.check("signalbot", "hello", 1000)).toBe("muted");
+  });
+});
+

@@ -376,6 +376,26 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.segmentTitle).toBe("New Arrivals");
   });
 
+  it("lets Red interrupt with a line that passes the checks, stored with both speakers named", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("And that is Red. He has felt it bounce every day since he was a wick.", { redLine: "It has to bounce here, I can feel it!" })]);
+    const result = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.redLine).toBe("It has to bounce here, I can feel it!");
+    expect(result.utterance?.spokenText).toBe("And that is Red. He has felt it bounce every day since he was a wick.");
+    expect(client.tables.live_host_utterances![0]!.spoken_text).toBe("[RED] It has to bounce here, I can feel it! [TILT] And that is Red. He has felt it bounce every day since he was a wick.");
+  });
+
+  it("drops a Red line that reads as a trade call or mentions the product, and keeps Tilt's line", async () => {
+    for (const redLine of ["Buy NQ now, trust me!", "Just use Fillbook, it fixes everything!", "NQ is going to hit twenty thousand!"]) {
+      const client = buildClient();
+      const llm = scriptedLlm([line("Ignore him. He once tried to trade a screensaver.", { redLine })]);
+      const result = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+      expect(result.utterance?.redLine, redLine).toBeNull();
+      expect(result.utterance?.spokenText).toBe("Ignore him. He once tried to trade a screensaver.");
+      expect(client.tables.live_host_utterances![0]!.spoken_text).not.toContain("[RED]");
+    }
+  });
+
   it("ignores TikTok chat unless the owner enabled it", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, idle_seconds: 600 })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
     await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, youtube: null, grounding: GROUNDING });
@@ -472,3 +492,25 @@ describe("isLiveHostAutomationRequest", () => {
     expect(isLiveHostAutomationRequest(req("POST", "inbound", { action: "tick" }))).toBe(false);
   });
 });
+
+describe("market hours awareness", () => {
+  it("tells the host the market is closed over the weekend and open in the week", async () => {
+    const { marketStatusNote, buildLiveLineUserMessage } = await import("../src/liveHost/liveHostWriter");
+    // Saturday 10 Oct 2026, 3pm New York.
+    expect(marketStatusNote(new Date("2026-10-10T19:00:00Z"))).toContain("CLOSED for the weekend");
+    // Friday after the 5pm close, and Sunday before the 6pm open.
+    expect(marketStatusNote(new Date("2026-10-09T21:30:00Z"))).toContain("CLOSED for the weekend");
+    expect(marketStatusNote(new Date("2026-10-11T20:00:00Z"))).toContain("CLOSED for the weekend");
+    // Sunday evening after the open, and a Wednesday morning.
+    expect(marketStatusNote(new Date("2026-10-11T22:30:00Z"))).toContain("is open");
+    expect(marketStatusNote(new Date("2026-10-07T14:00:00Z"))).toContain("is open");
+    // The daily break.
+    expect(marketStatusNote(new Date("2026-10-07T21:30:00Z"))).toContain("daily break");
+    const message = buildLiveLineUserMessage(
+      { recent: [], messages: [], viewersWaiting: 0, joiners: ["Sam"], fillbookMentionAllowed: false } as never,
+      new Date("2026-10-10T19:00:00Z"),
+    );
+    expect(message).toContain("Never ask what anyone traded today");
+  });
+});
+

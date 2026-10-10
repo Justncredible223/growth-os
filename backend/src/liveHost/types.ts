@@ -4,7 +4,7 @@ export type LiveHostMessageStatus = "pending" | "answered" | "skipped" | "blocke
 export type LiveHostUtteranceKind = "reply" | "segment";
 
 /** What the character's face does while a line is spoken. The stage maps each to an expression. */
-export const LIVE_HOST_MOODS = ["neutral", "smirk", "shocked", "tilted", "proud", "thinking"] as const;
+export const LIVE_HOST_MOODS = ["neutral", "smirk", "shocked", "tilted", "proud", "thinking", "sad"] as const;
 export type LiveHostMood = (typeof LIVE_HOST_MOODS)[number];
 
 export interface LiveHostSettings {

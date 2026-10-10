@@ -28,6 +28,10 @@ const LINE_SCHEMA = {
       },
       description: "Chat messages deliberately not answered.",
     },
+    redLine: {
+      type: "string",
+      description: "Optional. One short line (under 90 characters) that Red, the red candle, blurts before Tilt speaks. Red's own bad urge in the first person; never advice, never a direction or price, never a company. Omit most of the time.",
+    },
     tiltLevel: { type: "integer", minimum: 0, maximum: 10, description: "Only when giving a Tilt-o-Meter rating. Omit otherwise." },
     card: {
       type: "object",
@@ -50,6 +54,8 @@ export interface LiveLineDraft {
   skippedMessages: Array<{ id: string; reason: string }>;
   tiltLevel: number | null;
   card: LiveHostCard | null;
+  /** What Red, the foil, blurts before Tilt speaks. Null when he stays out of it. */
+  redLine: string | null;
 }
 
 export interface ChatMessageForDraft {
@@ -107,7 +113,26 @@ ${grounding.verifiedKnowledgeSummary || "(none on file: say you do not want to g
 Submit every line through the submit_line tool.`;
 }
 
-export function buildLiveLineUserMessage(request: LiveLineRequest): string {
+/**
+ * Whether futures are trading right now, in words the host can use. CME futures run from Sunday 6pm to
+ * Friday 5pm New York time, with an hour off at 5pm each day; he must not ask what someone traded "today"
+ * on a Saturday.
+ */
+export function marketStatusNote(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", hour: "numeric", hourCycle: "h23" }).formatToParts(now);
+  const day = parts.find((part) => part.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const weekendClosed = day === "Saturday" || (day === "Friday" && hour >= 17) || (day === "Sunday" && hour < 18);
+  if (weekendClosed) {
+    return `RIGHT NOW: it is ${day} in New York and the futures market is CLOSED for the weekend (it reopens Sunday at 6pm New York time). Nobody traded today. Never ask what anyone traded today, how their session went today, or what the market is doing right now. Ask about their week, their last session, or their weekend instead, and the closed market is fair game for jokes (a candle with nothing to do).`;
+  }
+  if (hour === 17) {
+    return `RIGHT NOW: it is ${day} in New York and futures are in the one-hour daily break (5pm to 6pm New York time). Do not talk as if the market is moving this minute.`;
+  }
+  return `RIGHT NOW: it is ${day} in New York and the futures market is open.`;
+}
+
+export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = new Date()): string {
   const lines: string[] = [];
 
   if (request.recent.length > 0) {
@@ -139,7 +164,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
     lines.push(
       "ONE short spoken sentence of welcome plus one quick question, under 28 words in total, because they will leave if it takes long. The welcome itself must be a joke, not a greeting-card line: a funny reason they showed up, a mock announcement of their arrival, a deadpan observation about the name, or a candle-with-no-hands gag. Never just 'welcome in, good to see you'. Say each name once, the way a host would. Say a name as a person would say it out loud: drop strings of numbers, underscores and symbols, and say the wordy part. " +
         "If a name is hard to pronounce or you had to guess, take your best shot and joke that you probably butchered it; do that for at most one name, and be warm about it, never mocking the name itself. " +
-        "If more joined than are named, welcome the rest together. Then give them one easy thing to type. Do not repeat a welcome line from the recent lines. Leave answeredMessageIds and skippedMessages empty.",
+        "If more joined than are named, welcome the rest together. Then hook them with ONE easy, fun thing to answer in a word or two. Do NOT ask what they trade or whether they are on an eval or funded: that question is worn out. Rotate through kinds of hook and never reuse one from the recent lines: a silly either-or (coffee or energy drink, cats or dogs, pineapple on pizza), a one-to-ten (how is your day, how tired are you), a dare (type DANCE and see what happens), a confession prompt (worst thing you did at 3:59 on a Friday), a guess-about-Tilt (how many hands do you think I have), or a quick would-you-rather. Trading can be the flavour but does not have to be the topic. Do not repeat a welcome line from the recent lines. Leave answeredMessageIds and skippedMessages empty.",
     );
   } else if (request.segment) {
     lines.push(`CHAT IS QUIET. Run the segment "${request.segment.title}":`);
@@ -148,6 +173,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
   }
 
   lines.push("");
+  lines.push(marketStatusNote(now));
   lines.push(
     request.fillbookMentionAllowed
       ? "Fillbook: mention it only if it is the honest answer to what was asked, or if the segment brief calls for it."
@@ -174,6 +200,7 @@ interface RawLine {
   skippedMessages?: unknown;
   tiltLevel?: unknown;
   card?: unknown;
+  redLine?: unknown;
 }
 
 /** Turns whatever the tool call returned into a well-formed draft. The model's output is data, so nothing is trusted. */
@@ -203,6 +230,7 @@ export function normalizeLiveLine(raw: RawLine): LiveLineDraft {
     skippedMessages: skipped,
     tiltLevel,
     card,
+    redLine: typeof raw.redLine === "string" && raw.redLine.trim().length > 0 ? raw.redLine.replace(/\s+/g, " ").trim().slice(0, 120) : null,
   };
 }
 
