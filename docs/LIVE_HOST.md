@@ -93,17 +93,19 @@ character. Education and entertainment only, not financial advice."
 3. **App.** Rebuild and install the Android app (JDK 17 to 21). Live Host is
    in the More sheet.
 4. **OBS on the PC.** Install OBS Studio 28 or newer.
-   - Settings > Video: base and output 1080 x 1920.
-   - Add a **Browser Source**: URL `http://127.0.0.1:8790/`, width 1080,
-     height 1920, tick "Control audio via OBS".
+   - Tools > WebSocket Server Settings: enable it and set a password.
+   - With OBS open, run `npm run live-host:setup-obs` in `backend/`. It sets
+     the canvas to 1080 x 1920, and creates the "Tilt Live" scene with a
+     "Tilt Stage" Browser Source pointing at `http://127.0.0.1:8790/` with
+     its audio routed through OBS. Safe to run again.
    - Settings > Stream: choose the service and paste the stream key
-     yourself. The worker never sees a stream key.
-   - Tools > WebSocket Server Settings: enable it and set a password, so the
-     worker can start and stop the stream with the switch. Optional: without
-     it, start and stop the stream in OBS by hand.
-5. **Worker env** (`backend/.env.local` or the shell):
-   `GROWTH_OS_AUTOMATION_TOKEN`, `GROWTH_OS_PROTECTION_BYPASS_SECRET`,
-   `OBS_WEBSOCKET_PASSWORD`. See `backend/.env.example`.
+     yourself. Neither script ever sees a stream key.
+5. **Worker env** in `backend/.env.local` (loaded automatically by both
+   npm scripts): `GROWTH_OS_AUTOMATION_TOKEN`,
+   `GROWTH_OS_PROTECTION_BYPASS_SECRET`, `OBS_WEBSOCKET_PASSWORD`. Set
+   `LIVE_HOST_OBS_STREAM=off` to start and stop the stream in OBS by hand;
+   the worker still reloads the stage page in OBS when it starts. See
+   `backend/.env.example`.
 6. **Go live.** In `backend/`: `npm run live-host`. Create the live stream
    on YouTube, paste its link into the app's Live Host tab, then flip the
    switch. Flip it off to stop.

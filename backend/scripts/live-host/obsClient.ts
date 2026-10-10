@@ -93,7 +93,8 @@ export class ObsClient {
     });
   }
 
-  private request(requestType: string, requestData: Record<string, unknown> = {}): Promise<Record<string, any>> {
+  /** One obs-websocket request. Rejects with OBS's own comment when the request fails. */
+  request(requestType: string, requestData: Record<string, unknown> = {}): Promise<Record<string, any>> {
     if (!this.connected || !this.socket) return Promise.reject(new Error("OBS is not connected"));
     const requestId = randomUUID();
     return new Promise((resolve, reject) => {
@@ -119,6 +120,11 @@ export class ObsClient {
     if (!(await this.isStreaming())) return;
     await this.request("StopStream");
     this.log("OBS: stream stopped");
+  }
+
+  /** Reloads a Browser Source, the same as pressing "Refresh cache of current page" in its properties. */
+  async refreshBrowserSource(inputName: string): Promise<void> {
+    await this.request("PressInputPropertiesButton", { inputName, propertyName: "refreshnocache" });
   }
 
   close(): void {

@@ -8,7 +8,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "video:render": "tsx scripts/video-factory/index.ts",
-    "live-host": "tsx scripts/live-host/worker.ts"
+    "live-host": "tsx --env-file-if-exists=.env.local scripts/live-host/worker.ts",
+    "live-host:setup-obs": "tsx --env-file-if-exists=.env.local scripts/live-host/setupObs.ts"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",

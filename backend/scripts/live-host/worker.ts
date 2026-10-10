@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { respellFillbookForTts } from "../video-factory/voiceover.js";
 import { ObsClient } from "./obsClient.js";
+import { OBS_SOURCE_NAME } from "./setupObs.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
@@ -45,6 +46,8 @@ export interface WorkerConfig {
   rate: string;
   obsUrl: string | null;
   obsPassword: string | undefined;
+  /** False when the owner starts and stops the stream in OBS by hand; the worker still keeps the stage page loaded. */
+  obsControlsStream: boolean;
   pythonCommand: string;
 }
 
@@ -63,6 +66,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     // OBS control is optional: without it the owner starts and stops the stream in OBS by hand.
     obsUrl: env.OBS_WEBSOCKET_URL === "off" ? null : env.OBS_WEBSOCKET_URL || "ws://127.0.0.1:4455",
     obsPassword: env.OBS_WEBSOCKET_PASSWORD || undefined,
+    obsControlsStream: env.LIVE_HOST_OBS_STREAM !== "off",
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
   };
 }
@@ -212,7 +216,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   const obs = config.obsUrl ? new ObsClient(config.obsUrl, config.obsPassword, log) : null;
   let obsWarned = false;
   async function setStreaming(on: boolean): Promise<void> {
-    if (!obs) return;
+    if (!obs || !config.obsControlsStream) return;
     try {
       await obs.connect();
       if (on) await obs.startStream();
@@ -224,9 +228,28 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     }
   }
 
+  /**
+   * OBS loads the stage page when OBS starts, which is usually before this worker is serving it, and a Browser
+   * Source does not retry a page that failed to load. So while nothing is connected to the stage, ask OBS to
+   * reload the source (the one `npm run live-host:setup-obs` creates), at most every 15 seconds.
+   */
+  let lastStageRefresh = 0;
+  async function reviveStage(): Promise<void> {
+    if (!obs || stageClients.size > 0 || Date.now() - lastStageRefresh < 15_000) return;
+    lastStageRefresh = Date.now();
+    try {
+      await obs.connect();
+      await obs.refreshBrowserSource(OBS_SOURCE_NAME);
+      log("Asked OBS to reload the stage page");
+    } catch {
+      // No OBS, or no such source yet: the "no stage page is open" message below covers it.
+    }
+  }
+
   let lastNote: string | null = null;
 
   async function tick(): Promise<void> {
+    await reviveStage();
     let result: TickResult;
     try {
       result = (await api({ action: "tick", busy: speaking !== null, workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false } })) as TickResult;

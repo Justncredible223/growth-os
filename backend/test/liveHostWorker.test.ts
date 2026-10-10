@@ -49,3 +49,19 @@ describe("live host stage page", () => {
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
   });
 });
+
+describe("live host OBS setup", () => {
+  it("points the Browser Source at the worker's stage with audio routed through OBS", async () => {
+    const { stageSourceSettings, STAGE_WIDTH, STAGE_HEIGHT } = await import("../scripts/live-host/setupObs");
+    const settings = stageSourceSettings(8790);
+    expect(settings.url).toBe("http://127.0.0.1:8790/");
+    expect([settings.width, settings.height]).toEqual([STAGE_WIDTH, STAGE_HEIGHT]);
+    expect(settings.reroute_audio).toBe(true);
+  });
+
+  it("lets the owner keep stream start and stop manual", () => {
+    const base = { GROWTH_OS_AUTOMATION_TOKEN: "a".repeat(40) };
+    expect(loadWorkerConfig(base).obsControlsStream).toBe(true);
+    expect(loadWorkerConfig({ ...base, LIVE_HOST_OBS_STREAM: "off" }).obsControlsStream).toBe(false);
+  });
+});
