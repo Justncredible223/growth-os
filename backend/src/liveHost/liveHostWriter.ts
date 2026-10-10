@@ -92,6 +92,8 @@ export interface LiveLineRequest {
   /** How many more joined than are named in `joiners`. */
   otherJoiners?: number;
   retryFeedback?: string;
+  /** Duo mode: the owner is on camera beside Tilt. Replies are short and conversational, segments are run with him. */
+  duo?: boolean;
 }
 
 export interface LiveHostGrounding {
@@ -157,15 +159,13 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
     lines.push("");
     if (request.messages.some((message) => message.isCoHost)) {
       lines.push(
-        "DUO MODE: a real person, your co-host, is on camera next to you and is talking to you directly. Talk to HIM, like two friends on a show, not to an audience: react to what he said, push back, tease him, ask him a quick question back. One to three sentences, conversational, no segment banner, no greeting. He is a person, so never roast him as a trader or call him a viewer. If his message relays a viewer's question, answer it for that viewer by name. Everything else about the rules still applies.",
+        "DUO MODE: a real person, your co-host, is on camera right next to you and is talking to you, not to an audience. This is a double act, so play it like one: react to what he said before you answer it, tease him, push back when he is wrong, ask him a quick question back or hand him the next beat. Mostly say what you think rather than reporting facts. Do not start every line with his name; use it only now and then, like a friend would. He is a person, so never roast him as a trader or call him a viewer. If his message passes on a viewer's question, answer that viewer by name, then toss it back to him.",
+      );
+      lines.push(
+        "Duo replies are quick: one or two sentences, under 35 words in total, because the pace of the back and forth is the show. Leave redLine and card out. If he asks you something you cannot answer (a firm ranking, a pick, a prediction), say so in one line in your own voice, then give him something concrete to work with, such as the one or two things that actually differ and what each one means, so the exchange keeps moving instead of ending on a no.",
       );
       lines.push("");
     }
-    lines.push(
-      request.messages.length === 1
-        ? "Answer this viewer in one spoken line of one to three sentences. Lead with the laugh, land the real answer inside it."
-        : "Answer these viewers together in ONE spoken line of at most four sentences, naming each viewer you answer. If two ask the same thing, answer once for both.",
-    );
     lines.push("If a viewer describes a trade or a mistake, give it the Roast My Trade treatment: roast the decision in one line, then one real takeaway, and include a card with the verdict.");
     if (request.viewersWaiting > request.messages.length) {
       lines.push(`${request.viewersWaiting - request.messages.length} more message(s) are waiting, so keep this one tight.`);
@@ -182,6 +182,9 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
     lines.push(`CHAT IS QUIET. Run the segment "${request.segment.title}":`);
     lines.push(request.segment.brief);
     lines.push("Two to four spoken sentences. Open on the funniest version of the idea, not on a setup line, and end on a punchline or a question that is itself a joke. Leave answeredMessageIds and skippedMessages empty.");
+    if (request.duo) {
+      lines.push("DUO MODE: your co-host is on camera next to you. Run this with him, not at an empty room: talk to him, and end by turning to him with a question or a dare rather than asking chat to type. Keep it under 45 words.");
+    }
   }
 
   lines.push("");

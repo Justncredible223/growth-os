@@ -418,6 +418,28 @@ describe("runLiveHostTick", () => {
     expect(sent.messages[0]!.content).toContain("DUO MODE");
   });
 
+  it("duo mode: replies use the fast model and ask for a short, banter-style line", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })] });
+    const llm = scriptedLlm([line("Fair, but you named your stop loss, so who is the dramatic one here?")]);
+    await runLiveHostTick(
+      asSupabase(client),
+      { duo: true, hostName: "Justin", hostMessages: [{ id: "p1", text: "Tilt, you're dramatic" }] },
+      { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING },
+    );
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { model: string; messages: Array<{ content: string }> };
+    expect(sent.model).toContain("haiku");
+    expect(sent.messages[0]!.content).toContain("under 35 words");
+    expect(sent.messages[0]!.content).toContain("Leave redLine and card out");
+  });
+
+  it("duo mode: a forced segment is run with the co-host, not at chat", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("Scenario for you, Justin: down two hundred, one more setup. What number do you give it?")]);
+    await runLiveHostTick(asSupabase(client), { duo: true, runSegment: { id: "tilt_o_meter" } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("end by turning to him");
+  });
+
   it("duo mode: relayed viewer questions are answered as viewer messages, not as the co-host", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })] });
     const llm = scriptedLlm([line("Dana, a consistency rule caps how much of your profit can come from one day.")]);

@@ -18,6 +18,8 @@
   .row { display:flex; gap:8px; }
   button { padding:10px 16px; border-radius:8px; border:0; background:var(--accent); color:#1a1200; font-weight:600; cursor:pointer; }
   select { flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+  .chip { padding:6px 12px; border-radius:99px; background:var(--card); color:var(--text); border:1px solid var(--line); font-weight:500; font-size:13px; }
   button.secondary { background:var(--card); color:var(--text); border:1px solid var(--line); }
   button:disabled { opacity:.5; cursor:default; }
   .log { display:grid; gap:6px; margin-top:14px; }
@@ -38,6 +40,14 @@
     <div id="err" class="err" role="status"></div>
   </form>
 
+  <div class="chips" aria-label="Quick prompts">
+    <button type="button" class="chip" data-text="Tilt, tease me about something I just said.">Tease me</button>
+    <button type="button" class="chip" data-text="Tilt, ask me one quick question I can answer in a sentence.">Ask me something</button>
+    <button type="button" class="chip" data-text="Tilt, hype up the room in one line and ask them to type something.">Hype the room</button>
+    <button type="button" class="chip" data-text="Tilt, say that again but simpler, like I'm new.">Say it simpler</button>
+    <button type="button" class="chip" data-text="Tilt, give me your hottest take on a harmless topic, not trading.">Hot take</button>
+    <button type="button" class="chip" data-text="Tilt, we need a bit. Do a one-line roast of my pre-market routine.">Roast my routine</button>
+  </div>
   <div class="row">
     <select id="segment" aria-label="Segment to run"><option value="">Next in rotation</option></select>
     <button id="runSegment" type="button" class="secondary">Run a segment</button>
@@ -99,6 +109,29 @@
       event.preventDefault();
       document.getElementById("form").requestSubmit();
     }
+  });
+
+  function sendPrompt(text, label) {
+    errEl.textContent = "";
+    return fetch("/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-live-host": "1" },
+      body: JSON.stringify({ text: text })
+    }).then(function (res) {
+      if (res.status === 202) addItem("", "You", label || text);
+      else if (res.status === 429) errEl.textContent = "Tilt has a queue already. Give him a moment.";
+      else errEl.textContent = "Could not send (HTTP " + res.status + ").";
+    }).catch(function () {
+      errEl.textContent = "Could not reach the worker. Is npm run live-host running?";
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (chip) {
+    chip.addEventListener("click", function () {
+      chip.disabled = true;
+      sendPrompt(chip.getAttribute("data-text"), chip.textContent).then(function () {
+        setTimeout(function () { chip.disabled = false; }, 4000);
+      });
+    });
   });
 
   var segEl = document.getElementById("segment");
