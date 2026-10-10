@@ -233,3 +233,10 @@ off: duo mode does not need it. No server or database change is required beyond 
 - Duo replies use the fast model and are capped at about 35 words, so the back and forth stays quick.
 - Typed prompts only for now (no speech-to-text). One prompt at a time is best; at most 10 wait in the queue.
 - Keep the on-screen "AI HOST" label and use TikTok's AI-generated content disclosure if it applies.
+
+## Voice speed
+
+The worker keeps one Python voice helper (`tts_server.py`) running instead of starting Python for every line. Starting
+Python and importing `edge_tts` cost 6 to 9 seconds per line on the laptop this was built on (`python -c pass` alone
+took about 6). The helper warms up once when the worker starts (the log says "voice helper is warm"), then a line takes
+about 2 seconds. If the helper dies, lines fall back to the old one-shot script until it restarts.
