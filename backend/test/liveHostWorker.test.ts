@@ -131,3 +131,45 @@ describe("stage moves", () => {
   });
 });
 
+describe("bored stage", () => {
+  it("has waiting-around bits and nothing in them that reads as advice or an offer", async () => {
+    const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "index.html"), "utf-8");
+    for (const name of ["yawn", "sleep", "peek", "watch", "sigh"]) expect(html).toMatch(new RegExp(`${name}: \\d+`));
+    const { checkSpokenLine } = await import("../src/liveHost/liveHostGuardrails");
+    const block = /const THOUGHTS = \[([\s\S]*?)\];/.exec(html)![1]!;
+    const thoughts = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+    expect(thoughts.length).toBeGreaterThan(8);
+    for (const thought of thoughts) expect(checkSpokenLine(thought.replace(/\*/g, ""), { fillbookMentionAllowed: true, websiteMentionAllowed: false }), thought).toBeNull();
+  });
+});
+
+describe("chat floods", () => {
+  it("flags the same message three times, mutes the sender for a while, then lets them back", async () => {
+    const { SpamWatch } = await import("../scripts/live-host/worker");
+    const watch = new SpamWatch();
+    expect(watch.check("Mike", "dance", 0)).toBe("ok");
+    expect(watch.check("Mike", "dance", 1000)).toBe("ok");
+    expect(watch.check("Mike", "DANCE ", 2000)).toBe("spam");
+    expect(watch.check("Mike", "hello?", 3000)).toBe("muted");
+    expect(watch.check("Dana", "dance", 3000)).toBe("ok");
+    expect(watch.check("Mike", "how does drawdown work", 40_000)).toBe("ok");
+  });
+
+  it("flags more than five messages in fifteen seconds, but not an ordinary conversation", async () => {
+    const { SpamWatch } = await import("../scripts/live-host/worker");
+    const flood = new SpamWatch();
+    const verdicts = [1, 2, 3, 4, 5, 6].map((i) => flood.check("Bob", `message ${i}`, i * 1000));
+    expect(verdicts).toEqual(["ok", "ok", "ok", "ok", "ok", "spam"]);
+    const normal = new SpamWatch();
+    for (let i = 0; i < 8; i++) expect(normal.check("Ann", `question ${i}`, i * 6000)).toBe("ok");
+  });
+
+  it("the signs are fixed text that passes the same checks as speech", async () => {
+    const { SPAM_NOTICES } = await import("../scripts/live-host/worker");
+    const { checkSpokenLine } = await import("../src/liveHost/liveHostGuardrails");
+    for (const notice of SPAM_NOTICES) {
+      expect(checkSpokenLine(`${notice.title}. ${notice.detail}`, { fillbookMentionAllowed: true, websiteMentionAllowed: false })).toBeNull();
+    }
+  });
+});
+

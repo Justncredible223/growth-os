@@ -113,6 +113,41 @@ function log(line: string): void {
   console.log(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
 }
 
+/** Signs the host holds up when someone floods the chat. Fixed text: nothing a viewer typed is ever shown in them. */
+export const SPAM_NOTICES: ReadonlyArray<{ title: string; detail: string }> = [
+  { title: "Easy on the spam", detail: "One message at a time and I'll get to you." },
+  { title: "No spamming, please", detail: "I'm a candle, not a slot machine." },
+  { title: "I saw it the first time", detail: "Flooding chat gets you skipped, not answered." },
+];
+
+/**
+ * Spots a viewer flooding the chat: the same thing three times, or more than five messages, inside fifteen
+ * seconds. Their messages are then left out for half a minute, so the host neither answers a flood nor pays to
+ * read it.
+ */
+export class SpamWatch {
+  private recent = new Map<string, Array<{ at: number; body: string }>>();
+  private mutedUntil = new Map<string, number>();
+
+  /** Returns "ok", "muted" (already flagged, drop quietly) or "spam" (just crossed the line: drop and show the sign). */
+  check(author: string, body: string, now: number = Date.now()): "ok" | "muted" | "spam" {
+    const key = author.trim().toLowerCase() || "unknown";
+    if ((this.mutedUntil.get(key) ?? 0) > now) return "muted";
+    const history = (this.recent.get(key) ?? []).filter((entry) => now - entry.at < 15_000);
+    const text = body.trim().toLowerCase();
+    history.push({ at: now, body: text });
+    this.recent.set(key, history);
+    if (this.recent.size > 500) this.recent.delete(this.recent.keys().next().value as string);
+    const repeats = history.filter((entry) => entry.body === text).length;
+    if (repeats >= 3 || history.length > 5) {
+      this.mutedUntil.set(key, now + 30_000);
+      this.recent.delete(key);
+      return "spam";
+    }
+    return "ok";
+  }
+}
+
 /** The move a chat message asks for, if it is one of the move words ("dance", "spin", "jump", "moonwalk", "wave", "flex"). */
 export function moveWord(body: string): string | null {
   const match = /\b(dance|dancing|spin|jump|moonwalk|wave|flex)\b/i.exec(body);
@@ -292,6 +327,9 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   // Moves: instant, physical reactions on the stage. No model call and nothing spoken, so a viewer who types
   // "dance" sees it happen within a second or two. At most one every two seconds.
   let lastMoveAt = 0;
+  const spamWatch = new SpamWatch();
+  let lastSpamNoticeAt = 0;
+  let spamNoticeIndex = 0;
   const sendMove = (name: string) => {
     if (Date.now() - lastMoveAt < 2_000) return;
     lastMoveAt = Date.now();
@@ -309,7 +347,15 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   async function tick(): Promise<void> {
     await reviveStage();
-    const messages = tiktok.drain();
+    const messages = tiktok.drain().filter((message) => {
+      const verdict = spamWatch.check(message.authorName, message.body);
+      if (verdict === "spam" && Date.now() - lastSpamNoticeAt > 20_000) {
+        lastSpamNoticeAt = Date.now();
+        broadcast("notice", SPAM_NOTICES[spamNoticeIndex++ % SPAM_NOTICES.length]);
+        log("chat flood: showed the no-spam sign");
+      }
+      return verdict === "ok";
+    });
     for (const message of messages) {
       const word = moveWord(message.body);
       if (word) sendMove(word);
