@@ -173,14 +173,18 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * downloading it, and sharing/drafting it out is now a routine daily loop
  * of its own, not an occasional check -- worth the permanent slot instead
  * of a trip through More every time.
+ *
+ * Engage took Radar's slot (2026-10-10, owner request): working through the
+ * pre-drafted comment queue is a daily habit; Radar moved to More, still
+ * one tap away.
  */
 private val primaryDestinations =
-    listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Approvals, Destination.VideoStatus)
+    listOf(Destination.Home, Destination.Engage, Destination.Prospecting, Destination.Inbound, Destination.Approvals, Destination.VideoStatus)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
     Destination.Results,
-    Destination.Engage,
+    Destination.Radar,
     Destination.LiveHost,
     Destination.Partnerships,
     Destination.Analytics,
