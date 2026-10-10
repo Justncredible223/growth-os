@@ -59,6 +59,7 @@ import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, r
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
+import { handleLiveHost, isLiveHostAutomationRequest } from "../src/liveHost/liveHostApi.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -631,8 +632,14 @@ async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<
  * docs/EXTERNAL_WRITE_FIREWALL.md).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only the read-only video-status list is open to the automation token; every approve/reject/edit stays app-token only.
-  if (!requireAppAuth(req, res, { allowAutomation: req.method === "GET" && req.query.resource === "video-status" })) return;
+  // Only the read-only video-status list and the Live Host worker's own calls are open to the automation token;
+  // every approve/reject/edit, and the Live Host switch and settings, stay app-token only.
+  const allowAutomation = (req.method === "GET" && req.query.resource === "video-status") || isLiveHostAutomationRequest(req);
+  if (!requireAppAuth(req, res, { allowAutomation })) return;
+  if (req.query.resource === "live-host") {
+    await handleLiveHost(req, res);
+    return;
+  }
   if (req.query.resource === "inbound") {
     await handleInbound(req, res);
     return;

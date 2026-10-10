@@ -5,13 +5,21 @@
  * touches an external platform. EXTERNAL_WRITE is permanently rejected:
  * there is no flag, table row, env var, or admin call anywhere in this
  * module that can change that outcome.
+ *
+ * One owner-approved exception exists (2026-10-09): the Live Host may SPEAK
+ * on a live stream the owner has switched on. It has its own class
+ * (LIVE_HOST_SPEECH), its own single action name and its own guard,
+ * authorizeLiveHostSpeech() below. authorize() rejects that class too, so
+ * declaring it is never enough. See the "Live Host exception" section of
+ * the doc.
  */
 
 export type ActionClass =
   | "READ"
   | "INTERNAL_WRITE"
   | "EXTERNAL_DRAFT"
-  | "EXTERNAL_WRITE";
+  | "EXTERNAL_WRITE"
+  | "LIVE_HOST_SPEECH";
 
 export interface FirewallAction {
   /** Stable machine name, e.g. "x.post_tweet", "search_console.read_queries". */
@@ -52,7 +60,86 @@ export function authorize(action: FirewallAction): FirewallAction {
   if (action.actionClass === "EXTERNAL_WRITE") {
     throw new ExternalWriteRejectedError(action.name);
   }
+  // Live speech is only ever allowed through authorizeLiveHostSpeech(), which checks the owner's switch, the
+  // system pause and the guardrail result. Reaching this generic guard with that class is always a mistake.
+  if (action.actionClass === "LIVE_HOST_SPEECH") {
+    throw new ExternalWriteRejectedError(action.name);
+  }
   return action;
+}
+
+/** The one action name the Live Host exception covers. Nothing else can be authorized as LIVE_HOST_SPEECH. */
+export const LIVE_HOST_SPEAK_ACTION = "live_host.speak";
+
+export class LiveHostSpeechRejectedError extends Error {
+  constructor(reason: string) {
+    super(`ExternalWriteFirewall: "${LIVE_HOST_SPEAK_ACTION}" rejected: ${reason}`);
+    this.name = "LiveHostSpeechRejectedError";
+  }
+}
+
+/**
+ * Everything authorizeLiveHostSpeech() needs to see before one line is spoken. Callers pass what they actually
+ * read and computed for this line (the settings row, the pause flag, the guardrail result). None of these is a
+ * standing permission, and a missing or false value always rejects.
+ */
+export interface LiveHostSpeechGrant {
+  /** live_host_settings.desired_state === "on": the owner switched the host on in the app. */
+  ownerSwitchedOn: boolean;
+  /** system_settings.paused: the global Pause System switch. */
+  systemPaused: boolean;
+  /** The open live_host_sessions row this line belongs to. */
+  sessionId: string | null;
+  /** The mechanical guardrail verdict for exactly this text (liveHostGuardrails.ts). Null means it passed. */
+  guardrailProblem: string | null;
+  /** The exact text to be spoken. */
+  text: string;
+}
+
+/**
+ * The single owner-approved exception to "never communicates externally" (docs/EXTERNAL_WRITE_FIREWALL.md,
+ * "Live Host exception"). Allows one spoken line on the owner's own live stream, and only when the owner has
+ * switched the host on, the system is not paused, the line belongs to an open session and the line passed the
+ * mechanical guardrails. It cannot post, comment, reply in chat, DM, like or follow: those stay EXTERNAL_WRITE.
+ */
+export function authorizeLiveHostSpeech(grant: LiveHostSpeechGrant): FirewallAction {
+  if (grant.ownerSwitchedOn !== true) throw new LiveHostSpeechRejectedError("the owner has not switched the Live Host on");
+  if (grant.systemPaused !== false) throw new LiveHostSpeechRejectedError("the system is paused");
+  if (!grant.sessionId) throw new LiveHostSpeechRejectedError("there is no open live session");
+  if (grant.text.trim().length === 0) throw new LiveHostSpeechRejectedError("there is nothing to say");
+  if (grant.guardrailProblem !== null) throw new LiveHostSpeechRejectedError(`the line ${grant.guardrailProblem}`);
+  return {
+    name: LIVE_HOST_SPEAK_ACTION,
+    actionClass: "LIVE_HOST_SPEECH",
+    context: { sessionId: grant.sessionId, characters: grant.text.length },
+  };
+}
+
+/** authorizeLiveHostSpeech() plus an audit row for every decision, allowed or rejected. */
+export async function authorizeLiveHostSpeechAndAudit(grant: LiveHostSpeechGrant, auditSink: AuditSink = () => {}): Promise<FirewallAction> {
+  const timestamp = new Date().toISOString();
+  try {
+    const action = authorizeLiveHostSpeech(grant);
+    await auditSink({
+      actionName: action.name,
+      actionClass: action.actionClass,
+      outcome: "allowed",
+      reason: "owner switched the Live Host on and the line passed guardrails",
+      context: action.context ?? {},
+      timestamp,
+    });
+    return action;
+  } catch (err) {
+    await auditSink({
+      actionName: LIVE_HOST_SPEAK_ACTION,
+      actionClass: "LIVE_HOST_SPEECH",
+      outcome: "rejected",
+      reason: err instanceof Error ? err.message : String(err),
+      context: { sessionId: grant.sessionId },
+      timestamp,
+    });
+    throw err;
+  }
 }
 
 /**

@@ -438,6 +438,17 @@ class NetworkGrowthOsRepository(
         post("/api/summary", JSONObject().put("paused", paused))
     }
 
+    override suspend fun getLiveHostStatus(): LiveHostStatus = parseLiveHostStatus(get("/api/approvals?resource=live-host"))
+
+    override suspend fun setLiveHostSwitch(on: Boolean) {
+        post("/api/approvals?resource=live-host", JSONObject().put("action", "set-desired").put("desired", if (on) "on" else "off"))
+    }
+
+    override suspend fun setLiveHostYoutubeVideo(linkOrId: String) {
+        val settings = JSONObject().put("youtubeVideoId", if (linkOrId.isBlank()) JSONObject.NULL else linkOrId)
+        post("/api/approvals?resource=live-host", JSONObject().put("action", "update-settings").put("settings", settings))
+    }
+
     override suspend fun handOffAsset(campaignAssetId: String): HandOffResult {
         val body = JSONObject().put("action", "hand-off").put("campaignAssetId", campaignAssetId)
         val json = post("/api/approvals", body)
