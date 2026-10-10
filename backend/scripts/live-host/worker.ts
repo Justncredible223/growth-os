@@ -296,7 +296,9 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     // Owner rule: no talking to an empty room. On TikTok this worker sees every join and message itself, so it
     // can hold the host back directly (the server applies the same rule, and is the one that knows about
     // YouTube chat).
-    const emptyRoom = !config.idleSegments && config.platform !== "youtube" && Date.now() - lastAudienceAt > 3 * 60_000;
+    // Only while the reader is actually connected: if it cannot see the room, staying silent would mean dead air for
+    // the whole stream, so the host falls back to running segments.
+    const emptyRoom = !config.idleSegments && config.platform !== "youtube" && tiktok.connected && Date.now() - lastAudienceAt > 3 * 60_000;
     let result: TickResult;
     try {
       result = (await api({
@@ -305,7 +307,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
         // retried. The server then takes chat in but does not spend a model call on a line nobody would hear.
         busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt || emptyRoom,
         platform: config.platform,
-        audienceOnly: !config.idleSegments,
+        // Not while the TikTok reader is down: without it nobody would ever count as present.
+        audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
         joins,
         workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
