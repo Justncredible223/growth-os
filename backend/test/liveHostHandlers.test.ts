@@ -330,6 +330,52 @@ describe("runLiveHostTick", () => {
     expect(busy.joinsWelcomed).toBeUndefined();
   });
 
+  it("the Fillbook spot does not send the segment rotation back to the start", async () => {
+    const started = new Date(NOW.getTime() - 10 * 60_000).toISOString();
+    const quiet = new Date(NOW.getTime() - 60_000).toISOString();
+    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: quiet, last_segment: "eval_graveyard" }] });
+    const llm = scriptedLlm([line("Fillbook is the trading journal I live in. The link is in the bio. What do you journal first?"), line("Quick one: what does a trailing drawdown trail?")]);
+    const spot = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(spot.utterance?.segmentTitle).toBe("Where Tilt Lives");
+    expect(client.tables.live_host_sessions![0]!.last_segment).toBe("eval_graveyard");
+    await markUtteranceSpoken(asSupabase(client), spot.utterance!.id, "spoken", NOW);
+    const next = await runLiveHostTick(asSupabase(client), {}, { now: new Date(NOW.getTime() + 60_000), llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(next.utterance?.segmentTitle).toBe("Rule Trivia");
+  });
+
+  it("in audience-only mode, says nothing to an empty room", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("Welcome in.")]);
+    const result = await runLiveHostTick(asSupabase(client), { audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance).toBeNull();
+    expect(llm.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("in audience-only mode, keeps a room that chatted recently engaged, then goes quiet once they have gone", async () => {
+    const recent = new Date(NOW.getTime() - 60_000).toISOString();
+    const quiet = new Date(NOW.getTime() - 50_000).toISOString();
+    const client = buildClient({
+      live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: quiet }],
+      live_host_messages: [{ id: "m0", session_id: "s1", platform: "tiktok", external_id: "e0", author_name: "Mike", body: "hi", received_at: recent, status: "answered", status_reason: null, utterance_id: null }],
+    });
+    const llm = scriptedLlm([line("Quick one for the room: eval or funded?"), line("Another.")]);
+    const engaged = await runLiveHostTick(asSupabase(client), { audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(engaged.utterance?.kind).toBe("segment");
+    await markUtteranceSpoken(asSupabase(client), engaged.utterance!.id, "spoken", NOW);
+
+    const later = new Date(NOW.getTime() + 5 * 60_000);
+    const gone = await runLiveHostTick(asSupabase(client), { audienceOnly: true }, { now: later, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(gone.utterance).toBeNull();
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("in audience-only mode, still welcomes someone who joins an empty room", async () => {
+    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
+    const llm = scriptedLlm([line("Dana, welcome in. Eval or funded?")]);
+    const result = await runLiveHostTick(asSupabase(client), { audienceOnly: true, joins: [{ name: "Dana" }] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.segmentTitle).toBe("New Arrivals");
+  });
+
   it("ignores TikTok chat unless the owner enabled it", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, idle_seconds: 600 })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
     await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, youtube: null, grounding: GROUNDING });

@@ -52,6 +52,8 @@ export interface WorkerConfig {
   obsPassword: string | undefined;
   /** False when the owner starts and stops the stream in OBS by hand; the worker still keeps the stage page loaded. */
   obsControlsStream: boolean;
+  /** False (the default, owner rule) means the host only speaks to people who are there and stays quiet in an empty room. */
+  idleSegments: boolean;
   /** Where OBS is streaming: "youtube", "tiktok" or "both". Only "youtube" lets the host say the website. */
   platform: string;
   pythonCommand: string;
@@ -73,6 +75,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     obsUrl: env.OBS_WEBSOCKET_URL === "off" ? null : env.OBS_WEBSOCKET_URL || "ws://127.0.0.1:4455",
     obsPassword: env.OBS_WEBSOCKET_PASSWORD || undefined,
     obsControlsStream: env.LIVE_HOST_OBS_STREAM !== "off",
+    idleSegments: env.LIVE_HOST_IDLE_SEGMENTS === "on",
     // Not stated means the careful choice: the host points to the bio instead of saying the website.
     platform: (env.LIVE_HOST_PLATFORM || "unknown").toLowerCase(),
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
@@ -279,6 +282,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   let lastNote: string | null = null;
   let ticksSinceStreamCheck = 0;
+  /** When this worker last saw a viewer join or chat. Zero means nobody yet. */
+  let lastAudienceAt = 0;
   /** After the voice fails, wait this long before trying the same line again. */
   let voiceRetryAt = 0;
   let voiceFailures = 0;
@@ -286,16 +291,26 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   async function tick(): Promise<void> {
     await reviveStage();
     const messages = tiktok.drain();
+    const joins = speaking === null ? tiktok.recentJoins() : [];
+    if (messages.length > 0 || joins.length > 0) lastAudienceAt = Date.now();
+    // Owner rule: no talking to an empty room. On TikTok this worker sees every join and message itself, so it
+    // can hold the host back directly (the server applies the same rule, and is the one that knows about
+    // YouTube chat).
+    // Only while the reader is actually connected: if it cannot see the room, staying silent would mean dead air for
+    // the whole stream, so the host falls back to running segments.
+    const emptyRoom = !config.idleSegments && config.platform !== "youtube" && tiktok.connected && Date.now() - lastAudienceAt > 3 * 60_000;
     let result: TickResult;
     try {
       result = (await api({
         action: "tick",
         // Busy also covers "nothing can be said right now": no stage page to say it on, or the voice is being
         // retried. The server then takes chat in but does not spend a model call on a line nobody would hear.
-        busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt,
+        busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt || emptyRoom,
         platform: config.platform,
+        // Not while the TikTok reader is down: without it nobody would ever count as present.
+        audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
-        joins: speaking === null ? tiktok.recentJoins() : [],
+        joins,
         workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
       })) as TickResult;
     } catch (err) {
