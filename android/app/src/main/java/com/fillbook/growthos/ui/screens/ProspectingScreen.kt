@@ -61,6 +61,7 @@ import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.copyToClipboard
 import com.fillbook.growthos.ui.components.openExternalUrl
+import com.fillbook.growthos.ui.components.openInBrowser
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
@@ -198,6 +199,18 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         }
     }
 
+    // Same as copyAndOpen, but the post opens in a web browser instead of the platform's app (see openInBrowser).
+    fun copyAndOpenInBrowser(candidate: ProspectingCandidate) {
+        val text = editedDrafts[candidate.id] ?: candidate.draftReply
+        if (text != null) copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", text)
+        val opened = openInBrowser(context, ProspectingPostLink.buildOpenUrl(candidate.platform, candidate.postUrl, candidate.authorHandle))
+        scope.launch {
+            if (opened) runCatching { repo.openProspectingCandidate(candidate.id) }
+            ProspectingPostLink.copyAndBrowserMessage(candidate.platform, copied = text != null, opened = opened)
+                ?.let { snackbarHostState.showSnackbar(it) }
+        }
+    }
+
     fun runOutcome(candidate: ProspectingCandidate, afterSuccess: suspend () -> Unit = {}, action: suspend () -> Unit) {
         scope.launch {
             busyId = candidate.id
@@ -301,6 +314,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                                 replyHold = replyHold,
                                 onDraft = { startDraft(candidate) },
                                 onCopyAndOpen = { copyAndOpen(candidate) },
+                                onCopyAndOpenInBrowser = { copyAndOpenInBrowser(candidate) },
                                 onReplied = {
                                     // Refresh afterwards so the pacing line and the held button reflect this reply.
                                     runOutcome(candidate, afterSuccess = { refresh() }) {
@@ -337,6 +351,7 @@ private fun ProspectingCard(
     replyHold: String?,
     onDraft: () -> Unit,
     onCopyAndOpen: () -> Unit,
+    onCopyAndOpenInBrowser: () -> Unit,
     onReplied: () -> Unit,
     onSkip: () -> Unit,
     onNotRelevant: () -> Unit,
@@ -458,6 +473,11 @@ private fun ProspectingCard(
         // phone -- wraps to a second line instead, same fix already used
         // for this card's own platform/class/follower chips above.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
+            if (draft != null && candidate.status != "not_relevant") {
+                TextButton(onClick = onCopyAndOpenInBrowser, enabled = !busy && replyHold == null) {
+                    Text("Open in browser", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             TextButton(onClick = onReplied, enabled = !busy) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = onSkip, enabled = !busy) { Text("Skip", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = onNotRelevant, enabled = !busy) { Text("Not relevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }

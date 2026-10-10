@@ -23,6 +23,14 @@ object ProspectingPostLink {
     }
 
     /**
+     * The snackbar after Prospecting's "Open in browser": the post opens as a web page, so the reply box is right there.
+     * A failed launch or a missing draft keeps PlatformActions' own wording.
+     */
+    fun copyAndBrowserMessage(platform: String, copied: Boolean, opened: Boolean): String? =
+        if (copied && opened) "Copied. Tap Reply on the post in your browser, then paste."
+        else PlatformActions.copyAndOpenMessage(platform, copied = copied, hadLink = true, opened = opened)
+
+    /**
      * The snackbar after Prospecting's "Copy + Open". X 12.32 (2026-10) shows a linked post as the first card of the For You
      * feed instead of the thread, so for X the owner is told where to tap. Every other case (failure, other platforms,
      * nothing copied) keeps PlatformActions' own wording.
