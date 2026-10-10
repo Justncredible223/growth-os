@@ -44,6 +44,48 @@ admin API that flips `EXTERNAL_WRITE` to allowed. Search
 `backend/test/firewall.test.ts` for the enumerated list of prohibited
 actions this is tested against — that test file is the living contract.
 
+## Live Host exception (owner decision, 2026-10-09)
+
+One exception to the rule at the top of this document exists, and it was
+made deliberately by the owner: the **Live Host** (`docs/LIVE_HOST.md`) is
+an AI character that hosts the owner's own live stream and answers chat
+**out loud, on its own**. That is external communication without a human
+performing each action, so it does not fit any of the four classes above.
+It has a fifth class of its own, `LIVE_HOST_SPEECH`, with deliberately
+narrow rules:
+
+- It covers exactly one action, `live_host.speak`: one spoken line on a
+  stream the owner started. It does not cover posting, commenting, replying
+  in chat, DMs, likes, follows or uploads. Those remain `EXTERNAL_WRITE`
+  and remain permanently rejected, on every platform, for the Live Host
+  too. The character never types in chat.
+- `authorize()` rejects `LIVE_HOST_SPEECH` exactly as it rejects
+  `EXTERNAL_WRITE`. The only way through is `authorizeLiveHostSpeech()`,
+  which requires all of the following for the specific line being spoken,
+  and rejects if any one is missing:
+  1. the owner has switched the Live Host on in the app
+     (`live_host_settings.desired_state = 'on'`). Only the app's own token
+     can change that switch; the PC worker's automation token cannot;
+  2. the system is not paused (`system_settings.paused`). If the pause flag
+     cannot be read, it is treated as paused;
+  3. the line belongs to an open live session;
+  4. the line passed every mechanical guardrail
+     (`backend/src/liveHost/liveHostGuardrails.ts` and the Brand
+     Constitution vocabulary check).
+- Switching the host off in the app ends the session immediately and drops
+  anything queued, so nothing further is authorized even if the worker is
+  still running.
+- Every decision, allowed or rejected, is written to `audit_logs` with the
+  class `LIVE_HOST_SPEECH`, and every line and every chat message is kept
+  in `live_host_utterances` / `live_host_messages` and shown in the app's
+  Live Host tab.
+
+`backend/test/liveHostFirewall.test.ts` is the contract for this exception.
+`backend/test/firewall.test.ts` is unchanged and still passes as written:
+nothing about `EXTERNAL_WRITE` was loosened. Any further exception needs
+the same treatment: an explicit owner decision, its own class, its own
+guard and its own contract test, never a flag on an existing one.
+
 ## Later-phase platform integrations must fit this model
 
 When X/TikTok/YouTube integrations are built (later phases), their code

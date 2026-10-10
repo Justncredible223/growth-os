@@ -21,6 +21,9 @@
     },
     "api/summary.ts": {
       "maxDuration": 60
+    },
+    "api/approvals.ts": {
+      "maxDuration": 60
     }
   }
 }

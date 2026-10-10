@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Nightlight
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Radar
@@ -95,6 +96,7 @@ import com.fillbook.growthos.ui.screens.ContentLibraryScreen
 import com.fillbook.growthos.ui.screens.CreatorsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.InboundScreen
+import com.fillbook.growthos.ui.screens.LiveHostScreen
 import com.fillbook.growthos.ui.screens.ProspectingScreen
 import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
@@ -146,6 +148,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object VideoStatus : Destination("video_status", "Video Status", Icons.Filled.Movie)
     data object FillbookStats : Destination("fillbook_stats", "Fillbook Stats", Icons.Filled.ShowChart)
     data object Results : Destination("results", "Results", Icons.Filled.QueryStats)
+    data object LiveHost : Destination("live_host", "Live Host", Icons.Filled.Podcasts)
 }
 
 /**
@@ -174,6 +177,7 @@ private val primaryDestinations =
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
     Destination.Results,
+    Destination.LiveHost,
     Destination.Partnerships,
     Destination.Analytics,
     Destination.Campaigns,
@@ -372,6 +376,7 @@ private fun GrowthOsApp(
             composable(Destination.VideoStatus.route) { VideoStatusScreen(repo) }
             composable(Destination.FillbookStats.route) { FillbookStatsScreen(fillbookAdminRepo) }
             composable(Destination.Results.route) { ResultsScreen(repo) }
+            composable(Destination.LiveHost.route) { LiveHostScreen(repo) }
         }
     }
 

@@ -118,6 +118,13 @@ interface GrowthOsRepository {
     /** Backs the Settings/System "Pause System" control -- actually stops auto-draft and manual campaign runs server-side, not just a display flag. */
     suspend fun setPaused(paused: Boolean)
 
+    /** The Live Host tab: the switch, the PC worker's presence, and every chat message seen and line said this stream. */
+    suspend fun getLiveHostStatus(): LiveHostStatus
+    /** The owner's Live Host switch. The character only speaks on stream while this is on; off stops it at once. */
+    suspend fun setLiveHostSwitch(on: Boolean)
+    /** The YouTube live stream whose chat the host reads. Accepts a link or an id; blank clears it. */
+    suspend fun setLiveHostYoutubeVideo(linkOrId: String)
+
     /** The active Inbound Engagement Queue -- everything not yet resolved (new/needs_response/draft_ready/follow_up/review_needed). */
     suspend fun getInboundQueue(): List<InboundEngagement>
     /** Command Center counts: needs response / follow-ups / repeat engagers / overdue. */
@@ -507,6 +514,26 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun setPaused(paused: Boolean) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun getLiveHostStatus(): LiveHostStatus = LiveHostStatus(
+        configured = true,
+        hostName = "Tilt",
+        settings = LiveHostSettings(switchedOn = false, youtubeVideoId = null, idleSeconds = 45, dailyBudgetUsd = 3.0),
+        systemPaused = false,
+        session = null,
+        lastSession = null,
+        todaySpendUsd = 0.0,
+        budgetReached = false,
+        feed = emptyList(),
+    )
+
+    override suspend fun setLiveHostSwitch(on: Boolean) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun setLiveHostYoutubeVideo(linkOrId: String) {
         // No backend to call in fake mode -- no-op.
     }
 
