@@ -17,6 +17,8 @@ import {
   checkMinSpacing,
   checkOpenAllowance,
   checkQuotaBudget,
+  nextAutoFillRun,
+  AUTOFILL_TARGET_WAITING,
   pacificDayKey,
   resolveLimits,
   type Block,
@@ -33,6 +35,9 @@ export { isMissingEngagementTables } from "./engagementRepository.js";
 
 /** A request the owner can fix (bad input, nothing to draft). Maps to HTTP 400. */
 export class EngagementActionError extends Error {}
+
+/** integration_health row the scheduled fill reports to (api/growth-pulse.ts) and the status endpoint reads. */
+export const AUTOFILL_HEALTH_KEY = "engagement_autofill";
 
 /** Search is 100 units a call, so one discovery run runs at most this many watchlist queries. */
 export const MAX_SEARCHES_PER_RUN = 3;
@@ -133,6 +138,17 @@ export async function getEngagementStatus(client: SupabaseClient, deps: Engageme
     repo.quotaUsedToday(client, now),
   ]);
 
+  // The last scheduled fill's summary (written by the pulse step). Best-effort: it only feeds an empty-state message.
+  let lastFill: { at: string | null; note: string | null } = { at: null, note: null };
+  try {
+    const { data } = await client.from("integration_health").select("last_attempted_at, last_success_at, notes, last_error").eq("platform", AUTOFILL_HEALTH_KEY).maybeSingle();
+    const row = data as { last_success_at?: string | null; last_attempted_at?: string | null; notes?: string | null; last_error?: string | null } | null;
+    if (row) lastFill = { at: row.last_success_at ?? row.last_attempted_at ?? null, note: row.notes ?? row.last_error ?? null };
+  } catch {
+    // ignore
+  }
+  const nextFill = nextAutoFillRun(now);
+
   const dayStart = arizonaDayStartIso(now);
   const doneToday = (platform: EngagementPlatform) => done.filter((a) => a.platform === platform && a.createdAt >= dayStart).length;
   const spacing = checkMinSpacing(done, now, limits);
@@ -150,6 +166,13 @@ export async function getEngagementStatus(client: SupabaseClient, deps: Engageme
       tiktok: { done: doneToday("tiktok"), cap: limits.dailyCapPerPlatform },
     },
     nextActionInSeconds: spacing?.retryAfterSeconds ?? 0,
+    autoFill: {
+      targetWaiting: AUTOFILL_TARGET_WAITING,
+      nextRunAt: nextFill.at,
+      nextRunLabel: nextFill.label,
+      lastRunAt: lastFill.at,
+      lastRunNote: lastFill.note,
+    },
     quota: {
       day: pacificDayKey(now),
       used: quotaUsed,
@@ -194,13 +217,36 @@ export interface DiscoveryResult {
  * (channels, playlistItems, videos: 1 unit each) do the bulk; search.list (100 units) is capped per run and by the
  * daily budget guard in the unit spender.
  */
-export async function discoverYoutube(client: SupabaseClient, deps: EngagementDeps = {}): Promise<DiscoveryResult> {
+export interface DiscoverOptions {
+  /** Hard cap on rows added this run (still bounded by the queue room and MAX_NEW_ITEMS_PER_RUN). */
+  maxNew?: number;
+  /** Cap on search.list calls (100 units each) this run. Defaults to MAX_SEARCHES_PER_RUN. */
+  maxSearches?: number;
+  /** Drop videos published longer ago than this many days (scheduled fill only). */
+  maxAgeDays?: number;
+  /** Drop videos whose cached view count is below this (scheduled fill only). */
+  minViews?: number;
+  /** Require trading-related words in search results and prefer videos with real discussion (scheduled fill only). */
+  curate?: boolean;
+  /** Varies which watchlist queries run so several runs a day cover the whole list. Defaults to the day number. */
+  rotationSeed?: number;
+}
+
+/** Cheap relevance pre-filter for search hits; the drafter still declines anything off topic. */
+const TRADING_WORDS =
+  /\b(trad(?:e|es|er|ers|ing)|futures?|prop|topstep|apex|tradeify|funded|payout|combine|drawdown|scalp\w*|nq|mnq|es|mes|nasdaq|s&p|stocks?|options?|forex|market|journal|stop ?loss|risk|p&l|pnl|revenge)\b/i;
+
+export function looksTradingRelated(title: string, description: string | null): boolean {
+  return TRADING_WORDS.test(`${title} ${description ?? ""}`);
+}
+
+export async function discoverYoutube(client: SupabaseClient, deps: EngagementDeps = {}, options: DiscoverOptions = {}): Promise<DiscoveryResult> {
   const yt = requireYoutube(client, deps);
   const now = clockOf(deps);
   const limits = limitsOf(deps);
   const result: DiscoveryResult = { added: 0, considered: 0, skippedCooldown: 0, skippedHandled: 0, stoppedReason: null, errors: [] };
 
-  const room = limits.maxPendingItems - (await repo.countPending(client));
+  const room = Math.min(limits.maxPendingItems - (await repo.countPending(client)), options.maxNew ?? MAX_NEW_ITEMS_PER_RUN);
   if (room <= 0) {
     result.stoppedReason = "The queue is full. Clear some items first.";
     return result;
@@ -216,8 +262,10 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
   const channels = watchlist.filter((w) => w.kind === "channel");
   const queries = watchlist.filter((w) => w.kind === "query");
   // Rotate which queries run so a long list is covered across days instead of always the first few.
-  const offset = queries.length > 0 ? Math.floor(now.getTime() / DAY_MS) % queries.length : 0;
-  const todaysQueries = [...queries.slice(offset), ...queries.slice(0, offset)].slice(0, MAX_SEARCHES_PER_RUN);
+  const searchCap = options.maxSearches ?? MAX_SEARCHES_PER_RUN;
+  const seed = options.rotationSeed ?? Math.floor(now.getTime() / DAY_MS);
+  const offset = queries.length > 0 ? (seed * searchCap) % queries.length : 0;
+  const todaysQueries = [...queries.slice(offset), ...queries.slice(0, offset)].slice(0, searchCap);
   const publishedAfter = new Date(now.getTime() - 7 * DAY_MS).toISOString();
 
   try {
@@ -273,9 +321,16 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
 
   const done = await repo.loadRecentDoneActions(client, now, doneWindowDays(limits));
   const cap = Math.min(room, MAX_NEW_ITEMS_PER_RUN);
-  for (const meta of metas) {
+  const ordered = options.curate
+    ? [...metas].sort((a, b) => (b.stats?.commentCount ?? 0) - (a.stats?.commentCount ?? 0) || (b.stats?.viewCount ?? 0) - (a.stats?.viewCount ?? 0))
+    : metas;
+  const oldestAllowed = options.maxAgeDays !== undefined ? now.getTime() - options.maxAgeDays * DAY_MS : null;
+  for (const meta of ordered) {
     if (result.added >= cap) break;
     if (meta.durationSeconds !== null && meta.durationSeconds > SHORTS_MAX_SECONDS) continue;
+    if (oldestAllowed !== null && meta.publishedAt && new Date(meta.publishedAt).getTime() < oldestAllowed) continue;
+    if (options.minViews !== undefined && meta.stats && (meta.stats.viewCount ?? 0) < options.minViews) continue;
+    if (options.curate && sourceById.get(meta.externalId) === "search" && !looksTradingRelated(meta.title, meta.description)) continue;
     if (!meta.creatorId || /fill-?book/i.test(meta.creatorName)) continue;
     if (checkCreatorCooldown("youtube", meta.creatorId, done, now, limits)) {
       result.skippedCooldown++;

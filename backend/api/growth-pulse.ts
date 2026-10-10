@@ -27,6 +27,8 @@ import { createYoutubeCommentAdapter } from "../src/signals/adapters/youtubeAdap
 import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
 import { isMissingPostingTables, saveOwnTweets, syncYoutubeStats } from "../src/posting/postingRepository.js";
 import { recordXOwnedReadCostEvent } from "../src/cost/costTracking.js";
+import { runEngagementAutoFill } from "../src/engagement/engagementAutoFill.js";
+import { AUTOFILL_HEALTH_KEY } from "../src/engagement/engagementHandlers.js";
 
 interface StepResult {
   step: string;
@@ -304,6 +306,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (runYoutubeComments) {
+    // Engage tab "ready to go" fill (docs/ENGAGEMENT_ASSISTANT.md): discovers YouTube videos, pre-drafts comment
+    // options for the owner's review queue, and purges the 30-day YouTube cache. Discover and draft ONLY: it never
+    // posts, likes or follows anything. Never throws (runEngagementAutoFill turns every failure into a summary line),
+    // so it cannot fail the pulse or the comment-monitoring step below.
+    results.push(
+      await runStep("engagement_autofill", async () => {
+        const fill = await runEngagementAutoFill(client, {
+          now: () => now,
+          isPaused: async () => {
+            const { data } = await client.from("system_settings").select("paused").eq("id", true).maybeSingle();
+            return Boolean((data as { paused?: boolean } | null)?.paused);
+          },
+        });
+        try {
+          await recordSyncAttempt(client, AUTOFILL_HEALTH_KEY);
+          if (fill.summary.startsWith("failed")) await recordSyncFailure(client, AUTOFILL_HEALTH_KEY, fill.summary);
+          else await recordSyncSuccess(client, AUTOFILL_HEALTH_KEY, fill.summary);
+        } catch {
+          // Health bookkeeping is best-effort.
+        }
+        return fill.summary;
+      }),
+    );
     results.push(
       await runStep("youtube_comments", async () => {
         // Not configured is a real, expected state (the owner hasn't

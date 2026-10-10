@@ -43,6 +43,10 @@ data class EngagementStatus(
     val quotaBudget: Int,
     val queue: List<EngagementItem>,
     val watchlistCount: Int,
+    /** When the next scheduled fill runs, e.g. "1:00 PM Arizona time" (the server fills and pre-drafts the queue). */
+    val nextFillLabel: String? = null,
+    /** The last scheduled fill's one-line summary, or null before the first run. */
+    val lastFillNote: String? = null,
 )
 
 data class EngagementCopyResult(val text: String, val warnings: List<String>)
@@ -101,6 +105,8 @@ internal fun parseEngagementStatus(json: JSONObject): EngagementStatus {
         quotaBudget = quota?.optInt("budget", 0) ?: 0,
         queue = queue,
         watchlistCount = json.optJSONArray("watchlist")?.length() ?: 0,
+        nextFillLabel = json.optJSONObject("autoFill")?.stringOrNull("nextRunLabel"),
+        lastFillNote = json.optJSONObject("autoFill")?.stringOrNull("lastRunNote"),
     )
 }
 

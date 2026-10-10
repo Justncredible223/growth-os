@@ -146,3 +146,27 @@ export function checkQuotaBudget(usedToday: number, units: number, limits: Engag
   }
   return null;
 }
+
+/** Waiting items the scheduled fill tries to keep in the queue (the hard cap stays maxPendingItems). */
+export const AUTOFILL_TARGET_WAITING = 10;
+
+/**
+ * UTC hours of the pulse runs the scheduled fill rides on (.github/workflows/growth-pulse.yml: 08:00, 13:00 and
+ * 18:00 America/Phoenix, which has no DST).
+ */
+export const AUTOFILL_RUN_HOURS_UTC = [1, 15, 20] as const;
+
+/** The next scheduled fill after `now`, with an owner-facing label in Arizona time. */
+export function nextAutoFillRun(now: Date): { at: string; label: string } {
+  for (let dayOffset = 0; dayOffset <= 1; dayOffset++) {
+    for (const hour of [...AUTOFILL_RUN_HOURS_UTC].sort((a, b) => a - b)) {
+      const at = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + dayOffset, hour, 0, 0));
+      if (at.getTime() > now.getTime()) {
+        const phoenixHour = (hour + 24 - 7) % 24;
+        const label = `${phoenixHour % 12 === 0 ? 12 : phoenixHour % 12}:00 ${phoenixHour < 12 ? "AM" : "PM"} Arizona time`;
+        return { at: at.toISOString(), label };
+      }
+    }
+  }
+  return { at: now.toISOString(), label: "soon" };
+}
