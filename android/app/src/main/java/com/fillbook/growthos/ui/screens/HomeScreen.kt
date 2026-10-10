@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PauseCircle
-import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
@@ -302,7 +301,6 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             QuickActionChip(Icons.Filled.Forum, "Inbound", { onNavigate("inbound") }, Modifier.weight(1f))
                             QuickActionChip(Icons.Filled.CheckCircle, "Approvals", { onNavigate("approvals") }, Modifier.weight(1f))
-                            QuickActionChip(Icons.Filled.Radar, "Radar", { onNavigate("radar") }, Modifier.weight(1f))
                         }
                     }
                 }
@@ -436,18 +434,10 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, o
             "approvals",
             Icons.Filled.CheckCircle,
         )
-        summary.opportunitiesFound > 0 -> NextAction(
-            "Next best action",
-            "${summary.opportunitiesFound} open opportunities on Radar",
-            "Real signals the system found -- nothing drafted from them yet unless you trigger it.",
-            "View Radar",
-            "radar",
-            Icons.Filled.Radar,
-        )
         else -> NextAction(
             "All caught up",
             "Nothing needs you right now",
-            "No open opportunities and nothing waiting for review right now.",
+            "Nothing waiting for review right now.",
             "View Analytics",
             "analytics",
             Icons.Filled.Insights,

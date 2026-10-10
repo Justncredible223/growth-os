@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Every draft this system has produced, grouped by platform -- the same
- * real data as the Campaigns screen (GET /api/campaigns), just organized
+ * real data as GET /api/campaigns (the former Campaigns screen), just organized
  * for browsing content instead of tracking pipeline progress. No new
  * endpoint: adding one would push this project over Vercel Hobby's
  * 12-serverless-function cap (see docs/PROGRESS_LEDGER.md Phase 15).
