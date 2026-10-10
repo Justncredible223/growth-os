@@ -55,6 +55,7 @@ import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PlatformActions
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.PrimaryButton
+import com.fillbook.growthos.ui.components.ProspectingPostLink
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
@@ -189,7 +190,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     fun copyAndOpen(candidate: ProspectingCandidate) {
         val text = editedDrafts[candidate.id] ?: candidate.draftReply
         if (text != null) copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", text)
-        val opened = openExternalUrl(context, candidate.postUrl)
+        val opened = openExternalUrl(context, ProspectingPostLink.buildOpenUrl(candidate.platform, candidate.postUrl, candidate.authorHandle))
         scope.launch {
             if (opened) runCatching { repo.openProspectingCandidate(candidate.id) }
             PlatformActions.copyAndOpenMessage(candidate.platform, copied = text != null, hadLink = true, opened = opened)
