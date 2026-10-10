@@ -330,6 +330,19 @@ describe("runLiveHostTick", () => {
     expect(busy.joinsWelcomed).toBeUndefined();
   });
 
+  it("the Fillbook spot does not send the segment rotation back to the start", async () => {
+    const started = new Date(NOW.getTime() - 10 * 60_000).toISOString();
+    const quiet = new Date(NOW.getTime() - 60_000).toISOString();
+    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: quiet, last_segment: "eval_graveyard" }] });
+    const llm = scriptedLlm([line("Fillbook is the trading journal I live in. The link is in the bio. What do you journal first?"), line("Quick one: what does a trailing drawdown trail?")]);
+    const spot = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(spot.utterance?.segmentTitle).toBe("Where Tilt Lives");
+    expect(client.tables.live_host_sessions![0]!.last_segment).toBe("eval_graveyard");
+    await markUtteranceSpoken(asSupabase(client), spot.utterance!.id, "spoken", NOW);
+    const next = await runLiveHostTick(asSupabase(client), {}, { now: new Date(NOW.getTime() + 60_000), llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(next.utterance?.segmentTitle).toBe("Rule Trivia");
+  });
+
   it("ignores TikTok chat unless the owner enabled it", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, idle_seconds: 600 })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
     await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, youtube: null, grounding: GROUNDING });

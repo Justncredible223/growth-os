@@ -53,8 +53,10 @@ describe("live host stage page", () => {
 describe("live host OBS setup", () => {
   it("points the Browser Source at the worker's stage with audio routed through OBS", async () => {
     const { stageSourceSettings, STAGE_WIDTH, STAGE_HEIGHT } = await import("../scripts/live-host/setupObs");
-    const settings = stageSourceSettings(8790);
+    const settings = stageSourceSettings(8790, "youtube");
     expect(settings.url).toBe("http://127.0.0.1:8790/");
+    expect(stageSourceSettings(8790, "tiktok").url).toBe("http://127.0.0.1:8790/?safe=tiktok");
+    expect(stageSourceSettings(8790, "").url).toBe("http://127.0.0.1:8790/?safe=tiktok");
     expect([settings.width, settings.height]).toEqual([STAGE_WIDTH, STAGE_HEIGHT]);
     expect(settings.reroute_audio).toBe(true);
   });

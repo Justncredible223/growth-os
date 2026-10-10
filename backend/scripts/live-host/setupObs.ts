@@ -18,9 +18,14 @@ export const OBS_SOURCE_NAME = "Tilt Stage";
 export const STAGE_WIDTH = 1080;
 export const STAGE_HEIGHT = 1920;
 
-export function stageSourceSettings(port: number): Record<string, unknown> {
+/** The stage address. Anything but a YouTube-only stream uses the TikTok-safe layout, which is fine on YouTube too. */
+export function stageUrl(port: number, platform: string = process.env.LIVE_HOST_PLATFORM ?? ""): string {
+  return `http://127.0.0.1:${port}/${platform.toLowerCase() === "youtube" ? "" : "?safe=tiktok"}`;
+}
+
+export function stageSourceSettings(port: number, platform?: string): Record<string, unknown> {
   return {
-    url: `http://127.0.0.1:${port}/`,
+    url: stageUrl(port, platform),
     width: STAGE_WIDTH,
     height: STAGE_HEIGHT,
     fps: 30,

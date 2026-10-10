@@ -250,3 +250,12 @@ describe("never suggests spending money (owner rule)", () => {
   });
 });
 
+describe("first real stream regressions", () => {
+  it("two lines in a row may not start with the same two words", () => {
+    const after = (previousLine: string) => ({ fillbookMentionAllowed: true, previousLine });
+    expect(checkSpokenLine("Time for the Eval Graveyard. Classic headstone.", after("Time for the Tilt-o-Meter. Here is the scenario."))).toMatch(/starts with "time for" again/);
+    expect(checkSpokenLine("Classic headstone: trader sizes up to get back to even.", after("Time for the Tilt-o-Meter. Here is the scenario."))).toBeNull();
+    expect(checkSpokenLine("Mike, welcome in.", after("Dana, good to see you."))).toBeNull();
+  });
+});
+

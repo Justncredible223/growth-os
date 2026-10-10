@@ -305,6 +305,13 @@ export function checkSpokenLine(text: string, context: SpokenLineContext): strin
     return "names the website, which is not allowed on this stream (say the link is in the bio instead)";
   }
 
+  // Heard on the first real stream: three segments running opened "Time for the ...". Two lines in a row may not
+  // start with the same two words, whatever they are (a viewer's name followed by a comma does not count).
+  const firstTwo = (value: string) => value.trim().toLowerCase().replace(/[^a-z' ]+/g, " ").split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
+  if (context.previousLine && firstTwo(line).split(" ").length === 2 && firstTwo(line) === firstTwo(context.previousLine)) {
+    return `starts with "${firstTwo(line)}" again, the same way the previous line started`;
+  }
+
   const opener = fillerOpener(line);
   if (opener && context.previousLine && fillerOpener(context.previousLine) === opener) {
     return `opens with "${opener}" again, the same way the previous line opened`;
