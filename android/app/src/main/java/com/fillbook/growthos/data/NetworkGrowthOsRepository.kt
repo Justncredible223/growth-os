@@ -449,6 +449,11 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=live-host", JSONObject().put("action", "update-settings").put("settings", settings))
     }
 
+    override suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String) {
+        val settings = JSONObject().put("tiktokChatEnabled", enabled).put("tiktokUsername", username.trim())
+        post("/api/approvals?resource=live-host", JSONObject().put("action", "update-settings").put("settings", settings))
+    }
+
     override suspend fun handOffAsset(campaignAssetId: String): HandOffResult {
         val body = JSONObject().put("action", "hand-off").put("campaignAssetId", campaignAssetId)
         val json = post("/api/approvals", body)

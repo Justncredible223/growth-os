@@ -616,6 +616,9 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
     segment = nextSegment(session.lastSegment, spotDue);
   }
   const fillbookMentionAllowed = askedDirectly || segment?.isFillbookSpot === true || recentMentions < PROMO_MAX_MENTIONS;
+  // TikTok chat on means the stream is on TikTok, where sending viewers off-platform is a LIVE violation.
+  const linkInBio = settings.tiktokChatEnabled;
+  const previousLine = recentUtterances[0]?.spokenText ?? null;
 
   // Who has spoken before in this session, to welcome first-timers by name.
   const authorCounts = new Map<string, number>();
@@ -652,13 +655,13 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, retryFeedback }, grounding);
-        let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed });
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, retryFeedback }, grounding);
+        let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0) {
           const violations = await brandConstitution.checkVocabulary(draft.reply);
           if (violations[0]) problem = `breaks a brand rule (uses "${violations[0].matchedPhrase}")`;
         }
-        if (!problem && draft.card && [draft.card.title, ...draft.card.lines].some((text) => checkSpokenLine(text, { fillbookMentionAllowed: true }) !== null)) {
+        if (!problem && draft.card && [draft.card.title, ...draft.card.lines].some((text) => checkSpokenLine(text, { fillbookMentionAllowed: true, websiteMentionAllowed: !linkInBio }) !== null)) {
           problem = "has an on-screen card with text that fails the same checks as the spoken line";
         }
         verdicts.set(draft, problem);

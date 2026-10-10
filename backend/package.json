@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "video:render": "tsx scripts/video-factory/index.ts",
     "live-host": "tsx --env-file-if-exists=.env.local scripts/live-host/worker.ts",
-    "live-host:setup-obs": "tsx --env-file-if-exists=.env.local scripts/live-host/setupObs.ts"
+    "live-host:setup-obs": "tsx --env-file-if-exists=.env.local scripts/live-host/setupObs.ts",
+    "live-host:install-tiktok-reader": "npm install --no-save --no-audit --no-fund tiktok-live-connector"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",

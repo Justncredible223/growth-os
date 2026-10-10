@@ -104,6 +104,10 @@ fun LiveHostScreen(repo: GrowthOsRepository) {
     var youtubeDraft by remember { mutableStateOf("") }
     var youtubeTouched by remember { mutableStateOf(false) }
     var savingYoutube by remember { mutableStateOf(false) }
+    var tiktokDraft by remember { mutableStateOf("") }
+    var tiktokTouched by remember { mutableStateOf(false) }
+    var savingTiktok by remember { mutableStateOf(false) }
+    var showTiktokConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -111,6 +115,7 @@ fun LiveHostScreen(repo: GrowthOsRepository) {
             val fresh = repo.getLiveHostStatus()
             status = fresh
             if (!youtubeTouched) youtubeDraft = fresh.settings?.youtubeVideoId ?: ""
+            if (!tiktokTouched) tiktokDraft = fresh.settings?.tiktokUsername ?: ""
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = authErrorMessage(e) ?: "Couldn't load the Live Host. Check your connection and try again."
@@ -147,6 +152,23 @@ fun LiveHostScreen(repo: GrowthOsRepository) {
                 actionError = authErrorMessage(e) ?: "That doesn't look like a YouTube video link. Paste the link to your live stream."
             } finally {
                 savingYoutube = false
+            }
+        }
+    }
+
+    fun setTiktokChat(enabled: Boolean) {
+        if (savingTiktok) return
+        scope.launch {
+            savingTiktok = true
+            try {
+                repo.setLiveHostTiktokChat(enabled, tiktokDraft)
+                tiktokTouched = false
+                actionError = null
+                refresh()
+            } catch (e: Exception) {
+                actionError = authErrorMessage(e) ?: "Couldn't save TikTok chat. Check the username (letters, numbers, dots and underscores) and try again."
+            } finally {
+                savingTiktok = false
             }
         }
     }
@@ -233,6 +255,15 @@ fun LiveHostScreen(repo: GrowthOsRepository) {
                                 onSave = ::saveYoutube,
                             )
                         }
+                        item {
+                            TiktokCard(
+                                enabled = current.settings?.tiktokChatEnabled == true,
+                                username = tiktokDraft,
+                                saving = savingTiktok,
+                                onUsernameChange = { tiktokDraft = it; tiktokTouched = true },
+                                onToggle = { if (current.settings?.tiktokChatEnabled == true) setTiktokChat(false) else showTiktokConfirm = true },
+                            )
+                        }
                         item { SectionHeader(if (current.session != null) "This stream" else "Last stream") }
                         if (current.feed.isEmpty()) {
                             item {
@@ -250,6 +281,21 @@ fun LiveHostScreen(repo: GrowthOsRepository) {
                 }
             }
         }
+    }
+
+    if (showTiktokConfirm) {
+        AlertDialog(
+            onDismissRequest = { showTiktokConfirm = false },
+            title = { Text("Read TikTok chat?") },
+            text = {
+                Text(
+                    "TikTok has no official way to read LIVE chat, so this uses an unofficial reader on your PC. It only listens and never posts, " +
+                        "but it is outside TikTok's terms and can stop working without warning. While it is on, the host says \"link in bio\" instead of the website.",
+                )
+            },
+            confirmButton = { TextButton(onClick = { showTiktokConfirm = false; setTiktokChat(true) }) { Text("Turn on") } },
+            dismissButton = { TextButton(onClick = { showTiktokConfirm = false }) { Text("Cancel") } },
+        )
     }
 
     if (showGoLiveConfirm) {
@@ -353,6 +399,41 @@ private fun YoutubeCard(value: String, saved: String?, saving: Boolean, onChange
         )
         Spacer(Modifier.height(8.dp))
         PrimaryButton(if (value.isBlank() && saved != null) "Clear" else "Save", onClick = onSave, enabled = value.trim() != (saved ?: ""), busy = saving)
+    }
+}
+
+@Composable
+private fun TiktokCard(enabled: Boolean, username: String, saving: Boolean, onUsernameChange: (String) -> Unit, onToggle: () -> Unit) {
+    GrowthCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("TikTok chat", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    when {
+                        saving -> "Updating..."
+                        enabled -> "On: reading chat through the unofficial reader. The host says \"link in bio\"."
+                        else -> "Off. Uses an unofficial reader on your PC; you choose whether to turn it on."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextTertiary,
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = { onToggle() },
+                enabled = !saving && (enabled || username.isNotBlank()),
+                modifier = Modifier.semantics { contentDescription = if (enabled) "TikTok chat, on" else "TikTok chat, off" },
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = username,
+            onValueChange = onUsernameChange,
+            singleLine = true,
+            enabled = !enabled,
+            label = { Text("TikTok username") },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

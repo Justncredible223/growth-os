@@ -124,6 +124,8 @@ interface GrowthOsRepository {
     suspend fun setLiveHostSwitch(on: Boolean)
     /** The YouTube live stream whose chat the host reads. Accepts a link or an id; blank clears it. */
     suspend fun setLiveHostYoutubeVideo(linkOrId: String)
+    /** Turns TikTok LIVE chat reading on or off, for the given TikTok username. Owner-only, like the switch. */
+    suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String)
 
     /** The active Inbound Engagement Queue -- everything not yet resolved (new/needs_response/draft_ready/follow_up/review_needed). */
     suspend fun getInboundQueue(): List<InboundEngagement>
@@ -520,7 +522,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun getLiveHostStatus(): LiveHostStatus = LiveHostStatus(
         configured = true,
         hostName = "Tilt",
-        settings = LiveHostSettings(switchedOn = false, youtubeVideoId = null, idleSeconds = 45, dailyBudgetUsd = 3.0),
+        settings = LiveHostSettings(switchedOn = false, youtubeVideoId = null, tiktokChatEnabled = false, tiktokUsername = null, idleSeconds = 45, dailyBudgetUsd = 3.0),
         systemPaused = false,
         session = null,
         lastSession = null,
@@ -534,6 +536,10 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun setLiveHostYoutubeVideo(linkOrId: String) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String) {
         // No backend to call in fake mode -- no-op.
     }
 

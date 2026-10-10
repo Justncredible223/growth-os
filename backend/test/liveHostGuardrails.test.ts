@@ -123,3 +123,21 @@ describe("nextSegment", () => {
     expect(nextSegment("fillbook_spot", false).id).toBe("cold_open");
   });
 });
+
+describe("TikTok and opener rules", () => {
+  it("rejects the website on a TikTok stream but allows pointing to the bio", () => {
+    const tiktok = { fillbookMentionAllowed: true, websiteMentionAllowed: false };
+    expect(checkSpokenLine("Fillbook is the journal I live in. It is at fillbookhq dot com.", tiktok)).toMatch(/TikTok/);
+    expect(checkSpokenLine("Fillbook is the journal I live in. It is at fillbookhq.com.", tiktok)).not.toBeNull();
+    expect(checkSpokenLine("Fillbook is the journal I live in. The link is in the bio.", tiktok)).toBeNull();
+    expect(checkSpokenLine("Fillbook is the journal I live in. It is at fillbookhq dot com.", open)).toBeNull();
+  });
+
+  it("rejects opening on the same filler word twice running, and nothing else", () => {
+    const after = (previousLine: string) => ({ fillbookMentionAllowed: true, previousLine });
+    expect(checkSpokenLine("Alright, trivia time.", after("Alright, let's fire up the Tilt-o-Meter."))).toMatch(/opens with "alright" again/);
+    expect(checkSpokenLine("Okay, trivia time.", after("Alright, let's fire up the Tilt-o-Meter."))).toBeNull();
+    expect(checkSpokenLine("Trivia time.", after("Alright, let's fire up the Tilt-o-Meter."))).toBeNull();
+    expect(checkSpokenLine("Mike, welcome in.", after("Mike, good to see you."))).toBeNull();
+  });
+});

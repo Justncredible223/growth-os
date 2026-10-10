@@ -164,10 +164,28 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.spokenText).not.toMatch(/fillbook/i);
 
     const asking = buildClient({ live_host_sessions: [{ ...session }], live_host_utterances: [{ ...priorPlug }] });
-    const llm2 = scriptedLlm([line("Jo, Fillbook is the trading journal I live in. It is at fillbookhq dot com.")]);
+    const llm2 = scriptedLlm([line("Jo, Fillbook is the trading journal I live in. The link is in the bio.")]);
     const asked = await runLiveHostTick(asSupabase(asking), { messages: [tiktokMessage("m2", "Jo", "what is Fillbook?")] }, { now: NOW, llmClient: llm2.client, youtube: null, grounding: GROUNDING });
     expect(asked.utterance?.spokenText).toMatch(/Fillbook/);
     expect(asking.tables.live_host_utterances!.at(-1)!.mentions_fillbook).toBe(true);
+  });
+
+  it("on a TikTok stream, rejects a line that names the website and accepts one that points to the bio", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("Jo, Fillbook is at fillbookhq dot com."), line("Jo, Fillbook is the journal I live in. The link is in the bio.")]);
+    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Jo", "what is Fillbook?")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.utterance?.spokenText).toContain("link is in the bio");
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("This stream is on TikTok");
+  });
+
+  it("off TikTok, the website may be said", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, youtube_video_id: null })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() }], live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }] });
+    const llm = scriptedLlm([line("Jo, Fillbook is the journal I live in. It is at fillbookhq dot com.")]);
+    const result = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.utterance?.spokenText).toContain("fillbookhq dot com");
   });
 
   it("runs a segment when chat is quiet, and waits out the quiet time first", async () => {
