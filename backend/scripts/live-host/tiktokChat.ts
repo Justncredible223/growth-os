@@ -136,7 +136,8 @@ export class TiktokChatReader {
       const library = (await import(packageName)) as Record<string, any>;
       const ConnectionClass = library.TikTokLiveConnection ?? library.WebcastPushConnection;
       if (!ConnectionClass) throw new Error("the installed tiktok-live-connector has no connection class this reader knows");
-      const connection = new ConnectionClass(username) as Connection;
+      // The options object is required: this library version reads fields from it without checking it exists.
+      const connection = new ConnectionClass(username, {}) as Connection;
       const events = (library.WebcastEvent ?? {}) as Record<string, string>;
 
       connection.on(events.CHAT ?? "chat", (data) => {
