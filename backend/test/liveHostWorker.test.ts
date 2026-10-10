@@ -114,3 +114,20 @@ describe("TikTok chat reader", () => {
     expect(reader.drain()).toHaveLength(0);
   });
 });
+
+describe("stage moves", () => {
+  it("recognises the move words in chat and nothing else", async () => {
+    const { moveWord } = await import("../scripts/live-host/worker");
+    expect(moveWord("DANCE")).toBe("dance");
+    expect(moveWord("tilt do a spin lol")).toBe("spin");
+    expect(moveWord("he's dancing")).toBe("dance");
+    expect(moveWord("how does trailing drawdown work")).toBeNull();
+    expect(moveWord("abundance of setups")).toBeNull();
+  });
+
+  it("the stage has every move the worker can send", () => {
+    const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "index.html"), "utf-8");
+    for (const name of ["dance", "spin", "jump", "moonwalk", "wave", "flex"]) expect(html).toMatch(new RegExp(`${name}: \\d+`));
+  });
+});
+

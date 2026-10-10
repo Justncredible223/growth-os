@@ -329,6 +329,44 @@
 
   function setMood(mood) { state.mood = MOODS[mood] ? mood : "neutral"; }
 
+  // ---- moves: short physical bits. Viewers trigger them from chat ("dance", "spin", "jump"), likes and gifts
+  // set them off, and he does one by himself now and then so the stage is never still.
+  const MOVES = { dance: 4200, spin: 1300, jump: 950, wave: 1600, shake: 1100, moonwalk: 3200, flex: 1800 };
+  let move = null; // { name, start }
+  function doMove(name) {
+    if (!MOVES[name]) return;
+    move = { name, start: performance.now() };
+    if (!current) setMood(name === "shake" ? "tilted" : name === "jump" ? "shocked" : "proud");
+  }
+  function moveOffsets(t) {
+    const none = { dx: 0, dy: 0, rot: 0, sx: 1, sy: 1, armL: 0, armR: 0 };
+    if (!move) return none;
+    const p = (t - move.start) / MOVES[move.name];
+    if (p >= 1) { move = null; if (!current) setMood("neutral"); return none; }
+    const ease = Math.sin(Math.PI * p); // in and out
+    const TAU = Math.PI * 2;
+    switch (move.name) {
+      case "dance": {
+        const beat = p * 8;
+        return { dx: Math.sin(beat * Math.PI) * 46 * ease, dy: -Math.abs(Math.sin(beat * TAU)) * 34 * ease, rot: Math.sin(beat * Math.PI) * 9 * ease, sx: 1, sy: 1 + Math.abs(Math.sin(beat * TAU)) * 0.05, armL: Math.sin(beat * TAU) * 62 * ease, armR: Math.sin(beat * TAU + Math.PI) * 62 * ease };
+      }
+      case "spin":
+        return { ...none, sx: Math.cos(p * TAU * 2), dy: -ease * 20 };
+      case "jump":
+        return { ...none, dy: -Math.sin(Math.PI * p) * 190, sy: 1 + (p < 0.12 || p > 0.88 ? -0.12 : 0.06), armL: -ease * 70, armR: ease * 70 };
+      case "wave":
+        return { ...none, armR: -95 * ease + Math.sin(p * TAU * 5) * 22 * ease, rot: 3 * ease };
+      case "shake":
+        return { ...none, dx: Math.sin(p * TAU * 11) * 20 * ease, rot: Math.sin(p * TAU * 11) * 3 };
+      case "moonwalk":
+        return { ...none, dx: (0.5 - Math.abs(p - 0.5)) * 2 * -150, rot: -6 * ease, dy: -Math.abs(Math.sin(p * TAU * 5)) * 10, armL: Math.sin(p * TAU * 5) * 30, armR: -Math.sin(p * TAU * 5) * 30 };
+      case "flex":
+        return { ...none, armL: 100 * ease, armR: -100 * ease, sx: 1 + 0.08 * ease, dy: -10 * ease };
+      default:
+        return none;
+    }
+  }
+
   function drawTilt(t, dt) {
     const target = MOODS[state.mood];
     const k = Math.min(1, dt * 0.006);
@@ -343,13 +381,14 @@
     const talk = state.mouthOpen;
     const squash = 1 + talk * 0.018;
     const lean = Math.sin(t / 1700) * 1.6 + (state.talking ? Math.sin(t / 260) * 1.1 : 0) + (state.mood === "tilted" ? Math.sin(t / 55) * 0.8 : 0);
-    $("rig").setAttribute("transform", `translate(380 ${440 + bob}) rotate(${lean}) scale(${1 / squash} ${squash}) translate(-380 -440)`);
+    const mv = moveOffsets(t);
+    $("rig").setAttribute("transform", `translate(${380 + mv.dx} ${440 + bob + mv.dy}) rotate(${lean + mv.rot}) scale(${(mv.sx / squash).toFixed(3)} ${(squash * mv.sy).toFixed(3)}) translate(-380 -440)`);
     $("floor").style.transform = `scale(${1 - bob / 160})`;
 
     // arms: gentle sway, bigger while talking
     const arm = Math.sin(t / 620) * (state.talking ? 13 : 5);
-    $("armL").setAttribute("transform", `rotate(${arm + state.gesture * 26} 214 470)`);
-    $("armR").setAttribute("transform", `rotate(${-arm * 0.8 - state.gesture * 34} 546 470)`);
+    $("armL").setAttribute("transform", `rotate(${arm + state.gesture * 26 + mv.armL} 214 470)`);
+    $("armR").setAttribute("transform", `rotate(${-arm * 0.8 - state.gesture * 34 + mv.armR} 546 470)`);
     state.gesture = lerp(state.gesture, 0, Math.min(1, dt * 0.004));
 
     // blink
@@ -564,12 +603,14 @@
     setMood("neutral");
     clearProps(); setSegment(null); $("caption").textContent = "";
   }
-  window.tiltStage = { speak, setMood, silence };
+  window.tiltStage = { speak, setMood, silence, doMove };
 
   // ---- the hook (shown only while he is not speaking) ----
   // Each line is something a viewer can answer in a word or two. None of them asks for or offers advice.
   const HOOKS = [
+    "Type <em>DANCE</em> and watch what happens.",
     "Type your <em>worst trade</em> this week. I'll roast it.",
+    "Type <em>SPIN</em>, <em>JUMP</em> or <em>MOONWALK</em>.",
     "Say <em>hi</em> in chat. I'll answer you by name.",
     "<em>Eval</em> or <em>funded</em>? Type one word.",
     "How <em>tilted</em> are you today? 1 to 10.",
@@ -580,6 +621,7 @@
   ];
   let hookIndex = Math.floor(Math.random() * HOOKS.length);
   let hookSince = 0;
+  let lastAutoMove = 0, nextAutoMoveIn = 6000;
   function updateHook(t) {
     const idle = !current && !DEMO_SILENT;
     const hook = $("hook");
@@ -590,8 +632,12 @@
     }
     hook.classList.toggle("show", idle);
     document.body.classList.toggle("hooked", idle);
-    // A small wave now and then so an idle stage never looks frozen.
-    if (idle && Math.random() < 1 / 420) state.gesture = 1;
+    // Every so often he does a move by himself, so an idle stage is never still.
+    if (idle && !move && t - lastAutoMove > nextAutoMoveIn) {
+      const names = ["dance", "wave", "spin", "moonwalk", "flex", "jump"];
+      doMove(names[Math.floor(Math.random() * names.length)]);
+      lastAutoMove = t; nextAutoMoveIn = 9000 + Math.random() * 9000;
+    }
   }
 
   // ---- main loop ----
@@ -630,7 +676,7 @@
     ];
     let i = 0;
     const next = () => { const line = script[i % script.length]; i++; speak({ id: "demo-" + i, ...line }); };
-    document.addEventListener("line-finished", () => setTimeout(next, 3200));
+    document.addEventListener("line-finished", () => { setTimeout(() => doMove("dance"), 600); setTimeout(next, 5600); });
     setTimeout(next, 900);
   } else {
     const offline = $("offline");
@@ -639,6 +685,7 @@
       events.onopen = () => offline.classList.remove("show");
       events.onerror = () => { offline.classList.add("show"); };
       events.addEventListener("speak", (event) => { offline.classList.remove("show"); speak(JSON.parse(event.data)); });
+      events.addEventListener("move", (event) => { doMove(JSON.parse(event.data).name); });
       events.addEventListener("state", (event) => {
         const data = JSON.parse(event.data);
         offline.classList.toggle("show", data.live !== true);

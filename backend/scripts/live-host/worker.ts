@@ -113,6 +113,14 @@ function log(line: string): void {
   console.log(`[${new Date().toISOString().slice(11, 19)}] ${line}`);
 }
 
+/** The move a chat message asks for, if it is one of the move words ("dance", "spin", "jump", "moonwalk", "wave", "flex"). */
+export function moveWord(body: string): string | null {
+  const match = /\b(dance|dancing|spin|jump|moonwalk|wave|flex)\b/i.exec(body);
+  if (!match) return null;
+  const word = match[1]!.toLowerCase();
+  return word === "dancing" ? "dance" : word;
+}
+
 /** What the voice is given: the brand name respelled so it is pronounced correctly, "dot com" left as written. */
 export function prepareSpeechText(spokenText: string): string {
   return respellFillbookForTts(spokenText).replace(/\s+/g, " ").trim();
@@ -281,6 +289,16 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   // TikTok chat, read only while the owner has it switched on (see tiktokChat.ts for what that involves).
   const tiktok = new TiktokChatReader(log);
 
+  // Moves: instant, physical reactions on the stage. No model call and nothing spoken, so a viewer who types
+  // "dance" sees it happen within a second or two. At most one every two seconds.
+  let lastMoveAt = 0;
+  const sendMove = (name: string) => {
+    if (Date.now() - lastMoveAt < 2_000) return;
+    lastMoveAt = Date.now();
+    broadcast("move", { name });
+  };
+  tiktok.onReaction = (kind) => sendMove(kind === "gift" ? "dance" : kind === "follow" ? "flex" : kind === "share" ? "spin" : "jump");
+
   let lastNote: string | null = null;
   let ticksSinceStreamCheck = 0;
   /** When this worker last saw a viewer join or chat. Zero means nobody yet. */
@@ -292,6 +310,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   async function tick(): Promise<void> {
     await reviveStage();
     const messages = tiktok.drain();
+    for (const message of messages) {
+      const word = moveWord(message.body);
+      if (word) sendMove(word);
+    }
     const joins = speaking === null ? tiktok.recentJoins() : [];
     if (messages.length > 0 || joins.length > 0) lastAudienceAt = Date.now();
     // Owner rule: no talking to an empty room. On TikTok this worker sees every join and message itself, so it

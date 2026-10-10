@@ -84,6 +84,12 @@ export class TiktokChatReader {
   private readonly buffer: TiktokChatMessage[] = [];
   private joins: Array<{ name: string; at: number }> = [];
 
+  /**
+   * Called for things viewers do that the stage reacts to at once, with no model call: a like, a gift, a
+   * follow, or a chat message that is one of the move words. Nothing is sent to TikTok.
+   */
+  onReaction: (kind: "like" | "gift" | "follow" | "share") => void = () => {};
+
   constructor(private log: (line: string) => void = () => {}) {}
 
   get connected(): boolean {
@@ -147,6 +153,10 @@ export class TiktokChatReader {
         if (this.buffer.length > MAX_BUFFERED) this.buffer.splice(0, this.buffer.length - MAX_BUFFERED);
       });
       connection.on(events.MEMBER ?? "member", (data) => this.noteJoin(joinerName(data)));
+      connection.on(events.LIKE ?? "like", () => this.onReaction("like"));
+      connection.on(events.GIFT ?? "gift", () => this.onReaction("gift"));
+      connection.on(events.FOLLOW ?? "follow", () => this.onReaction("follow"));
+      connection.on(events.SHARE ?? "share", () => this.onReaction("share"));
       // Without a listener, an "error" event from the library would crash the whole worker.
       connection.on("error", (data) => this.log(`TikTok chat: ${String((data as { info?: unknown })?.info ?? "connection error").slice(0, 160)}`));
       const dropped = () => {
