@@ -131,8 +131,8 @@ A candidate whose author has ≥2,000 followers is flagged
 `creator_candidate: true` on discovery (a simple threshold, not a vetting
 judgment) and shown in the app as a badge. Nothing is auto-inserted into
 `creators` — the table's existing manual-curation model (readiness score
-only advances alongside a logged, confirmed interaction, per
-`creatorNetwork.ts`) is left untouched. The flag is purely a "consider
+only advances alongside a logged, confirmed interaction)
+is left untouched. The flag is purely a "consider
 this for the Creators tab" signal for the owner.
 
 ## Attribution

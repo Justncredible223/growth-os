@@ -2156,8 +2156,7 @@ function openingOnlyVariant(base: ScenePlan, spec: OpeningOnlySpec): ScenePlan {
 }
 
 /**
- * The three "variant 2" openings actually used for the six finished previews (see
- * generateEvidenceDeliverables.ts and SHORTFORM_EVIDENCE_REPORT.md): a concrete comparison or
+ * The three "variant 2" openings actually used for the six finished previews: a concrete comparison or
  * question, reusing already-authored/reviewed hook copy, with scenes 2-4 identical to the base
  * pilot. Paired against PILOT_1/PILOT_2/PILOT_3 themselves as "variant 1" (direct statement).
  */

@@ -4,7 +4,7 @@ import type { Platform, Rect, SceneSpec, VerifiedAsset } from "./types.js";
 /**
  * Pure builders for the LOCAL preview render: where the screenshot lands on the 1080x1920 canvas, where
  * masks go, the subtitle file that draws the text, and the ffmpeg filter graph. No I/O and no ffmpeg calls
- * here; scripts/video-factory/previewPlans.ts runs them. Text is drawn with ASS subtitles, not drawtext,
+ * here. Text is drawn with ASS subtitles, not drawtext,
  * because drawtext segfaults on this project's ffmpeg build.
  */
 

@@ -64,7 +64,7 @@ export interface PartnershipProspect {
   /** 0-100 ranking score computed at discovery time by discoveryScoring.ts -- null for manually entered prospects. */
   discoveryScore: number | null;
   discoveryConfidence: "low" | "medium" | "high" | null;
-  /** Set only by automated reassessment (see recommendationReassessment.ts) -- null means not suppressed. Distinct from and never overrides owner-driven 'archived'/'do_not_contact' stages. Reversible. */
+  /** Set only by automated reassessment -- null means not suppressed. Distinct from and never overrides owner-driven 'archived'/'do_not_contact' stages. Reversible. */
   suppressedReason: string | null;
   /** 'manual' for owner-entered prospects; otherwise which discovery source found this one. Never overwritten after creation. */
   discoveredVia: "manual" | "creators" | "prospecting" | "inbound" | "x_search";
@@ -111,7 +111,7 @@ export interface PartnershipRepository {
   /** The ONLY path that changes `stage` -- always paired with an interaction row so history and stage never drift apart. */
   transitionStage(id: string, toStage: PartnershipStage, interaction: { interactionType: PartnershipInteractionType; summary: string }): Promise<PartnershipProspect>;
   setApprovedDraft(id: string, campaignAssetId: string | null): Promise<void>;
-  /** Reversible, system-driven only -- see recommendationReassessment.ts. Pass null to un-suppress. */
+  /** Reversible, system-driven only. Pass null to un-suppress. */
   setSuppressedReason(id: string, reason: string | null): Promise<void>;
   recordContact(id: string, channel: string, contactedAt: string): Promise<void>;
   insertInteraction(partnershipId: string, interactionType: PartnershipInteractionType, summary: string): Promise<PartnershipInteraction>;

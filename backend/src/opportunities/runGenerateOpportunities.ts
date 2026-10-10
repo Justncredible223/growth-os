@@ -29,9 +29,9 @@ interface SignalRow {
 }
 
 /**
- * Shared by the manual POST /api/generate-opportunities endpoint and the
- * scheduled daily-pipeline cron job, so there's exactly one place that
- * knows how to turn recent signal rows into real Opportunity rows.
+ * Used by the scheduled daily-pipeline cron job (api/daily-pipeline.ts), so
+ * there's exactly one place that knows how to turn recent signal rows into
+ * real Opportunity rows.
  */
 export async function runGenerateOpportunities(client: SupabaseClient): Promise<GenerateOpportunitiesResult> {
   const repo = new SupabaseOpportunityRepository(client);

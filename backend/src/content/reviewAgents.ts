@@ -24,7 +24,7 @@ export interface ReviewContext {
   platform: string;
   /** Rendered brand-voice/prohibited-vocabulary rules, from BrandConstitution.getActiveRules(). */
   brandRulesSummary: string;
-  /** Rendered verified knowledge_documents content for the topic, from KnowledgeBrain.requireVerifiedKnowledge(). Empty if the content makes no factual product claims. */
+  /** Rendered verified knowledge_documents content for the topic. Empty if the content makes no factual product claims. */
   verifiedKnowledgeSummary: string;
   /**
    * True when this candidate is a reply to a real X mention (opportunity
