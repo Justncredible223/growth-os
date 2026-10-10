@@ -7,7 +7,7 @@ import { classifyPriority } from "./inboundClassifier.js";
 export const INBOUND_CURSOR_SOURCE = "x_mention_inbound";
 
 export interface IngestInboundDeps {
-  adapter: XSignalAdapter;
+  adapter: Pick<XSignalAdapter, "fetchOwnMentions">;
   repo: InboundRepository;
   /** Resolves a handle to a tracked creator's id, if any -- links relationship context without this module depending on the creators module's repository shape. */
   findCreatorIdByHandle: (handle: string) => Promise<string | null>;
