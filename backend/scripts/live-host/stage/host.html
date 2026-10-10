@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilt co-host console</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --text:#e8eaf0; --mute:#8b93a5; --accent:#f5a524; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:15px/1.4 system-ui, sans-serif; max-width:640px; margin-inline:auto; }
+  h1 { font-size:17px; margin:0 0 4px; }
+  p.sub { margin:0 0 14px; color:var(--mute); }
+  .status { display:inline-block; padding:2px 8px; border-radius:99px; background:var(--card); border:1px solid var(--line); font-size:12px; color:var(--mute); }
+  .status.on { color:#4ade80; border-color:#14532d; }
+  form { display:grid; gap:8px; margin:12px 0; }
+  textarea, input { width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; }
+  textarea { min-height:72px; resize:vertical; }
+  .row { display:flex; gap:8px; }
+  button { padding:10px 16px; border-radius:8px; border:0; background:var(--accent); color:#1a1200; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .log { display:grid; gap:6px; margin-top:14px; }
+  .item { padding:8px 10px; border-radius:8px; background:var(--card); border:1px solid var(--line); }
+  .item .who { font-size:12px; color:var(--mute); }
+  .item.tilt { border-left:3px solid var(--accent); }
+  .err { color:#f87171; min-height:1.2em; font-size:13px; }
+</style>
+</head>
+<body>
+  <h1>Tilt co-host console</h1>
+  <p class="sub">Type what you want Tilt to answer. He only speaks when you send something. <span id="status" class="status">connecting</span></p>
+
+  <form id="form">
+    <textarea id="text" maxlength="400" placeholder="Say something to Tilt, or paste a viewer's question below" autofocus></textarea>
+    <input id="from" maxlength="40" placeholder="Viewer's name (only when relaying a viewer's question)">
+    <div class="row"><button id="send" type="submit">Send to Tilt</button></div>
+    <div id="err" class="err" role="status"></div>
+  </form>
+
+  <div id="log" class="log"></div>
+
+<script>
+  var statusEl = document.getElementById("status");
+  var logEl = document.getElementById("log");
+  var errEl = document.getElementById("err");
+  var textEl = document.getElementById("text");
+  var fromEl = document.getElementById("from");
+  var sendEl = document.getElementById("send");
+
+  function addItem(cls, who, text) {
+    var item = document.createElement("div");
+    item.className = "item " + cls;
+    var w = document.createElement("div");
+    w.className = "who";
+    w.textContent = who;
+    var t = document.createElement("div");
+    t.textContent = text;
+    item.appendChild(w);
+    item.appendChild(t);
+    logEl.insertBefore(item, logEl.firstChild);
+    while (logEl.children.length > 30) logEl.removeChild(logEl.lastChild);
+  }
+
+  document.getElementById("form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var text = textEl.value.trim();
+    if (!text) return;
+    var from = fromEl.value.trim();
+    sendEl.disabled = true;
+    errEl.textContent = "";
+    fetch("/ask", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-live-host": "1" },
+      body: JSON.stringify(from ? { text: text, relayedFrom: from } : { text: text })
+    }).then(function (res) {
+      if (res.status === 202) {
+        addItem("", from ? "You, relaying " + from : "You", text);
+        textEl.value = "";
+        textEl.focus();
+      } else if (res.status === 429) {
+        errEl.textContent = "Tilt has a queue already. Give him a moment.";
+      } else {
+        errEl.textContent = "Could not send (HTTP " + res.status + ").";
+      }
+    }).catch(function () {
+      errEl.textContent = "Could not reach the worker. Is npm run live-host running?";
+    }).then(function () { sendEl.disabled = false; });
+  });
+
+  textEl.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById("form").requestSubmit();
+    }
+  });
+
+  var source = new EventSource("/host-events");
+  source.addEventListener("state", function (event) {
+    var data = JSON.parse(event.data);
+    statusEl.textContent = data.live ? "Tilt is live" : "Tilt is off (switch it on in the app)";
+    statusEl.className = "status" + (data.live ? " on" : "");
+  });
+  source.addEventListener("speak", function (event) {
+    var data = JSON.parse(event.data);
+    addItem("tilt", "Tilt", data.spokenText);
+  });
+  source.onerror = function () { statusEl.textContent = "reconnecting"; statusEl.className = "status"; };
+</script>
+</body>
+</html>

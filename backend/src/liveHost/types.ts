@@ -72,3 +72,12 @@ export interface IncomingChatMessage {
   body: string;
   receivedAt?: string;
 }
+
+/**
+ * Duo mode (TikTok): the owner is on camera next to Tilt and types what Tilt should react to. Those rows are
+ * stored with these external-id prefixes so the server can tell the co-host apart from a viewer. The prefixes
+ * are reserved: chat read from a platform that carries one is dropped.
+ */
+export const DUO_HOST_ID_PREFIX = "duo-host-";
+/** A viewer question the owner typed in to relay (read in TikTok's own chat). Treated as a viewer message. */
+export const DUO_RELAY_ID_PREFIX = "duo-relay-";

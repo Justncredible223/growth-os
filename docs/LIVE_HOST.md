@@ -198,3 +198,32 @@ regression test in `backend/test/liveHost*.test.ts`.
 - Settings for quiet time and daily budget in the app (the API accepts
   them; the tab only edits the YouTube link).
 - Viewer-triggered reactions (gifts, likes) and polls.
+
+## Duo mode (TikTok co-host)
+
+TikTok wants a real person present and interacting in a LIVE. Duo mode runs Tilt as a co-host next to you instead
+of as a solo, automated host. YouTube stays fully automated; duo mode is for TikTok.
+
+**How it works**
+
+- You are on camera (OBS scene: your camera on one half, the Tilt stage Browser Source on the other, one output).
+- You read TikTok chat yourself, in TikTok's app or LIVE Studio.
+- You type prompts for Tilt at `http://127.0.0.1:8790/host` (the worker serves it, local only). Two ways to use it:
+  - say something to Tilt directly ("Tilt, explain trailing drawdown to them"), and he answers you like a co-host;
+  - paste a viewer's question into the box and put their name in "Viewer's name": Tilt answers it for that viewer.
+- Tilt speaks only when you send something. No idle segments, no unprompted welcomes, no spoken line without a
+  prompt. The same screening, safety checks, owner switch and firewall rule apply to what you type as to chat.
+
+**Run it**
+
+```
+LIVE_HOST_MODE=duo LIVE_HOST_PLATFORM=tiktok LIVE_HOST_COHOST_NAME=Justin npm run live-host
+```
+
+(`LIVE_HOST_COHOST_NAME` is what Tilt calls you on stream; default `Host`.) TikTok chat reading in the app can stay
+off: duo mode does not need it. No server or database change is required beyond the Live Host migration.
+
+**Limits**
+
+- Typed prompts only for now (no speech-to-text). One prompt at a time is best; at most 10 wait in the queue.
+- Keep the on-screen "AI HOST" label and use TikTok's AI-generated content disclosure if it applies.
