@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createLlmClient, type LlmClient } from "../content/llmClient.js";
+import { MODEL_HAIKU, createLlmClient, type LlmClient } from "../content/llmClient.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
 import { recordCostEvent } from "../cost/costTracking.js";
 import { authorizeLiveHostSpeechAndAudit, LiveHostSpeechRejectedError, type AuditSink } from "../firewall/externalWriteFirewall.js";
@@ -40,7 +40,12 @@ export const PROMO_WINDOW = 6;
 export const FILLBOOK_SPOT_EVERY_MS = 12 * 60_000;
 export const FILLBOOK_SPOT_NOT_BEFORE_MS = 4 * 60_000;
 /** Welcomes for viewers who just joined are spaced at least this far apart, so arrivals never crowd out the show. */
-export const JOIN_WELCOME_EVERY_MS = 40_000;
+export const JOIN_WELCOME_EVERY_MS = 12_000;
+/**
+ * On the first real stream viewers arrived and left within seconds. While someone is in the room the host
+ * does not leave long silences: the gap between his lines is capped at this, whatever the quiet-time setting.
+ */
+export const ENGAGED_GAP_MS = 18_000;
 /** Names said in one welcome; anyone beyond that is welcomed as "and N more". */
 export const JOIN_WELCOME_MAX_NAMES = 3;
 export const JOIN_WELCOME_SEGMENT = "join_welcome";
@@ -691,7 +696,8 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   let segment = null;
   if (batch.length === 0 && !joinWelcome) {
     const quietSince = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : 0;
-    if (now.getTime() - quietSince < settings.idleSeconds * 1000) return base;
+    const gapMs = input.audienceOnly ? Math.min(settings.idleSeconds * 1000, ENGAGED_GAP_MS) : settings.idleSeconds * 1000;
+    if (now.getTime() - quietSince < gapMs) return base;
     if (input.audienceOnly) {
       // Is anyone here? A join sent with this tick, a recent welcome, or a recent chat message all count.
       const { data: lastMessageRows } = await client.from("live_host_messages").select("received_at").eq("session_id", session.id).order("received_at", { ascending: false }).limit(1);
@@ -746,7 +752,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, retryFeedback }, grounding);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, retryFeedback }, grounding, joinWelcome ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0) {
           const violations = await brandConstitution.checkVocabulary(draft.reply);

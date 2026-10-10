@@ -118,6 +118,26 @@
   body.safe-tiktok .footer { bottom: auto; top: 1292px; font-size: 22px; left: 110px; right: 110px; }
   body.safe-tiktok .footer .fine { font-size: 19px; margin-top: 4px; }
 
+  /*
+   * The hook: what a viewer who just swiped in sees while Tilt is not speaking. One short, changing invitation
+   * to type something, large enough to read in a second. It hides the moment he starts a line.
+   */
+  .hook { position: absolute; left: 70px; right: 70px; top: 1490px; text-align: center; opacity: 0; transform: translateY(18px) scale(0.97); transition: opacity 0.35s ease, transform 0.45s cubic-bezier(.2, .9, .2, 1.15); pointer-events: none; }
+  .hook.show { opacity: 1; transform: none; }
+  .hook .label { display: inline-block; padding: 8px 20px; border-radius: 999px; background: var(--accent); color: #04121c; font-size: 24px; font-weight: 900; letter-spacing: 3px; animation: hookPulse 1.6s ease-in-out infinite; }
+  .hook .text { margin-top: 16px; font-size: 56px; line-height: 1.16; font-weight: 900; text-shadow: 0 4px 22px rgba(0, 0, 0, 0.85); }
+  .hook .text em { font-style: normal; color: var(--accent); }
+  .hook .arrow { margin-top: 12px; font-size: 44px; color: var(--accent); animation: hookBounce 1.1s ease-in-out infinite; }
+  @keyframes hookPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.55); } 50% { transform: scale(1.06); box-shadow: 0 0 0 16px rgba(34, 211, 238, 0); } }
+  @keyframes hookBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(12px); } }
+  body.safe-tiktok .hook { top: 1118px; left: 110px; right: 110px; }
+  body.safe-tiktok .hook .text { font-size: 48px; }
+  body.safe-tiktok .hook .label { font-size: 21px; }
+  body.safe-tiktok .hook .arrow { font-size: 38px; margin-top: 6px; }
+  /* While the hook is up, the small footer line would sit under it. */
+  body.safe-tiktok.hooked .footer { opacity: 0; }
+  .footer { transition: opacity 0.3s ease; }
+
   .offline { position: absolute; inset: 0; display: none; place-items: center; background: rgba(4, 8, 16, 0.86); text-align: center; font-size: 46px; font-weight: 800; }
   .offline.show { display: grid; }
   .offline small { display: block; margin-top: 14px; font-size: 28px; color: var(--ink2); font-weight: 600; }
@@ -221,6 +241,8 @@
 
     <div class="captions"><p id="caption"></p></div>
 
+    <div class="hook" id="hook"><span class="label">TILT ANSWERS OUT LOUD</span><div class="text" id="hookText"></div><div class="arrow">&#9660;</div></div>
+
     <div class="footer">
       <b>Ask anything in chat</b> &nbsp;·&nbsp; rules, drawdown, journaling, or confess a trade
       <span class="fine">Tilt is an AI character. Education and entertainment only, not financial advice.</span>
@@ -237,6 +259,7 @@
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const DEMO = params.has("demo");
+  const DEMO_SILENT = params.has("nohook");
   // ?safe=tiktok keeps everything clear of the TikTok app's own overlays (see the stylesheet).
   if (params.get("safe") === "tiktok") document.body.classList.add("safe-tiktok");
 
@@ -543,6 +566,34 @@
   }
   window.tiltStage = { speak, setMood, silence };
 
+  // ---- the hook (shown only while he is not speaking) ----
+  // Each line is something a viewer can answer in a word or two. None of them asks for or offers advice.
+  const HOOKS = [
+    "Type your <em>worst trade</em> this week. I'll roast it.",
+    "Say <em>hi</em> in chat. I'll answer you by name.",
+    "<em>Eval</em> or <em>funded</em>? Type one word.",
+    "How <em>tilted</em> are you today? 1 to 10.",
+    "<em>Micros</em> or <em>minis</em>?",
+    "Ask me anything about <em>prop firm rules</em>.",
+    "Moved your stop today? <em>Confess</em> in chat.",
+    "What do you trade: <em>NQ, ES, CL or GC</em>?",
+  ];
+  let hookIndex = Math.floor(Math.random() * HOOKS.length);
+  let hookSince = 0;
+  function updateHook(t) {
+    const idle = !current && !DEMO_SILENT;
+    const hook = $("hook");
+    if (idle && (!hook.classList.contains("show") || t - hookSince > 6500)) {
+      if (hook.classList.contains("show")) hookIndex = (hookIndex + 1) % HOOKS.length;
+      $("hookText").innerHTML = HOOKS[hookIndex];
+      hookSince = t;
+    }
+    hook.classList.toggle("show", idle);
+    document.body.classList.toggle("hooked", idle);
+    // A small wave now and then so an idle stage never looks frozen.
+    if (idle && Math.random() < 1 / 420) state.gesture = 1;
+  }
+
   // ---- main loop ----
   let last = performance.now();
   function frame(t) {
@@ -563,6 +614,7 @@
       }
       if (Math.random() < dt / 2600) state.gesture = 1;
     }
+    updateHook(t);
     drawTilt(t, dt);
   }
   requestAnimationFrame(frame);

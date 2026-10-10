@@ -137,7 +137,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
     lines.push("CHAT IS QUIET AND PEOPLE JUST JOINED. Welcome them in:");
     lines.push(`Names: ${request.joiners.join(", ")}${request.otherJoiners ? ` (and ${request.otherJoiners} more who joined with them)` : ""}`);
     lines.push(
-      "One or two spoken sentences. Say each name once, the way a host would. Say a name as a person would say it out loud: drop strings of numbers, underscores and symbols, and say the wordy part. " +
+      "ONE short spoken sentence of welcome plus one quick question, under 25 words in total, because they will leave if it takes long. Say each name once, the way a host would. Say a name as a person would say it out loud: drop strings of numbers, underscores and symbols, and say the wordy part. " +
         "If a name is hard to pronounce or you had to guess, take your best shot and joke that you probably butchered it; do that for at most one name, and be warm about it, never mocking the name itself. " +
         "If more joined than are named, welcome the rest together. Then give them one easy thing to type. Do not repeat a welcome line from the recent lines. Leave answeredMessageIds and skippedMessages empty.",
     );
@@ -207,7 +207,11 @@ export function normalizeLiveLine(raw: RawLine): LiveLineDraft {
 }
 
 /** One model call for one spoken line. Guardrails and the firewall are the caller's job (liveHostHandlers.ts). */
-export async function draftLiveLine(client: LlmClient, request: LiveLineRequest, grounding: LiveHostGrounding): Promise<LiveLineDraft> {
+/**
+ * `model` is only passed for join welcomes, which use the fast model: a greeting that arrives ten seconds after
+ * someone walked in is a greeting to someone who has already left.
+ */
+export async function draftLiveLine(client: LlmClient, request: LiveLineRequest, grounding: LiveHostGrounding, model?: string): Promise<LiveLineDraft> {
   const raw = await client.callTool<RawLine>(
     buildLiveHostSystemPrompt(grounding),
     buildLiveLineUserMessage(request),
@@ -215,7 +219,7 @@ export async function draftLiveLine(client: LlmClient, request: LiveLineRequest,
     LINE_SCHEMA,
     LIVE_DRAFT_TIMEOUT_MS,
     LIVE_DRAFT_MAX_TOKENS,
-    undefined,
+    model,
     true,
   );
   return normalizeLiveLine(raw);

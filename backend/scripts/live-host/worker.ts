@@ -38,7 +38,8 @@ const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py"
 export const LIVE_HOST_DEFAULT_VOICE = "en-US-AndrewNeural";
 /** Close to the voice's natural pace. +12% was tried first and the owner found the captions hard to follow (2026-10-09). */
 export const LIVE_HOST_DEFAULT_RATE = "+4%";
-const TICK_MS = 3_000;
+// Halved after the first real stream: three seconds of waiting before a joiner was even noticed was too slow.
+const TICK_MS = 1_500;
 const TTS_TIMEOUT_MS = 30_000;
 
 export interface WorkerConfig {
@@ -335,7 +336,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
         clearTimeout(speaking.timer);
         speaking = null;
       }
-    } else if (++ticksSinceStreamCheck >= 5) {
+    } else if (++ticksSinceStreamCheck >= 10) {
       // Every 15 seconds make sure OBS matches the switch. A stop that failed once (OBS busy, connection lost)
       // must not leave the broadcast running after the owner switched off.
       ticksSinceStreamCheck = 0;
