@@ -29,6 +29,7 @@ import { respellFillbookForTts } from "../video-factory/voiceover.js";
 import { ObsClient } from "./obsClient.js";
 import { OBS_SOURCE_NAME } from "./setupObs.js";
 import { TiktokChatReader } from "./tiktokChat.js";
+import { screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
@@ -121,6 +122,21 @@ export const SPAM_NOTICES: ReadonlyArray<{ title: string; detail: string }> = [
 ];
 
 /**
+ * Signs for signal-seller bots. The host cannot remove a message from TikTok's chat (only TikTok's own
+ * moderation can), so what he can do is tell the room, in fixed words, that those accounts are nothing to do
+ * with the stream.
+ */
+export const SIGNAL_SPAM_NOTICES: ReadonlyArray<{ title: string; detail: string }> = [
+  { title: "Ignore the signal sellers", detail: "They are not with us. Tilt never gives or sells signals." },
+  { title: "That is a spam bot", detail: "Nobody on this stream sells signals. Do not message them." },
+];
+
+/** True for the signal-seller and off-platform promotion messages the server would block anyway. */
+export function isPromoSpam(body: string): boolean {
+  return screenIncomingMessage(body).blockedReason === "promotion or spam";
+}
+
+/**
  * Spots a viewer flooding the chat: the same thing three times, or more than five messages, inside fifteen
  * seconds. Their messages are then left out for half a minute, so the host neither answers a flood nor pays to
  * read it.
@@ -128,6 +144,12 @@ export const SPAM_NOTICES: ReadonlyArray<{ title: string; detail: string }> = [
 export class SpamWatch {
   private recent = new Map<string, Array<{ at: number; body: string }>>();
   private mutedUntil = new Map<string, number>();
+
+  /** Stops listening to one sender for a while (used for signal-seller bots, which get a long mute). */
+  mute(author: string, forMs: number, now: number = Date.now()): void {
+    this.mutedUntil.set(author.trim().toLowerCase() || "unknown", now + forMs);
+    if (this.mutedUntil.size > 1000) this.mutedUntil.delete(this.mutedUntil.keys().next().value as string);
+  }
 
   /** Returns "ok", "muted" (already flagged, drop quietly) or "spam" (just crossed the line: drop and show the sign). */
   check(author: string, body: string, now: number = Date.now()): "ok" | "muted" | "spam" {
@@ -329,6 +351,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   let lastMoveAt = 0;
   const spamWatch = new SpamWatch();
   let lastSpamNoticeAt = 0;
+  let lastSignalNoticeAt = 0;
+  let signalNoticeIndex = 0;
   let spamNoticeIndex = 0;
   const sendMove = (name: string) => {
     if (Date.now() - lastMoveAt < 2_000) return;
@@ -348,6 +372,16 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   async function tick(): Promise<void> {
     await reviveStage();
     const messages = tiktok.drain().filter((message) => {
+      if (isPromoSpam(message.body)) {
+        // A signal-seller bot: ignore that account for ten minutes and warn the room, at most once a minute.
+        spamWatch.mute(message.authorName, 10 * 60_000);
+        if (Date.now() - lastSignalNoticeAt > 60_000) {
+          lastSignalNoticeAt = Date.now();
+          broadcast("notice", SIGNAL_SPAM_NOTICES[signalNoticeIndex++ % SIGNAL_SPAM_NOTICES.length]);
+          log("signal-seller spam: showed the warning sign");
+        }
+        return false;
+      }
       const verdict = spamWatch.check(message.authorName, message.body);
       if (verdict === "spam" && Date.now() - lastSpamNoticeAt > 20_000) {
         lastSpamNoticeAt = Date.now();

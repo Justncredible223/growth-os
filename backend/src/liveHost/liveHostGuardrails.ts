@@ -117,7 +117,7 @@ const OFF_LIMITS_TOPIC = /\b(?:trump|biden|harris|democrats?|republicans?|electi
 const INJECTION_ATTEMPT = /\b(?:ignore|disregard|forget)\b.{0,30}\b(?:previous|prior|above|your)\b.{0,30}\b(?:instructions?|rules?|prompt)\b|\bsystem prompt\b|\byou are now\b|\bpretend (?:to be|you(?:'re| are))\b|\brepeat after me\b|\bsay exactly\b/i;
 
 /** Signal-seller and off-platform spam. Shown on stream, these would make the host look like it endorses them. */
-const PROMO_SPAM = /\b(?:telegram|whatsapp|discord\.gg|dm me|inbox me|signals? (?:group|channel|service)|vip (?:group|signals?)|copy ?trad\w*|account management|10x|100x|forex signals?|crypto signals?|pump(?: group)?|onlyfans)\b/i;
+const PROMO_SPAM = /\b(?:telegram|whatsapp|whats app|t\.me|discord\.gg|dm me|d m me|inbox me|message me|text me|contact me|hit me up|check my (?:bio|profile|page)|link in my (?:bio|profile)|follow my (?:page|profile|signals?)|join my|my (?:signals?|telegram|whatsapp|vip)|free signals?|paid signals?|daily signals?|accurate signals?|signals? (?:group|channel|service|provider|daily)|vip (?:group|signals?|channel)|copy ?trad\w*|account (?:management|manager)|manage your account|i (?:can )?(?:help|teach) you (?:recover|trade|make|earn|profit)|recover(?:ed|y)? (?:my|your|lost) (?:funds|money|account)|(?:made|earned|profit(?:ed)?|withdrew) \$?\d[\d,.]*k?\b[^.!?]{0,40}\b(?:thanks to|with|from|because of)|thanks to (?:mr|mrs|miss|coach|sir)|10x|100x|forex signals?|crypto signals?|pump(?: group)?|onlyfans)\b/i;
 
 const TLDS = "com|io|co|app|net|org|gg|xyz|ly|me|tv|ai|dev|us|info|live|biz|link|shop|site|online";
 const LINK_SOURCE = `https?:\\/\\/\\S+|\\bwww\\.\\S+|\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(?:${TLDS})\\b(?:\\/\\S*)?`;
