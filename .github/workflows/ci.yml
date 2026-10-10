@@ -7,10 +7,18 @@ name: CI
 # public, and a workflow that ran a fork's code with secrets available would hand those secrets out.
 
 on:
+  # Only changes that can affect the backend (its code, tests, lock file, or this workflow) run the suite: an
+  # Android-only or docs-only PR has nothing here to test and used to install ffmpeg + Chromium for nothing.
   pull_request:
-  # Every merge to master is tested too, so master's status is visible without triggering it by hand.
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
+  # Every backend merge to master is tested too, so master's status is visible without triggering it by hand.
   push:
     branches: [master]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 permissions:
@@ -43,10 +51,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install edge-tts
-        run: pip install edge-tts
+        run: pip install --disable-pip-version-check edge-tts
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
 
       # The mock-slide tests render real slides in headless Chromium (they skip themselves where none is installed).
       - name: Install Chromium

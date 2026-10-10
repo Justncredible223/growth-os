@@ -34,8 +34,8 @@ name: Growth OS pulse (X, higher-than-daily)
 #
 #   America/Phoenix   UTC (fixed, no DST)   Workflow(s) triggered
 #   08:00             15:00                 X prospecting+inbound, Partnerships discovery, YouTube comments
-#   13:00             20:00                 X prospecting+inbound, Partnerships discovery, YouTube comments
-#   18:00             01:00 (next day)      X prospecting+inbound, Partnerships discovery, YouTube comments
+#   13:00             20:00                 X prospecting+inbound, YouTube comments
+#   18:00             01:00 (next day)      X prospecting+inbound, YouTube comments
 #
 # Each trigger calls POST /api/growth-pulse with explicit query flags
 # (`x`, `partnerships`) rather than letting the endpoint guess which
@@ -106,7 +106,13 @@ jobs:
             # sweep, and YouTube comment monitoring riding along on the
             # same slots.
             echo "x=true" >> "$GITHUB_OUTPUT"
-            echo "partnerships=true" >> "$GITHUB_OUTPUT"
+            # Partnerships discovery is gated to once per 7 days inside discovery.ts, so only the first slot of
+            # the day asks for it; the other two used to cost a pause check and a cadence lookup each, for nothing.
+            if [ "${{ github.event.schedule }}" = "0 15 * * *" ]; then
+              echo "partnerships=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "partnerships=false" >> "$GITHUB_OUTPUT"
+            fi
             echo "videoReconciliation=true" >> "$GITHUB_OUTPUT"
             echo "youtubeComments=true" >> "$GITHUB_OUTPUT"
             echo "results=true" >> "$GITHUB_OUTPUT"
