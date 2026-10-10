@@ -211,6 +211,8 @@ of as a solo, automated host. YouTube stays fully automated; duo mode is for Tik
 - You type prompts for Tilt at `http://127.0.0.1:8790/host` (the worker serves it, local only). Two ways to use it:
   - say something to Tilt directly ("Tilt, explain trailing drawdown to them"), and he answers you like a co-host;
   - paste a viewer's question into the box and put their name in "Viewer's name": Tilt answers it for that viewer.
+- **Quick prompts**: one-click chips (Tease me, Ask me something, Hype the room, Say it simpler, Hot take, Roast my
+  routine) send a ready-made prompt, so you don't have to type mid-stream.
 - **Run a segment** button: pick a segment (or leave it on "Next in rotation") and press the button to have Tilt
   run one right now, skipping the quiet-time wait. A typed prompt waiting goes first. The Fillbook spot is not
   offered; the server rations it.
@@ -228,5 +230,6 @@ off: duo mode does not need it. No server or database change is required beyond 
 
 **Limits**
 
+- Duo replies use the fast model and are capped at about 35 words, so the back and forth stays quick.
 - Typed prompts only for now (no speech-to-text). One prompt at a time is best; at most 10 wait in the queue.
 - Keep the on-screen "AI HOST" label and use TikTok's AI-generated content disclosure if it applies.

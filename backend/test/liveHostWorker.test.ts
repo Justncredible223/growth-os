@@ -67,6 +67,16 @@ describe("live host duo mode", () => {
     expect(duoSegmentChoices().map((choice) => choice.id)).not.toContain("fillbook_spot");
   });
 
+  it("offers quick prompts that go through the same /ask route as typed ones", () => {
+    const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
+    expect(html.match(/class="chip"/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
+    expect(html).toContain('data-text="Tilt, tease me');
+    // Quick prompts are plain text: nothing in them may name a trade, a firm or a link.
+    for (const match of html.matchAll(/data-text="([^"]+)"/g)) {
+      expect(match[1]).not.toMatch(/https?:|www\.|\.com|buy|sell|signal/i);
+    }
+  });
+
   it("ships a host page that loads nothing from the internet", () => {
     const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
