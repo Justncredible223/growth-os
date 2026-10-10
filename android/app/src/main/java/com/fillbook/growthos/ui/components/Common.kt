@@ -145,6 +145,25 @@ fun openExternalUrl(context: Context, url: String): Boolean = runCatching {
     true
 }.getOrElse { false }
 
+/**
+ * Opens [url] in a web browser, never in the platform's own app. Prospecting's "Open in browser" uses this because the X
+ * Android app (12.32, 2026-10) intercepts x.com links and shows a linked post as the first card of the For You feed instead
+ * of the thread. The browser selector limits resolution to apps that handle a plain http page (real browsers), so the X app,
+ * which only claims x.com hosts, is not offered. On Android 12+ a user who has set X's links to "open in app" may still be
+ * routed to it; the button's label says "browser" and a failed launch is reported, not swallowed.
+ */
+fun openInBrowser(context: Context, url: String): Boolean = runCatching {
+    val browserOnly = android.content.Intent(android.content.Intent.ACTION_VIEW)
+        .addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+        .setData(android.net.Uri.fromParts("http", "", null))
+    val target = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+        .addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    target.selector = browserOnly
+    context.startActivity(target)
+    true
+}.getOrElse { false }
+
 /** "video_script" -> "Video script", "post" -> "Post" -- same lowercase-DB-value pattern as platformDisplayName. */
 fun assetTypeDisplayName(assetType: String): String =
     assetType.replace('_', ' ').replaceFirstChar { it.uppercase() }

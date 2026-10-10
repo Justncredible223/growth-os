@@ -58,4 +58,20 @@ class ProspectingPostLinkTest {
         assertEquals("Opened in X", ProspectingPostLink.copyAndOpenMessage("x", copied = false, opened = true))
         assertEquals("Copied — paste in YouTube", ProspectingPostLink.copyAndOpenMessage("youtube", copied = true, opened = true))
     }
+
+    @Test
+    fun `browser route tells the owner where the reply box is`() {
+        assertEquals(
+            "Copied. Tap Reply on the post in your browser, then paste.",
+            ProspectingPostLink.copyAndBrowserMessage("x", copied = true, opened = true),
+        )
+    }
+
+    @Test
+    fun `browser route reports a failed launch instead of claiming it opened`() {
+        assertEquals(
+            "Copied, but no app could open X",
+            ProspectingPostLink.copyAndBrowserMessage("x", copied = true, opened = false),
+        )
+    }
 }
