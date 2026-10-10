@@ -240,3 +240,19 @@ The worker keeps one Python voice helper (`tts_server.py`) running instead of st
 Python and importing `edge_tts` cost 6 to 9 seconds per line on the laptop this was built on (`python -c pass` alone
 took about 6). The helper warms up once when the worker starts (the log says "voice helper is warm"), then a line takes
 about 2 seconds. If the helper dies, lines fall back to the old one-shot script until it restarts.
+
+## The comedy pass (2026-10-10)
+
+What changed after the first real duo runs, and why:
+
+- **Who said what.** Memory labels your lines ("Justin (CO-HOST...)") and Tilt's own ("Tilt (you)"), and the duo prompt
+  lists what the co-host has actually said, word for word. A model that mixed these up told you "you just told me"
+  things Tilt himself had said.
+- **Nothing invented.** With nothing to quote, a tease goes after the setup (a cartoon candle next to you on camera),
+  never a made-up moment.
+- **Shape of a line.** React, name one specific absurd detail, turn it; the first five words are the hook; the fact
+  comes second and stays small.
+- **No copying.** Example lines are exported (`LIVE_HOST_EXAMPLE_LINES`) and a draft that lifts six words in a row from
+  one is rejected and rewritten. Keep examples few and varied: whatever topic an example covers becomes an attractor.
+- **Not naming the company when asked if he is a bot.** He says he is an AI character built by the people who run the
+  stream; naming Fillbook there tripped the promotion rationing check.

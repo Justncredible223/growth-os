@@ -71,7 +71,7 @@ export interface ChatMessageForDraft {
 
 export interface RecentExchange {
   /** "viewer" lines are chat, "tilt" lines are what the host said. Oldest first. */
-  speaker: "viewer" | "tilt";
+  speaker: "viewer" | "cohost" | "tilt";
   name?: string;
   text: string;
 }
@@ -140,10 +140,15 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
   const lines: string[] = [];
 
   if (request.recent.length > 0) {
-    lines.push("RECENT STREAM (oldest first; do not repeat your own phrasing or jokes from here):");
+    lines.push("RECENT STREAM (oldest first). Lines marked 'Tilt' are YOUR OWN earlier words:");
     for (const exchange of request.recent) {
-      lines.push(exchange.speaker === "tilt" ? `Tilt: ${exchange.text}` : `${exchange.name ?? "viewer"} (chat): ${exchange.text}`);
+      if (exchange.speaker === "tilt") lines.push(`Tilt (you): ${exchange.text}`);
+      else if (exchange.speaker === "cohost") lines.push(`${exchange.name ?? "Co-host"} (CO-HOST, the person next to you): ${exchange.text}`);
+      else lines.push(`${exchange.name ?? "viewer"} (chat): ${exchange.text}`);
     }
+    lines.push(
+      "Rules for using this: never attribute your own words to anyone else, and only say someone said or did something if it appears under their name above. Never invent specifics about what anyone did (how long, how many, how much). Do not reuse a premise, comparison, bit or topic that already appears in your own lines above, even reworded: find a new angle. If something a person said above was funny or distinctive, one callback to it by name is worth more than a fresh joke.",
+    );
     lines.push("");
   }
 
@@ -158,6 +163,12 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
     }
     lines.push("");
     if (request.messages.some((message) => message.isCoHost)) {
+      const saidByCoHost = request.recent.filter((exchange) => exchange.speaker === "cohost" && !/^tilt,/i.test(exchange.text)).slice(-4);
+      lines.push(
+        saidByCoHost.length > 0
+          ? `WHAT YOUR CO-HOST HAS ACTUALLY SAID THIS STREAM (word for word; the only things you may say he said): ${saidByCoHost.map((exchange) => `"${exchange.text}"`).join(" | ")}`
+          : "YOUR CO-HOST HAS SAID NOTHING YOU CAN QUOTE YET. If he asks you to tease him, tease the setup, not an invented moment: that he is hosting a stream with a cartoon candle, that he has the hands and the camera, that he is the one who built you. Never make up something he did or said.",
+      );
       lines.push(
         "DUO MODE: a real person, your co-host, is on camera right next to you and is talking to you, not to an audience. This is a double act, so play it like one: react to what he said before you answer it, tease him, push back when he is wrong, ask him a quick question back or hand him the next beat. Mostly say what you think rather than reporting facts. Do not start every line with his name; use it only now and then, like a friend would. He is a person, so never roast him as a trader or call him a viewer. If his message passes on a viewer's question, answer that viewer by name, then toss it back to him.",
       );

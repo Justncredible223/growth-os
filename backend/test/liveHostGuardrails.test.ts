@@ -288,3 +288,21 @@ describe("legal-risk lines (owner rule)", () => {
   });
 });
 
+
+describe("Tilt's character prompt", () => {
+  it("teaches the shape of a good line and what fails, and keeps the examples clear of the hard rules", async () => {
+    const { LIVE_HOST_CHARACTER } = await import("../src/liveHost/liveHostPersona");
+    expect(LIVE_HOST_CHARACTER).toContain("THE SHAPE OF A GOOD LINE");
+    expect(LIVE_HOST_CHARACTER).toContain("LINES THAT FAIL");
+    // The exported list that the copy check uses must match what the model is actually shown.
+    const { LIVE_HOST_EXAMPLE_LINES } = await import("../src/liveHost/liveHostPersona");
+    for (const example of LIVE_HOST_EXAMPLE_LINES) expect(LIVE_HOST_CHARACTER, example).toContain(example);
+    // Every example line in the prompt must itself pass the spoken-line checks the host's output is held to.
+    const goodSection = LIVE_HOST_CHARACTER.split("LINES THAT WORK")[1]!.split("LINES THAT FAIL")[0]!;
+    const examples = [...goodSection.matchAll(/^- "([^"]+)"$/gm)].map((match) => match[1]!);
+    expect(examples.length).toBeGreaterThanOrEqual(5);
+    for (const example of examples) {
+      expect(checkSpokenLine(example, { fillbookMentionAllowed: false, websiteMentionAllowed: false }), example).toBeNull();
+    }
+  });
+});
