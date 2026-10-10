@@ -61,6 +61,11 @@ export async function setupObs(obs: ObsClient, port: number, log: (line: string)
     log(`Browser Source "${OBS_SOURCE_NAME}" added to "${OBS_SCENE_NAME}"`);
   }
 
+  // "Monitor and Output": the host's voice goes to the stream AND to this PC's speakers, so the owner hears what
+  // viewers hear. Without it the voice is only in the stream and the PC is silent.
+  await obs.request("SetInputAudioMonitorType", { inputName: OBS_SOURCE_NAME, monitorType: "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT" });
+  log("Voice set to play on this PC as well as in the stream");
+
   await obs.request("SetCurrentProgramScene", { sceneName: OBS_SCENE_NAME });
   log(`"${OBS_SCENE_NAME}" is the active scene. Set the stream service and key in OBS > Settings > Stream.`);
 }

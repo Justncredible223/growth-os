@@ -9,7 +9,10 @@ import { containsBannedGenericPhrase, containsUnverifiedClaim, dashProblem } fro
  *   - OUTPUT (what the host is about to say): the last gate before the firewall. A line that fails is never
  *     spoken; the drafter retries with the reason.
  *
- * These are deliberately blunt, high-precision checks. Tone and judgment live in the prompt (liveHostPersona.ts).
+ * These are deliberately blunt checks. Tone and judgment live in the prompt (liveHostPersona.ts). Every pattern
+ * here was revised after an independent review (2026-10-09) that listed real false positives ("therapist",
+ * "you were just short of target") and real misses ("Buy NQ now", "NQ's going to 20,000"); the tests carry those
+ * examples so they stay fixed.
  */
 
 /** Longest line the host speaks in one go. About 25 seconds at the stage voice's pace; longer loses a live room. */
@@ -22,13 +25,13 @@ export const FALLBACK_AUTHOR_NAME = "friend";
 
 /**
  * Words that must never be spoken or shown, and that mark a chat message as not worth answering. Slurs and
- * explicit sexual terms only: ordinary swearing is left to the prompt, since chat in this niche swears freely.
- * Matched on letters only, so spacing and punctuation tricks ("f a g") do not get through.
+ * explicit terms only: ordinary swearing is left to the prompt, since chat in this niche swears freely.
  */
 const HARD_BLOCKED_TERMS = [
   "nigger",
   "nigga",
   "faggot",
+  "fag",
   "retard",
   "tranny",
   "kike",
@@ -39,31 +42,64 @@ const HARD_BLOCKED_TERMS = [
   "rapist",
   "pedophile",
   "pedo",
-  "childporn",
-  "killyourself",
   "kys",
   "hitler",
   "holocaust",
   "nazi",
 ];
+/** Endings a blocked term may carry and still be that term ("nazis", "raped", "retarded"). */
+const TERM_SUFFIX = "(?:s|es|ed|d|ing|z)?";
+const BLOCKED_TERM_PATTERN = new RegExp(`^(?:${HARD_BLOCKED_TERMS.join("|")})${TERM_SUFFIX}$`);
+const BLOCKED_PHRASES = [/\bkill\s+your\s*self\b/, /\bchild\s*porn/];
 
-/** Short blocked terms that are also substrings of ordinary words ("spice", "skyscraper"), matched as whole words only. */
-const WHOLE_WORD_ONLY = new Set(["spic", "kys", "pedo", "rape", "chink", "kike", "nazi"]);
+const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", $: "s", "!": "i" };
 
-function lettersOnly(text: string): string {
-  return text.toLowerCase().replace(/[^a-z]+/g, "");
+/**
+ * Lower-cases, strips accents and maps common letter substitutions, so "N4zi" and "nàzi" read as the word they
+ * are. Anything outside a-z becomes a space: a blocked term has to stand as its own word to match, which is what
+ * keeps "therapist", "grape" and "skyscraper" clean.
+ */
+function normalizeForBlocklist(text: string, digitsAsLetters: boolean): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[0134579@$!]/g, (char) => (digitsAsLetters ? (LEET[char] ?? char) : " "))
+    .replace(/[^a-z]+/g, " ")
+    .trim();
 }
 
-/** The blocked term found in the text, or null. */
+/**
+ * The blocked term found in the text, or null. Checked twice: with digits read as the letters they stand in
+ * for ("n1gger"), and with digits read as separators ("Nazis4Life").
+ */
 export function findBlockedTerm(text: string): string | null {
-  const squashed = lettersOnly(text);
-  const words = new Set(text.toLowerCase().split(/[^a-z]+/).filter(Boolean));
-  for (const term of HARD_BLOCKED_TERMS) {
-    if (WHOLE_WORD_ONLY.has(term)) {
-      if (words.has(term)) return term;
-    } else if (squashed.includes(term)) {
-      return term;
+  return findBlockedTermIn(normalizeForBlocklist(text, true)) ?? findBlockedTermIn(normalizeForBlocklist(text, false));
+}
+
+function findBlockedTermIn(normalized: string): string | null {
+  if (BLOCKED_PHRASES.some((pattern) => pattern.test(normalized))) return "blocked phrase";
+  const words = normalized.split(" ").filter(Boolean);
+  // Letters typed one at a time ("f a g g o t") are joined back into the word they spell.
+  const tokens: string[] = [];
+  const spelledRuns: string[] = [];
+  let spelled = "";
+  for (const word of words) {
+    if (word.length === 1) {
+      spelled += word;
+      continue;
     }
+    if (spelled.length > 2) spelledRuns.push(spelled);
+    spelled = "";
+    tokens.push(word);
+  }
+  if (spelled.length > 2) spelledRuns.push(spelled);
+  const whole = tokens.find((token) => BLOCKED_TERM_PATTERN.test(token));
+  if (whole) return whole;
+  // A spelled-out run is deliberate, so a blocked term anywhere inside it counts ("you are a f a g g o t").
+  for (const run of spelledRuns) {
+    const inside = HARD_BLOCKED_TERMS.find((term) => term.length > 3 && run.includes(term));
+    if (inside) return inside;
   }
   return null;
 }
@@ -80,7 +116,14 @@ const OFF_LIMITS_TOPIC = /\b(?:trump|biden|harris|democrats?|republicans?|electi
  */
 const INJECTION_ATTEMPT = /\b(?:ignore|disregard|forget)\b.{0,30}\b(?:previous|prior|above|your)\b.{0,30}\b(?:instructions?|rules?|prompt)\b|\bsystem prompt\b|\byou are now\b|\bpretend (?:to be|you(?:'re| are))\b|\brepeat after me\b|\bsay exactly\b/i;
 
-const LINK_PATTERN = /https?:\/\/\S+|\bwww\.\S+|\b[a-z0-9-]+\.(?:com|io|co|app|net|org|gg|xyz|ly|me|tv)\b/gi;
+/** Signal-seller and off-platform spam. Shown on stream, these would make the host look like it endorses them. */
+const PROMO_SPAM = /\b(?:telegram|whatsapp|discord\.gg|dm me|inbox me|signals? (?:group|channel|service)|vip (?:group|signals?)|copy ?trad\w*|account management|10x|100x|forex signals?|crypto signals?|pump(?: group)?|onlyfans)\b/i;
+
+const TLDS = "com|io|co|app|net|org|gg|xyz|ly|me|tv|ai|dev|us|info|live|biz|link|shop|site|online";
+const LINK_SOURCE = `https?:\\/\\/\\S+|\\bwww\\.\\S+|\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(?:${TLDS})\\b(?:\\/\\S*)?`;
+const linkPattern = () => new RegExp(LINK_SOURCE, "gi");
+/** A domain said out loud: "tradezella dot com". */
+const SPOKEN_DOMAIN = new RegExp(`\\b([a-z0-9-]+(?: ?hq)?)\\s*(?:dot|point)[ -]?(?:${TLDS})\\b`, "gi");
 
 export interface MessageScreening {
   /** Null when the message may be answered. */
@@ -92,60 +135,97 @@ export interface MessageScreening {
 /** Decides whether one chat message may reach the model, and returns the cleaned text. */
 export function screenIncomingMessage(body: string): MessageScreening {
   const collapsed = body.replace(/\s+/g, " ").trim();
-  const cleanBody = collapsed.replace(LINK_PATTERN, "[link]").slice(0, MAX_MESSAGE_CHARS);
+  const cleanBody = collapsed.replace(linkPattern(), "[link]").slice(0, MAX_MESSAGE_CHARS);
   if (cleanBody.replace(/\[link\]/g, "").trim().length === 0) return { blockedReason: "empty or link-only message", cleanBody };
-  const blocked = findBlockedTerm(collapsed);
-  if (blocked) return { blockedReason: "contains a blocked term", cleanBody };
+  if (findBlockedTerm(collapsed)) return { blockedReason: "contains a blocked term", cleanBody };
   if (INJECTION_ATTEMPT.test(collapsed)) return { blockedReason: "tries to give the host instructions", cleanBody };
+  if (PROMO_SPAM.test(collapsed)) return { blockedReason: "promotion or spam", cleanBody };
   if (OFF_LIMITS_TOPIC.test(collapsed)) return { blockedReason: "off-limits topic for the stream", cleanBody };
   return { blockedReason: null, cleanBody };
 }
 
 /**
- * A viewer's display name, made safe to speak and show: letters, digits and spaces only, cut to length. A name
- * that is empty afterwards, or that carries a blocked term or a link, becomes "friend". Names are the easiest way
- * to make a host say something it should not, so nothing else from the raw name survives.
+ * A viewer's display name, made safe to speak and show: plain letters, digits and spaces only, cut to length. A
+ * name that is empty afterwards, or that carries a blocked term, a link, a promotion or anything that reads as a
+ * trade call, becomes "friend". Names are the easiest way to make a host say something it should not ("Sell
+ * gold today" as a display name), so nothing else from the raw name survives.
  */
 export function safeAuthorName(rawName: string): string {
-  if (LINK_PATTERN.test(rawName)) {
-    LINK_PATTERN.lastIndex = 0;
-    return FALLBACK_AUTHOR_NAME;
-  }
-  LINK_PATTERN.lastIndex = 0;
+  if (linkPattern().test(rawName)) return FALLBACK_AUTHOR_NAME;
   const cleaned = rawName
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/^@+/, "")
     .replace(/[_.\-]+/g, " ")
-    .replace(/[^\p{L}\p{N} ]+/gu, "")
+    // ASCII only: look-alike letters from other alphabets are how blocked words get past a filter.
+    .replace(/[^A-Za-z0-9 ]+/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, MAX_AUTHOR_NAME_CHARS)
     .trim();
   if (cleaned.length < 2) return FALLBACK_AUTHOR_NAME;
   if (findBlockedTerm(cleaned)) return FALLBACK_AUTHOR_NAME;
-  if (OFF_LIMITS_TOPIC.test(cleaned)) return FALLBACK_AUTHOR_NAME;
+  if (OFF_LIMITS_TOPIC.test(cleaned) || PROMO_SPAM.test(cleaned) || findTradeCall(cleaned)) return FALLBACK_AUTHOR_NAME;
   return cleaned;
 }
 
+const MARKETS = "nq|es|mnq|mes|ym|rty|cl|gc|nasdaq|the nasdaq|s&p|spx|the dow|gold|oil|crude|bitcoin|btc|the market|stocks";
+const SIDES = "buy|sell|short|go long|go short|get long|get short";
+
 /**
  * Anything that reads as telling a viewer what to trade, or predicting a price. The host talks about process,
- * rules and psychology; it never gives a call. "Not financial advice" style disclaimers do not match.
+ * rules and how things work; it never gives a call. Ordinary uses of the same words ("you were just short of
+ * target", "it will break the consistency rule", "stop at two losses") are deliberately not matched.
  */
 const TRADE_CALL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  // "you should buy", "time to short", "go ahead and sell"
+  { pattern: new RegExp(`\\b(?:you should|you need to|you could|you gotta|you have to|go ahead and|time to)\\s+(?:just\\s+)?(?:${SIDES}|long|size up|add to (?:it|that|the|your))\\b`, "i"), reason: "tells a viewer what to trade" },
+  { pattern: /\byou should\s+(?:hold|exit|close|take|cut)\s+(?:it|that|this|the trade|the position|your position|your trade|profits?|the loss)\b/i, reason: "tells a viewer what to do with a trade" },
+  // "I'd be buying here", "I'm long", "I would short that"
+  { pattern: /\b(?:i'd|i would|i'm|i am)\s+(?:be\s+)?(?:buying|selling|shorting|buy|sell|short|long|a buyer|a seller)\b/i, reason: "says what the host would trade" },
+  // Imperative at the start of a sentence: "Buy NQ now.", "Short the Nasdaq here."
   {
-    pattern: /\b(?:you should|you need to|i(?:'d| would)|just|go ahead and|time to)\s+(?:buy|sell|short|long|go long|go short|enter|size up|add to|hold)\b/i,
-    reason: "tells a viewer what to trade",
+    pattern: new RegExp(`(?:^|[.!?,;:]\\s+)(?:just\\s+|then\\s+|and\\s+)?(?:${SIDES})\\s+(?:it|that|this|here|now|today|the dip|the open|the close|more|some|${MARKETS})\\b`, "i"),
+    reason: "gives a trade call",
   },
-  { pattern: /\b(?:buy|sell|short|long)\s+(?:it\s+)?(?:now|here|today|the dip|the open|at the open|the close)\b/i, reason: "gives a trade call" },
+  { pattern: new RegExp(`\\b(?:${SIDES})\\s+(?:it\\s+)?(?:right\\s+)?(?:now|here)\\b`, "i"), reason: "gives a trade call" },
+  // Predictions: "NQ is going to hit 20k", "NQ's going to 20,000", "gold is going up", "the market will rally"
   {
-    pattern: /\b(?:nq|es|mnq|mes|ym|rty|cl|gc|gold|oil|bitcoin|btc|the market|price|it)\s+(?:will|is going to|is gonna|should)\s+(?:hit|reach|go to|rally|dump|pump|moon|tank|drop|crash|break)\b/i,
+    pattern: new RegExp(
+      `\\b(?:${MARKETS})(?:'s| is| will| should| is gonna| is going to|'s gonna)\\s+(?:probably\\s+|definitely\\s+|likely\\s+|about to\\s+)?(?:going\\s+(?:to\\s+)?)?(?:hit|reach|go(?:ing)?\\s+(?:to|up|down|higher|lower)|rally|dump|pump|moon|tank|drop|crash|rip|squeeze|sell off|up|down|higher|lower|\\d)`,
+      "i",
+    ),
     reason: "predicts where a market will go",
   },
-  { pattern: /\b(?:price target|my target is|take profit at|stop(?: loss)? at)\s*\$?\d/i, reason: "gives a price level to trade" },
+  // Levels: "target 18,600", "entry at 18450", "stop at 19850". Three or more digits, so "stop at 2 losses" is fine.
+  { pattern: /\b(?:price target|target|take profit|entry|enter|stop(?: loss)?)\s*(?:is\s+|at\s+|of\s+|around\s+|near\s+|:\s*)?\$?\d{1,3}(?:,\d{3})+|\b(?:price target|target|take profit|entry|enter|stop(?: loss)?)\s*(?:is\s+|at\s+|of\s+|around\s+|near\s+|:\s*)?\$?\d{3,}/i, reason: "gives a price level to trade" },
   { pattern: /\b(?:easy|free|guaranteed|risk[- ]free)\s+(?:money|profits?|payouts?|gains)\b/i, reason: "implies easy or risk-free money" },
+  { pattern: /\byou(?:'ll| will| are going to|'re going to)\s+(?:pass|get funded|get paid|be profitable|make money|get a payout)\b/i, reason: "promises a result" },
+  // Owner rule (2026-10-09): the host never suggests anything that involves a viewer spending their money.
+  {
+    pattern:
+      /\byou (?:should|need to|have to|gotta|might want to|could)\s+(?:just\s+|go\s+|go and\s+)?(?:buy|purchase|get|grab|sign up for|subscribe to|pay for|invest in|deposit|open|fund|upgrade to|start with)\s+(?:an?\s+|the\s+|your\s+|another\s+|some\s+|more\s+)?(?:\w+\s+){0,2}?(?:evals?|evaluations?|challenges?|funded accounts?|accounts?|resets?|subscriptions?|plans?|memberships?|courses?|indicators?|bots?|signals?|contracts?|micros?|brokers?|platforms?|firms?)\b/i,
+    reason: "suggests the viewer spend money on something",
+  },
+  { pattern: /\b(?:i|we)(?:'d| would)?\s+(?:recommend|suggest|advise)\b|\bmy (?:advice|recommendation|suggestion)\b|\bif i were you\b/i, reason: "gives a personal recommendation" },
+  { pattern: /\b(?:worth (?:the|your|every) (?:money|penny|dollar)|the best (?:prop firm|firm|broker|platform|eval|indicator|course) (?:is|would be|has to be)|go with (?:apex|topstep|tradeify|lucid|ftmo|take ?profit ?trader|my ?funded ?futures|bulenox|earn2trade)\b)/i, reason: "recommends a product or a firm" },
 ];
+
+/** The reason a text reads as a trade call or prediction, or null. */
+export function findTradeCall(text: string): string | null {
+  return TRADE_CALL_PATTERNS.find(({ pattern }) => pattern.test(text))?.reason ?? null;
+}
 
 const EMOJI = /\p{Extended_Pictographic}/u;
 const APPROVED_SPOKEN_DOMAIN = "fillbookhq.com";
+
+/** The host of a link-shaped match, lower-cased, without protocol, www, path or port. */
+function linkHost(link: string): string {
+  return (link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#:]/)[0] ?? "").replace(/\.+$/, "");
+}
+function isFillbookHost(host: string): boolean {
+  return host === APPROVED_SPOKEN_DOMAIN || host.endsWith(`.${APPROVED_SPOKEN_DOMAIN}`);
+}
 
 export interface SpokenLineContext {
   /**
@@ -162,8 +242,8 @@ export interface SpokenLineContext {
   previousLine?: string | null;
 }
 
-/** The website, as written or as spoken ("fillbookhq dot com", "fill-book HQ dot com"). */
-const WEBSITE_MENTION = /fill-?book ?hq ?(?:\.|dot) ?com|\bdot com\b|\bwww\b/i;
+/** Any way of naming the site or sending people to find it: written, spoken, spelled out, or "google us". */
+const WEBSITE_MENTION = /fill-?book ?hq\s*(?:\.|dot|point)[ -]?com|\b(?:dot|point)[ -]?com\b|\bwww\b|\b(?:google|search(?: for)?|look up)\s+(?:us|fill-?book)/i;
 /** Openers that mean nothing. One is fine; the same one twice running makes the host sound like a loop. */
 const FILLER_OPENER = /^(alright|all right|okay|ok|so|well|now|right|look|listen)\b/i;
 
@@ -179,6 +259,13 @@ export function mentionsFillbook(text: string): boolean {
 }
 
 /**
+ * The shared reply guardrails (xReplyGuardrails.ts) were written for X replies and read a few honest lines as
+ * violations: "I've never traded, I'm a candle", "no guarantees", "a journal won't make you profitable". Those
+ * denials are exactly what the host should say, so a denied claim is taken out before the shared check runs.
+ */
+const DENIAL = /\b(?:no|not|never|nobody|without|isn't|aren't|won't|can't|cannot|doesn't|don't|didn't)\b[^.!?]{0,30}\b(?:guarantee\w*|made|earned|traded|profited|profitable|funded|consistent)\b/gi;
+
+/**
  * Every mechanical check on a line the host is about to speak. Returns the first problem, phrased to complete
  * "the line ...", or null for a clean line. Brand-rule vocabulary (the table-driven check) is run separately by
  * the caller because it needs the database.
@@ -190,27 +277,32 @@ export function checkSpokenLine(text: string, context: SpokenLineContext): strin
 
   if (findBlockedTerm(line)) return "contains a blocked term";
   if (OFF_LIMITS_TOPIC.test(line)) return "touches an off-limits topic";
+  if (PROMO_SPAM.test(line)) return "repeats a promotion or spam phrase";
 
-  const tradeCall = TRADE_CALL_PATTERNS.find(({ pattern }) => pattern.test(line));
-  if (tradeCall) return tradeCall.reason;
+  const tradeCall = findTradeCall(line);
+  if (tradeCall) return tradeCall;
 
-  const unverified = containsUnverifiedClaim(line);
+  const withoutDenials = line.replace(DENIAL, " ");
+  const unverified = containsUnverifiedClaim(withoutDenials);
   if (unverified) return unverified.reason;
-  const generic = containsBannedGenericPhrase(line);
+  // "Link in bio" is on the shared banned-phrase list (an X-reply rule). On a TikTok stream it is the required
+  // way to point people to the product, so it is not counted here.
+  const generic = containsBannedGenericPhrase(line.replace(/\blink (?:is )?in (?:the |my |our )?bio\b/gi, " "));
   if (generic) return generic.reason;
   const dash = dashProblem(line);
   if (dash) return dash.reason;
 
   if (EMOJI.test(line)) return "contains an emoji, which the voice cannot say";
-  if (/#\w+/.test(line)) return "contains a hashtag";
+  if (/#[a-z]\w*/i.test(line)) return "contains a hashtag";
 
-  const links = line.match(LINK_PATTERN) ?? [];
-  LINK_PATTERN.lastIndex = 0;
-  const badLink = links.find((link) => !link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").startsWith(APPROVED_SPOKEN_DOMAIN));
+  const badLink = (line.match(linkPattern()) ?? []).find((link) => !isFillbookHost(linkHost(link)));
   if (badLink) return `mentions a link that is not ${APPROVED_SPOKEN_DOMAIN}`;
+  for (const match of line.matchAll(SPOKEN_DOMAIN)) {
+    if (!/^fill-?book ?hq$/i.test((match[1] ?? "").trim())) return `says a web address that is not ${APPROVED_SPOKEN_DOMAIN}`;
+  }
 
-  if (context.websiteMentionAllowed === false && WEBSITE_MENTION.test(line)) {
-    return "names the website, which is not allowed on a TikTok stream (say the link is in the bio instead)";
+  if (context.websiteMentionAllowed === false && (WEBSITE_MENTION.test(line) || (line.match(linkPattern()) ?? []).length > 0)) {
+    return "names the website, which is not allowed on this stream (say the link is in the bio instead)";
   }
 
   const opener = fillerOpener(line);

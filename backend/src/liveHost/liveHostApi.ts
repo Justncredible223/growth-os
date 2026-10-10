@@ -61,7 +61,9 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
       settings?: LiveHostSettingsPatch;
       messages?: TickInput["messages"];
       busy?: boolean;
+      joins?: TickInput["joins"];
       workerInfo?: Record<string, unknown>;
+      platform?: string;
       utteranceId?: string;
       outcome?: string;
     };
@@ -85,7 +87,9 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
           await runLiveHostTick(client, {
             messages: Array.isArray(body.messages) ? body.messages : [],
             busy: body.busy === true,
+            platform: typeof body.platform === "string" ? body.platform : undefined,
             workerInfo: body.workerInfo && typeof body.workerInfo === "object" ? body.workerInfo : {},
+            joins: Array.isArray(body.joins) ? body.joins.slice(0, 50) : [],
           }),
         );
         return;

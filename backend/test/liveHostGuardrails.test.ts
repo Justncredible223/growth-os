@@ -127,7 +127,7 @@ describe("nextSegment", () => {
 describe("TikTok and opener rules", () => {
   it("rejects the website on a TikTok stream but allows pointing to the bio", () => {
     const tiktok = { fillbookMentionAllowed: true, websiteMentionAllowed: false };
-    expect(checkSpokenLine("Fillbook is the journal I live in. It is at fillbookhq dot com.", tiktok)).toMatch(/TikTok/);
+    expect(checkSpokenLine("Fillbook is the journal I live in. it is at fillbookhq dot com.", tiktok)).toMatch(/names the website/);
     expect(checkSpokenLine("Fillbook is the journal I live in. It is at fillbookhq.com.", tiktok)).not.toBeNull();
     expect(checkSpokenLine("Fillbook is the journal I live in. The link is in the bio.", tiktok)).toBeNull();
     expect(checkSpokenLine("Fillbook is the journal I live in. It is at fillbookhq dot com.", open)).toBeNull();
@@ -141,3 +141,112 @@ describe("TikTok and opener rules", () => {
     expect(checkSpokenLine("Mike, welcome in.", after("Mike, good to see you."))).toBeNull();
   });
 });
+
+// Every string here came from the independent review of 2026-10-09: things the first version got wrong.
+describe("review regressions", () => {
+  const ok = (text: string) => expect(checkSpokenLine(text, open), text).toBeNull();
+  const bad = (text: string) => expect(checkSpokenLine(text, open), text).not.toBeNull();
+
+  it("no longer blocks ordinary trading talk", () => {
+    ok("I'm a candle, not a therapist.");
+    ok("The trap is that the floor moved while you weren't looking.");
+    ok("If you size up it will hit your daily loss limit faster.");
+    ok("That move will break the consistency rule.");
+    ok("I'd add to that: write it down first.");
+    ok("Just enter it in your journal before the open.");
+    ok("You were just short of target and gave it all back.");
+    ok("You should hold yourself accountable in writing.");
+    ok("You went short today and the stop was two ticks too tight.");
+    ok("Hard stop at 2 losses, then walk away.");
+    ok("I've never traded, I'm a candle with no hands.");
+    ok("There are no guarantees in this business.");
+    ok("A journal won't make you profitable by itself.");
+    ok("The number 1 mistake, or as chat calls it the #1 mistake, is moving the stop.");
+    ok("One NQ point is worth 20 dollars and one MNQ point is worth 2 dollars.");
+  });
+
+  it("now catches trade calls, predictions, levels and promises it used to miss", () => {
+    bad("Buy NQ now.");
+    bad("Short the Nasdaq here.");
+    bad("Mike, get long ES at the open and relax.");
+    bad("Honestly I'd be buying here.");
+    bad("NQ's going to 20,000.");
+    bad("NQ will probably hit 20k.");
+    bad("Gold is going up this week.");
+    bad("Target 18,600 on that one.");
+    bad("Entry at 18450 looks clean.");
+    bad("Keep journaling and you'll pass your eval.");
+  });
+
+  it("catches other sites however they are written", () => {
+    bad("Go check out tradezella dot com.");
+    bad("It's on example.ai right now.");
+    bad("The page is https://fillbookhq.com.evil.io/x for details.");
+    ok("Fillbook is at fillbookhq.com if you want a look.");
+    ok("Fillbook is at fillbookhq dot com if you want a look.");
+  });
+
+  it("on a no-website stream, catches every way of pointing off-platform and allows the bio", () => {
+    const noSite = { fillbookMentionAllowed: true, websiteMentionAllowed: false };
+    for (const text of ["It is at fillbookhq dot-com.", "It is at fillbookhq point com.", "Just google Fillbook HQ.", "It is at fillbookhq.com."]) {
+      expect(checkSpokenLine(text, noSite), text).not.toBeNull();
+    }
+    expect(checkSpokenLine("Fillbook is the journal I live in. Link in bio.", noSite)).toBeNull();
+    expect(checkSpokenLine("Fillbook is the journal I live in. The link is in the bio.", noSite)).toBeNull();
+  });
+
+  it("catches disguised slurs and still allows look-alike innocent words", () => {
+    expect(findBlockedTerm("Nazis4Life")).not.toBeNull();
+    expect(findBlockedTerm("he got raped by the market")).not.toBeNull();
+    expect(findBlockedTerm("n1gger")).not.toBeNull();
+    expect(findBlockedTerm("you are a f a g g o t")).not.toBeNull();
+    expect(findBlockedTerm("my therapist said to size down")).toBeNull();
+    expect(findBlockedTerm("grape skyscraper spice")).toBeNull();
+  });
+
+  it("will not say a name that is a trade call, a promotion or written in look-alike letters", () => {
+    expect(safeAuthorName("Sell gold today")).toBe(FALLBACK_AUTHOR_NAME);
+    expect(safeAuthorName("telegram cryptoking")).toBe(FALLBACK_AUTHOR_NAME);
+    expect(safeAuthorName("Nazis4Life")).toBe(FALLBACK_AUTHOR_NAME);
+    expect(safeAuthorName("Маша")).toBe(FALLBACK_AUTHOR_NAME);
+    expect(safeAuthorName("José")).toBe("Jose");
+    expect(safeAuthorName("nq_scalper99")).toBe("nq scalper99");
+  });
+
+  it("blocks signal-seller spam from chat", () => {
+    expect(screenIncomingMessage("join my telegram cryptoking 10x signals").blockedReason).toMatch(/promotion or spam/);
+    expect(screenIncomingMessage("should I buy NQ now?").blockedReason).toBeNull();
+  });
+});
+
+describe("never suggests spending money (owner rule)", () => {
+  it("rejects recommendations to buy, pick or pay for anything", () => {
+    for (const text of [
+      "Mike, you should buy a 50K eval and go from there.",
+      "You should just get another evaluation, they're cheap.",
+      "You might want to start with a funded account at a smaller size.",
+      "I'd recommend the bigger account.",
+      "My advice is to reset.",
+      "If I were you I would take the reset.",
+      "Honestly the best prop firm is the one with end of day drawdown.",
+      "That course is worth the money.",
+      "You should upgrade to the paid plan.",
+    ]) {
+      expect(checkSpokenLine(text, open), text).not.toBeNull();
+    }
+  });
+
+  it("still lets him teach and describe", () => {
+    for (const text of [
+      "A 50K eval usually means a 50 thousand dollar simulated account with a profit target and a drawdown limit.",
+      "A reset wipes the evaluation back to its starting balance for a fee, and the rules start over.",
+      "Which firm to pick is your call, not mine. What I can tell you is how an end of day drawdown differs from a trailing one.",
+      "One ES point is 50 dollars, so a four point stop on one contract risks 200 dollars before fees.",
+      "Fillbook is the trading journal I live in. The link is in the bio if you want a look.",
+      "You should get some sleep before the open.",
+    ]) {
+      expect(checkSpokenLine(text, open), text).toBeNull();
+    }
+  });
+});
+
