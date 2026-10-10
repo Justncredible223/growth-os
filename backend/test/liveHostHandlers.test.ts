@@ -376,6 +376,26 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.segmentTitle).toBe("New Arrivals");
   });
 
+  it("lets Red interrupt with a line that passes the checks, stored with both speakers named", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("And that is Red. He has felt it bounce every day since he was a wick.", { redLine: "It has to bounce here, I can feel it!" })]);
+    const result = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.redLine).toBe("It has to bounce here, I can feel it!");
+    expect(result.utterance?.spokenText).toBe("And that is Red. He has felt it bounce every day since he was a wick.");
+    expect(client.tables.live_host_utterances![0]!.spoken_text).toBe("[RED] It has to bounce here, I can feel it! [TILT] And that is Red. He has felt it bounce every day since he was a wick.");
+  });
+
+  it("drops a Red line that reads as a trade call or mentions the product, and keeps Tilt's line", async () => {
+    for (const redLine of ["Buy NQ now, trust me!", "Just use Fillbook, it fixes everything!", "NQ is going to hit twenty thousand!"]) {
+      const client = buildClient();
+      const llm = scriptedLlm([line("Ignore him. He once tried to trade a screensaver.", { redLine })]);
+      const result = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+      expect(result.utterance?.redLine, redLine).toBeNull();
+      expect(result.utterance?.spokenText).toBe("Ignore him. He once tried to trade a screensaver.");
+      expect(client.tables.live_host_utterances![0]!.spoken_text).not.toContain("[RED]");
+    }
+  });
+
   it("ignores TikTok chat unless the owner enabled it", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, idle_seconds: 600 })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
     await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, youtube: null, grounding: GROUNDING });

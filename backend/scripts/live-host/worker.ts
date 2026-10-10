@@ -38,6 +38,9 @@ const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py"
 /** Same voice the videos use; the only one verified by ear to say "Fillbook" correctly (see voiceover.ts). */
 export const LIVE_HOST_DEFAULT_VOICE = "en-US-AndrewNeural";
 /** Close to the voice's natural pace. +12% was tried first and the owner found the captions hard to follow (2026-10-09). */
+/** Red, the foil, speaks in a different voice and faster, so nobody mistakes him for Tilt. */
+export const RED_VOICE = "en-US-ChristopherNeural";
+export const RED_RATE = "+22%";
 export const LIVE_HOST_DEFAULT_RATE = "+4%";
 // Halved after the first real stream: three seconds of waiting before a joiner was even noticed was too slow.
 const TICK_MS = 1_500;
@@ -89,6 +92,7 @@ interface TickUtterance {
   kind: "reply" | "segment";
   segmentTitle: string | null;
   spokenText: string;
+  redLine?: string | null;
   mood: string;
   tiltLevel: number | null;
   card: { title: string; lines: string[] } | null;
@@ -188,7 +192,7 @@ export function captionWords(words: WordCue[]): WordCue[] {
   return words.map((word) => ({ ...word, text: word.text.replace(/fill-book/gi, "Fillbook") }));
 }
 
-async function synthesize(config: WorkerConfig, workDir: string, id: string, spokenText: string): Promise<{ words: WordCue[]; durationSeconds: number }> {
+async function synthesize(config: WorkerConfig, workDir: string, id: string, spokenText: string, voice: string = config.voice, rate: string = config.rate): Promise<{ words: WordCue[]; durationSeconds: number }> {
   const textFile = join(workDir, `${id}.txt`);
   const audioFile = join(workDir, `${id}.mp3`);
   const wordsFile = join(workDir, `${id}.json`);
@@ -196,7 +200,7 @@ async function synthesize(config: WorkerConfig, workDir: string, id: string, spo
   await new Promise<void>((resolve, reject) => {
     execFile(
       config.pythonCommand,
-      [WORD_TIMING_SCRIPT, "--voice", config.voice, "--rate", config.rate, "--file", textFile, "--out-media", audioFile, "--out-words", wordsFile],
+      [WORD_TIMING_SCRIPT, "--voice", voice, "--rate", rate, "--file", textFile, "--out-media", audioFile, "--out-words", wordsFile],
       { timeout: TTS_TIMEOUT_MS, windowsHide: true },
       (error, _stdout, stderr) => (error ? reject(new Error(`voice synthesis failed: ${stderr.trim() || error.message}`)) : resolve()),
     );
@@ -259,7 +263,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     clearTimeout(speaking.timer);
     finished.set(id, outcome);
     if (finished.size > 200) finished.delete(finished.keys().next().value as string);
-    for (const extension of ["mp3", "json", "txt"]) rmSync(join(workDir, `${id}.${extension}`), { force: true });
+    for (const extension of ["mp3", "json", "txt"]) {
+      rmSync(join(workDir, `${id}.${extension}`), { force: true });
+      rmSync(join(workDir, `${id}-red.${extension}`), { force: true });
+    }
     // Stay "speaking" until the server has the confirmation, so the tick in between does not ask for this line again.
     await confirm(id);
     if (speaking?.id === id) speaking = null;
@@ -457,10 +464,22 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     if (stageClients.size === 0 || Date.now() < voiceRetryAt) return;
     try {
       const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText);
+      // Red's interruption, when there is one, is voiced separately and played first. If his voice fails he is
+      // simply left out.
+      let sidekick: { text: string; audioUrl: string; durationSeconds: number } | null = null;
+      if (line.redLine) {
+        try {
+          const red = await synthesize(config, workDir, `${line.id}-red`, line.redLine, RED_VOICE, RED_RATE);
+          sidekick = { text: line.redLine, audioUrl: `/audio/${line.id}-red.mp3`, durationSeconds: red.durationSeconds };
+        } catch {
+          sidekick = null;
+        }
+      }
       voiceFailures = 0;
-      const timer = setTimeout(() => void finishLine(line.id, "spoken"), (durationSeconds + 6) * 1000);
+      const timer = setTimeout(() => void finishLine(line.id, "spoken"), (durationSeconds + (sidekick?.durationSeconds ?? 0) + 7) * 1000);
       speaking = { id: line.id, timer };
-      broadcast("speak", { ...line, audioUrl: `/audio/${line.id}.mp3`, words, durationSeconds });
+      broadcast("speak", { ...line, audioUrl: `/audio/${line.id}.mp3`, words, durationSeconds, sidekick });
+      if (sidekick) log(`   Red: ${sidekick.text}`);
       log(`${line.kind === "segment" ? `[${line.segmentTitle}]` : `-> ${line.replyingTo.map((m) => m.authorName).join(", ") || "chat"}`}: ${line.spokenText}`);
     } catch (err) {
       // The line stays queued on the server and comes back after the wait. Only after repeated failures is it

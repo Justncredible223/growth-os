@@ -28,6 +28,10 @@ const LINE_SCHEMA = {
       },
       description: "Chat messages deliberately not answered.",
     },
+    redLine: {
+      type: "string",
+      description: "Optional. One short line (under 90 characters) that Red, the red candle, blurts before Tilt speaks. Red's own bad urge in the first person; never advice, never a direction or price, never a company. Omit most of the time.",
+    },
     tiltLevel: { type: "integer", minimum: 0, maximum: 10, description: "Only when giving a Tilt-o-Meter rating. Omit otherwise." },
     card: {
       type: "object",
@@ -50,6 +54,8 @@ export interface LiveLineDraft {
   skippedMessages: Array<{ id: string; reason: string }>;
   tiltLevel: number | null;
   card: LiveHostCard | null;
+  /** What Red, the foil, blurts before Tilt speaks. Null when he stays out of it. */
+  redLine: string | null;
 }
 
 export interface ChatMessageForDraft {
@@ -174,6 +180,7 @@ interface RawLine {
   skippedMessages?: unknown;
   tiltLevel?: unknown;
   card?: unknown;
+  redLine?: unknown;
 }
 
 /** Turns whatever the tool call returned into a well-formed draft. The model's output is data, so nothing is trusted. */
@@ -203,6 +210,7 @@ export function normalizeLiveLine(raw: RawLine): LiveLineDraft {
     skippedMessages: skipped,
     tiltLevel,
     card,
+    redLine: typeof raw.redLine === "string" && raw.redLine.trim().length > 0 ? raw.redLine.replace(/\s+/g, " ").trim().slice(0, 120) : null,
   };
 }
 

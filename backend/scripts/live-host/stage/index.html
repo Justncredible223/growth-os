@@ -158,6 +158,18 @@
   .notice small { display: block; margin-top: 6px; font-size: 26px; font-weight: 700; }
   body.safe-tiktok .notice { top: 410px; left: 110px; right: 110px; font-size: 36px; }
 
+  /* Red, the foil: peeks in from the left edge, blurts a line in a speech bubble, and ducks back out. */
+  .red { position: absolute; left: -260px; top: 760px; width: 230px; transition: left 0.45s cubic-bezier(.2, .9, .2, 1.2); pointer-events: none; }
+  .red.show { left: 26px; }
+  .red svg { width: 230px; height: 300px; overflow: visible; animation: redBob 0.5s ease-in-out infinite alternate; }
+  @keyframes redBob { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-14px) rotate(5deg); } }
+  .redsay { position: absolute; left: 240px; top: 700px; max-width: 560px; padding: 18px 26px; border-radius: 28px 28px 28px 6px; background: #ff5d73; color: #fff; font-size: 40px; font-weight: 900; line-height: 1.15; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.7); transform-origin: 0 100%; transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2, .9, .2, 1.3); pointer-events: none; }
+  .redsay.show { opacity: 1; transform: none; }
+  .redsay b { display: block; font-size: 22px; letter-spacing: 3px; opacity: 0.85; margin-bottom: 4px; }
+  body.safe-tiktok .red { top: 700px; width: 190px; }
+  body.safe-tiktok .red svg { width: 190px; height: 250px; }
+  body.safe-tiktok .redsay { left: 210px; top: 640px; font-size: 34px; max-width: 520px; }
+
   .offline { position: absolute; inset: 0; display: none; place-items: center; background: rgba(4, 8, 16, 0.86); text-align: center; font-size: 46px; font-weight: 800; }
   .offline.show { display: grid; }
   .offline small { display: block; margin-top: 14px; font-size: 28px; color: var(--ink2); font-weight: 600; }
@@ -261,6 +273,20 @@
 
     <div class="captions"><p id="caption"></p></div>
 
+    <div class="red" id="red">
+      <svg viewBox="0 0 230 300" aria-label="Red">
+        <rect x="104" y="6" width="14" height="60" rx="7" fill="#ffc2cb"/>
+        <rect x="104" y="232" width="14" height="52" rx="7" fill="#c81e45"/>
+        <rect x="46" y="58" width="132" height="184" rx="36" fill="#ff5d73"/>
+        <rect x="58" y="72" width="34" height="150" rx="17" fill="#fff" opacity="0.25"/>
+        <ellipse cx="88" cy="128" rx="24" ry="27" fill="#fff"/><ellipse cx="140" cy="128" rx="24" ry="27" fill="#fff"/>
+        <circle cx="92" cy="132" r="12" fill="#2a0710"/><circle cx="144" cy="132" r="12" fill="#2a0710"/>
+        <path d="M62 92 Q88 108 112 98" fill="none" stroke="#5c0d1f" stroke-width="8" stroke-linecap="round"/>
+        <path d="M166 92 Q140 108 116 98" fill="none" stroke="#5c0d1f" stroke-width="8" stroke-linecap="round"/>
+        <ellipse id="redMouth" cx="114" cy="190" rx="24" ry="6" fill="#2a0710"/>
+      </svg>
+    </div>
+    <div class="redsay" id="redsay"></div>
     <div class="notice" id="notice"></div>
     <div class="thought" id="thought"></div>
     <div class="zzz" id="z1">Z</div><div class="zzz z2" id="z2">z</div><div class="zzz z3" id="z3">z</div>
@@ -621,8 +647,42 @@
   }
 
   /** Speak one line: { id, spokenText, mood, kind, segmentTitle, tiltLevel, card, replyingTo, audioUrl, words, durationSeconds }. */
+  // Red goes first when the line has him in it: he peeks in, says his piece in his own voice, ducks out, and
+  // then Tilt answers. If his audio cannot play he is skipped.
+  const redVoice = new Audio();
+  let redMouthTimer = null;
+  function hideRed() {
+    $("red").classList.remove("show"); $("redsay").classList.remove("show");
+    clearInterval(redMouthTimer); $("redMouth").setAttribute("ry", "6");
+  }
+  function playSidekick(line, then) {
+    const s = line.sidekick;
+    const bubble = $("redsay");
+    bubble.textContent = "";
+    const tag = document.createElement("b"); tag.textContent = "RED";
+    bubble.append(tag, document.createTextNode(s.text));
+    $("red").classList.add("show");
+    setTimeout(() => bubble.classList.add("show"), 250);
+    setMood("shocked");
+    current = { id: line.id, words: [], spans: [], startedAt: performance.now(), duration: 999, hasAudio: true, sidekick: true };
+    clearInterval(redMouthTimer);
+    redMouthTimer = setInterval(() => $("redMouth").setAttribute("ry", String(6 + Math.random() * 20)), 110);
+    let done = false;
+    const finishRed = () => { if (done) return; done = true; hideRed(); setTimeout(then, 350); };
+    if (DEMO || !s.audioUrl) { setTimeout(finishRed, (s.durationSeconds || 2.2) * 1000); return; }
+    redVoice.src = s.audioUrl;
+    redVoice.onended = finishRed; redVoice.onerror = finishRed;
+    redVoice.play().catch(finishRed);
+    setTimeout(finishRed, ((s.durationSeconds || 3) + 2) * 1000);
+  }
+
   function speak(line) {
     $("hook").classList.remove("show"); document.body.classList.remove("hooked");
+    if (line.sidekick && !line.sidekickDone) {
+      clearTimeout(finishTimer); clearProps(); $("caption").textContent = "";
+      playSidekick(line, () => speak({ ...line, sidekickDone: true }));
+      return;
+    }
     clearTimeout(finishTimer);
     clearProps();
     const hasAudio = !DEMO && line.audioUrl;
@@ -648,7 +708,8 @@
   }
   /** Cuts the current line off without reporting it as spoken. */
   function silence() {
-    try { voice.pause(); voice.removeAttribute("src"); voice.load(); } catch (err) { /* nothing was playing */ }
+    try { voice.pause(); voice.removeAttribute("src"); voice.load(); redVoice.pause(); } catch (err) { /* nothing was playing */ }
+    hideRed();
     current = null;
     state.talking = false; state.targetOpen = 0;
     setMood("neutral");
@@ -762,7 +823,9 @@
     requestAnimationFrame(frame);
     const dt = Math.min(64, t - last); last = t;
     drawChart(dt);
-    if (current) {
+    if (current && current.sidekick) {
+      lastSpokeAt = t;
+    } else if (current) {
       lastSpokeAt = t;
       const seconds = current.hasAudio ? voice.currentTime : (t - current.startedAt) / 1000;
       updateCaption(seconds);
@@ -785,6 +848,7 @@
   if (DEMO) {
     const script = [
       { kind: "segment", segmentTitle: "Welcome In", mood: "smirk", spokenText: "I'm Tilt, the AI candle who lives inside a trading journal. Ask me anything about prop firm rules, or confess a trade and I'll roast the decision, not you. Quick one for chat: eval or funded?" },
+      { kind: "segment", segmentTitle: "Famous Last Words", mood: "smirk", sidekick: { text: "It HAS to bounce here. I can feel it!", durationSeconds: 2.6 }, spokenText: "And that, everyone, is Red. He has felt it bounce here every single day since he was a wick." },
       { kind: "reply", mood: "thinking", replyingTo: [{ platform: "tiktok", authorName: "Mike", body: "how does trailing drawdown actually work?" }], spokenText: "Mike, welcome in. A trailing drawdown follows your account's high-water mark, so a green morning quietly raises the floor under you. The trap is giving back open profit and finding the floor moved up while you weren't looking." },
       { kind: "reply", mood: "tilted", tiltLevel: 9, replyingTo: [{ platform: "youtube", authorName: "Dana", body: "moved my stop three times then sized up to get it back" }], card: { title: "Roast Verdict", lines: ["Stop moved: 3 times", "Plan followed: 0 times", "Write the exit first"] }, spokenText: "Dana, that stop has more frequent flyer miles than I do, and I don't have legs. Nine out of ten on the Tilt-o-Meter. Real takeaway: write the exit down before the entry, because the version of you in the trade is not a reliable narrator." },
       { kind: "reply", mood: "proud", replyingTo: [{ platform: "tiktok", authorName: "Jo", body: "what is this stream for lol" }], spokenText: "Jo, this is the Fillbook live. Fillbook is the trading journal I live in, and it's at fillbookhq dot com. Mostly though, we're here to talk rules, risk and the trades you'd rather forget." },

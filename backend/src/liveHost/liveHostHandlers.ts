@@ -49,6 +49,17 @@ export const ENGAGED_GAP_MS = 18_000;
 /** Names said in one welcome; anyone beyond that is welcomed as "and N more". */
 export const JOIN_WELCOME_MAX_NAMES = 3;
 export const JOIN_WELCOME_SEGMENT = "join_welcome";
+
+/** How a line with Red in it is stored: both parts in one text, so the record shows exactly what was said and by whom. */
+export function joinRedLine(redLine: string | null, tiltLine: string): string {
+  return redLine ? `[RED] ${redLine} [TILT] ${tiltLine}` : tiltLine;
+}
+
+/** The reverse of joinRedLine. */
+export function splitRedLine(spokenText: string): { redLine: string | null; tiltLine: string } {
+  const match = /^\[RED\]\s*([\s\S]*?)\s*\[TILT\]\s*([\s\S]*)$/.exec(spokenText);
+  return match ? { redLine: match[1]!, tiltLine: match[2]! } : { redLine: null, tiltLine: spokenText };
+}
 /**
  * Owner rule (2026-10-09): the host does not talk to an empty room. In audience-only mode a segment runs only
  * while someone has joined or chatted within this long; otherwise he stays quiet until the next person arrives.
@@ -468,6 +479,8 @@ export interface TickUtterance {
   kind: "reply" | "segment";
   segmentTitle: string | null;
   spokenText: string;
+  /** Red's interruption, spoken first in his own voice. Null when he is not in this line. */
+  redLine: string | null;
   mood: LiveHostMood;
   tiltLevel: number | null;
   card: LiveHostCard | null;
@@ -815,6 +828,12 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     throw err;
   }
 
+  // Red's line is held to the same checks as Tilt's, plus: he never mentions the product, the website or a
+  // company. A Red line that fails is simply left out; Tilt's line does not depend on it.
+  const redLine =
+    accepted.redLine && batch.length <= 1 && checkSpokenLine(accepted.redLine, { fillbookMentionAllowed: false, websiteMentionAllowed: false }) === null && (await brandConstitution.checkVocabulary(accepted.redLine)).length === 0
+      ? accepted.redLine
+      : null;
   const lineMentionsFillbook = mentionsFillbook(accepted.reply);
   const { data: inserted, error: insertError } = await client
     .from("live_host_utterances")
@@ -822,7 +841,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       session_id: session.id,
       kind: segment || joinWelcome ? "segment" : "reply",
       segment: joinWelcome ? JOIN_WELCOME_SEGMENT : (segment?.id ?? null),
-      spoken_text: accepted.reply,
+      spoken_text: joinRedLine(redLine, accepted.reply),
       mood: accepted.mood,
       card: accepted.card,
       mentions_fillbook: lineMentionsFillbook,
@@ -873,7 +892,8 @@ function toTickUtterance(utterance: LiveHostUtterance, answered: LiveHostMessage
     kind: utterance.kind,
     // A line handed out a second time (the worker restarted mid-line) still gets its banner.
     segmentTitle: segmentTitle ?? (utterance.segment === JOIN_WELCOME_SEGMENT ? JOIN_WELCOME_TITLE : (LIVE_HOST_SEGMENTS.find((candidate) => candidate.id === utterance.segment)?.title ?? null)),
-    spokenText: utterance.spokenText,
+    spokenText: splitRedLine(utterance.spokenText).tiltLine,
+    redLine: splitRedLine(utterance.spokenText).redLine,
     mood: utterance.mood,
     tiltLevel,
     card: utterance.card,
