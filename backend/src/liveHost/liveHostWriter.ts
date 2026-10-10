@@ -126,7 +126,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
     lines.push("");
     lines.push(
       request.messages.length === 1
-        ? "Answer this viewer in one spoken line of one to three sentences."
+        ? "Answer this viewer in one spoken line of one to three sentences. Lead with the laugh, land the real answer inside it."
         : "Answer these viewers together in ONE spoken line of at most four sentences, naming each viewer you answer. If two ask the same thing, answer once for both.",
     );
     lines.push("If a viewer describes a trade or a mistake, give it the Roast My Trade treatment: roast the decision in one line, then one real takeaway, and include a card with the verdict.");
@@ -137,14 +137,14 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
     lines.push("CHAT IS QUIET AND PEOPLE JUST JOINED. Welcome them in:");
     lines.push(`Names: ${request.joiners.join(", ")}${request.otherJoiners ? ` (and ${request.otherJoiners} more who joined with them)` : ""}`);
     lines.push(
-      "ONE short spoken sentence of welcome plus one quick question, under 25 words in total, because they will leave if it takes long. Say each name once, the way a host would. Say a name as a person would say it out loud: drop strings of numbers, underscores and symbols, and say the wordy part. " +
+      "ONE short spoken sentence of welcome plus one quick question, under 28 words in total, because they will leave if it takes long. The welcome itself must be a joke, not a greeting-card line: a funny reason they showed up, a mock announcement of their arrival, a deadpan observation about the name, or a candle-with-no-hands gag. Never just 'welcome in, good to see you'. Say each name once, the way a host would. Say a name as a person would say it out loud: drop strings of numbers, underscores and symbols, and say the wordy part. " +
         "If a name is hard to pronounce or you had to guess, take your best shot and joke that you probably butchered it; do that for at most one name, and be warm about it, never mocking the name itself. " +
         "If more joined than are named, welcome the rest together. Then give them one easy thing to type. Do not repeat a welcome line from the recent lines. Leave answeredMessageIds and skippedMessages empty.",
     );
   } else if (request.segment) {
     lines.push(`CHAT IS QUIET. Run the segment "${request.segment.title}":`);
     lines.push(request.segment.brief);
-    lines.push("Two to four spoken sentences. Leave answeredMessageIds and skippedMessages empty.");
+    lines.push("Two to four spoken sentences. Open on the funniest version of the idea, not on a setup line, and end on a punchline or a question that is itself a joke. Leave answeredMessageIds and skippedMessages empty.");
   }
 
   lines.push("");
