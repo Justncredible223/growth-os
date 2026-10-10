@@ -77,6 +77,8 @@ export interface LiveLineRequest {
   /** False when Fillbook has come up too often lately: do not mention it unless a viewer asked. */
   fillbookMentionAllowed: boolean;
   viewersWaiting: number;
+  /** True on a TikTok stream: point to the link in the bio, never say the website. */
+  linkInBio?: boolean;
   retryFeedback?: string;
 }
 
@@ -139,6 +141,12 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
       ? "Fillbook: mention it only if it is the honest answer to what was asked, or if the segment brief calls for it."
       : "Fillbook: it has come up enough lately. Do NOT mention Fillbook or the site in this line unless a viewer above asked about it directly.",
   );
+
+  if (request.linkInBio) {
+    lines.push(
+      "This stream is on TikTok. Never say, spell or hint at the website address, whatever the segment brief says. If you point people to Fillbook, say the link is in the bio.",
+    );
+  }
 
   if (request.retryFeedback) {
     lines.push("");

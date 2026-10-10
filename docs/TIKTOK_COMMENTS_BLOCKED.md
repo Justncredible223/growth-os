@@ -78,3 +78,17 @@ Revisit only if one of these actually happens:
    decision, not a default fallback.
 
 None of these were pursued further this pass.
+
+## Update 2026-10-09: option 3 was chosen for LIVE chat only
+
+The owner explicitly approved an unofficial reader for one narrow purpose:
+reading the chat of Fillbook's own TikTok LIVE so the Live Host can answer
+it (see the TikTok section of `docs/LIVE_HOST.md`). This is the
+owner-approved exception described in option 3 above. It is read-only, off
+by default, and lives entirely in `backend/scripts/live-host/tiktokChat.ts`
+on the streaming PC.
+
+Everything else in this document still stands. Comments on TikTok videos
+are still not ingested, there is still no `tiktokAdapter.ts`, and nothing
+here reads TikTok data on the server.
+

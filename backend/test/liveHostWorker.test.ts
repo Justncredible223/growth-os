@@ -65,3 +65,48 @@ describe("live host OBS setup", () => {
     expect(loadWorkerConfig({ ...base, LIVE_HOST_OBS_STREAM: "off" }).obsControlsStream).toBe(false);
   });
 });
+
+describe("TikTok chat reader", () => {
+  it("turns a library chat event into a message for the server", async () => {
+    const { toChatMessage } = await import("../scripts/live-host/tiktokChat");
+    const now = new Date("2026-10-09T18:00:00.000Z");
+    expect(toChatMessage({ comment: " how does drawdown work? ", common: { msgId: "777" }, user: { nickname: "Mike", uniqueId: "mike_nq" } }, now)).toEqual({
+      platform: "tiktok",
+      externalId: "777",
+      authorName: "Mike",
+      body: "how does drawdown work?",
+      receivedAt: now.toISOString(),
+    });
+  });
+
+  it("falls back to the handle for the name and makes an id when TikTok gives none", async () => {
+    const { toChatMessage } = await import("../scripts/live-host/tiktokChat");
+    const message = toChatMessage({ comment: "hi", user: { uniqueId: "mike_nq" } }, new Date(1000), 3)!;
+    expect(message.authorName).toBe("mike_nq");
+    expect(message.externalId).toBe("mike_nq-1000-3");
+  });
+
+  it("ignores events with no comment text", async () => {
+    const { toChatMessage } = await import("../scripts/live-host/tiktokChat");
+    expect(toChatMessage({ comment: "   " })).toBeNull();
+    expect(toChatMessage({ user: { nickname: "x" } })).toBeNull();
+  });
+
+  it("only ever listens: the reader has no way to send anything to TikTok", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync(join(__dirname, "..", "scripts", "live-host", "tiktokChat.ts"), "utf-8");
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    expect(code).not.toMatch(/sendMessage|sessionId|signApiKey|\.like\(|\.follow\(/);
+  });
+
+  it("stays disconnected, and keeps undelivered chat, when it should not be reading", async () => {
+    const { TiktokChatReader } = await import("../scripts/live-host/tiktokChat");
+    const reader = new TiktokChatReader();
+    await reader.ensure(false, "fillbookhq");
+    await reader.ensure(true, null);
+    expect(reader.connected).toBe(false);
+    reader.restore([{ platform: "tiktok", externalId: "1", authorName: "a", body: "b", receivedAt: "t" }]);
+    expect(reader.drain()).toHaveLength(1);
+    expect(reader.drain()).toHaveLength(0);
+  });
+});

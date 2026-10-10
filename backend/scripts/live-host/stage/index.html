@@ -67,8 +67,8 @@
 
   /* ---- captions ---- */
   .captions { position: absolute; left: 56px; right: 56px; top: 1500px; min-height: 230px; display: flex; align-items: flex-start; justify-content: center; }
-  .captions p { margin: 0; text-align: center; font-size: 54px; line-height: 1.22; font-weight: 800; letter-spacing: 0.2px; text-shadow: 0 4px 22px rgba(0, 0, 0, 0.85), 0 0 2px #000; }
-  .captions .w { color: rgba(243, 247, 255, 0.38); transition: color 0.12s linear; }
+  .captions p { margin: 0; text-align: center; font-size: 58px; line-height: 1.25; font-weight: 800; letter-spacing: 0.2px; text-shadow: 0 4px 22px rgba(0, 0, 0, 0.85), 0 0 2px #000; }
+  .captions .w { color: rgba(243, 247, 255, 0.62); transition: color 0.12s linear; }
   .captions .w.said { color: var(--ink); }
   .captions .w.now { color: var(--accent); }
 
@@ -377,16 +377,36 @@
       return span;
     });
   }
-  /** Captions show a window of words around the one being spoken, so long lines never overflow the frame. */
+  /**
+   * Captions are shown one phrase at a time and each phrase stays put while it is spoken: only the highlight
+   * moves. (A window that slid forward on every word made the whole block reflow constantly and was hard to
+   * read.) A phrase ends at sentence punctuation, or when it would no longer fit on two lines.
+   */
+  const CAPTION_MAX_CHARS = 52;
+  const CAPTION_MAX_WORDS = 9;
+  function captionPhrases(words) {
+    const phraseOf = [];
+    let phrase = 0, chars = 0, count = 0;
+    words.forEach((word, i) => {
+      const length = word.text.length + 1;
+      if (count > 0 && (chars + length > CAPTION_MAX_CHARS || count >= CAPTION_MAX_WORDS)) { phrase++; chars = 0; count = 0; }
+      phraseOf[i] = phrase;
+      chars += length; count++;
+      if (/[.!?]["')]?$/.test(word.text) && count >= 3) { phrase++; chars = 0; count = 0; }
+    });
+    return phraseOf;
+  }
   function updateCaption(seconds) {
     if (!current) return;
     const { words, spans } = current;
+    if (!current.phraseOf) current.phraseOf = captionPhrases(words);
     let now = words.findIndex((w) => seconds < w.end);
     if (now === -1) now = words.length - 1;
-    const WINDOW = 11;
-    const start = Math.max(0, Math.min(now - 4, words.length - WINDOW));
+    // Hold a finished phrase on screen through the pause before the next one starts.
+    const next = words[now];
+    const showing = now > 0 && seconds < next.start - 0.12 ? current.phraseOf[now - 1] : current.phraseOf[now];
     spans.forEach((span, i) => {
-      span.style.display = i >= start && i < start + WINDOW ? "" : "none";
+      span.style.display = current.phraseOf[i] === showing ? "" : "none";
       span.classList.toggle("said", i < now);
       span.classList.toggle("now", i === now && seconds >= words[i].start - 0.05);
     });

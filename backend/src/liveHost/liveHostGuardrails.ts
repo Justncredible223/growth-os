@@ -153,6 +153,24 @@ export interface SpokenLineContext {
    * mentions Fillbook anyway is rejected, which is what keeps the stream from turning into an advert.
    */
   fillbookMentionAllowed: boolean;
+  /**
+   * False on a TikTok stream: TikTok's LIVE rules list directing viewers off-platform as a violation, so the
+   * host points to the link in the bio and never says or spells the website. Defaults to allowed.
+   */
+  websiteMentionAllowed?: boolean;
+  /** The host's previous line, so two lines in a row cannot open on the same filler word. */
+  previousLine?: string | null;
+}
+
+/** The website, as written or as spoken ("fillbookhq dot com", "fill-book HQ dot com"). */
+const WEBSITE_MENTION = /fill-?book ?hq ?(?:\.|dot) ?com|\bdot com\b|\bwww\b/i;
+/** Openers that mean nothing. One is fine; the same one twice running makes the host sound like a loop. */
+const FILLER_OPENER = /^(alright|all right|okay|ok|so|well|now|right|look|listen)\b/i;
+
+/** The filler word a line opens with, lower-cased, or null. */
+export function fillerOpener(text: string): string | null {
+  const match = FILLER_OPENER.exec(text.trim());
+  return match ? match[1]!.toLowerCase().replace("all right", "alright").replace(/^ok$/, "okay") : null;
 }
 
 /** True when the text mentions the product by name or domain. */
@@ -190,6 +208,15 @@ export function checkSpokenLine(text: string, context: SpokenLineContext): strin
   LINK_PATTERN.lastIndex = 0;
   const badLink = links.find((link) => !link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").startsWith(APPROVED_SPOKEN_DOMAIN));
   if (badLink) return `mentions a link that is not ${APPROVED_SPOKEN_DOMAIN}`;
+
+  if (context.websiteMentionAllowed === false && WEBSITE_MENTION.test(line)) {
+    return "names the website, which is not allowed on a TikTok stream (say the link is in the bio instead)";
+  }
+
+  const opener = fillerOpener(line);
+  if (opener && context.previousLine && fillerOpener(context.previousLine) === opener) {
+    return `opens with "${opener}" again, the same way the previous line opened`;
+  }
 
   if (!context.fillbookMentionAllowed && mentionsFillbook(line)) {
     return "mentions Fillbook again although it has come up too often lately and nobody asked about it";

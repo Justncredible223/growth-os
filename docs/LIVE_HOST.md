@@ -120,15 +120,30 @@ server. It plays a scripted run with no audio and no network.
   with the existing API key. `liveChatMessages.list` costs 5 quota units and
   is polled at most every 10 seconds, which is about five and a half hours
   of chat reading per day on the default 10,000-unit quota.
-- **TikTok LIVE:** the stream itself can go to TikTok from OBS if the
-  account has LIVE access and a stream key (not confirmed for @fillbookhq as
-  of 2026-10-09; TikTok has required about 1,000 followers). **TikTok chat
-  is not read.** There is no official API for it
-  (`docs/TIKTOK_COMMENTS_BLOCKED.md`); the only readers are unofficial,
-  reverse-engineered libraries. The server accepts TikTok messages from the
-  worker when `live_host_settings.tiktok_chat_enabled` is on, but no reader
-  is included, so on TikTok Tilt would run segments without answering chat.
-  Adding a reader is a separate owner decision with its own account risk.
+- **TikTok LIVE:** @fillbookhq can go live but has no stream key ("Stream
+  keys are for certain verified accounts only"), so the picture has to go
+  out through TikTok LIVE Studio on the PC, capturing the OBS scene. That
+  hand-off is not set up or tested yet.
+- **TikTok chat (owner decision, 2026-10-09):** TikTok has no official API
+  for LIVE chat (`docs/TIKTOK_COMMENTS_BLOCKED.md`). The owner chose, with
+  the risks explained, to read it through the unofficial
+  `tiktok-live-connector` library. How that is contained:
+  - It is off until the owner turns on **TikTok chat** in the app's Live
+    Host tab and enters the username. The server ignores TikTok messages
+    while it is off, and the worker only connects when the server says so.
+  - `backend/scripts/live-host/tiktokChat.ts` only listens. It has no
+    login, never posts, and a test asserts it contains no send call.
+  - The library is AGPL-licensed and is not a dependency of this project.
+    Install it on the streaming PC only:
+    `npm run live-host:install-tiktok-reader` (run it again after any
+    `npm ci`, which removes it).
+  - While TikTok chat is on, Tilt says "link in bio" and a guardrail
+    rejects any line that names the website, because TikTok's LIVE rules
+    list directing viewers off-platform as a violation.
+  - Known risks: it is outside TikTok's terms, it breaks when TikTok
+    changes things, and it relies on a third-party signing service. When it
+    cannot connect, Tilt keeps running segments without TikTok chat.
+  - Not yet tried against a real TikTok LIVE.
 - Streaming to both at once needs an OBS multi-output plugin or a restream
   service; OBS alone sends to one destination.
 
@@ -147,7 +162,8 @@ budget setting is the hard stop. Not yet measured on a real stream.
 
 ## Not built yet
 
-- A TikTok chat reader (see above).
+- Greeting TikTok viewers as they join (the reader only passes chat on).
+- The TikTok LIVE Studio hand-off from OBS.
 - A premium voice. The voice is one function in the worker (`synthesize`);
   swapping providers means replacing it and returning word timings.
 - Settings for quiet time and daily budget in the app (the API accepts

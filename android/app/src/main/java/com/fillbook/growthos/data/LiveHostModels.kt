@@ -10,6 +10,9 @@ import org.json.JSONObject
 data class LiveHostSettings(
     val switchedOn: Boolean,
     val youtubeVideoId: String?,
+    /** The owner's choice to read TikTok LIVE chat through an unofficial reader on the PC worker. Off by default. */
+    val tiktokChatEnabled: Boolean,
+    val tiktokUsername: String?,
     val idleSeconds: Int,
     val dailyBudgetUsd: Double,
 )
@@ -64,6 +67,8 @@ internal fun parseLiveHostStatus(json: JSONObject): LiveHostStatus {
         LiveHostSettings(
             switchedOn = s.optString("desiredState") == "on",
             youtubeVideoId = s.stringOrNull("youtubeVideoId"),
+            tiktokChatEnabled = s.optBoolean("tiktokChatEnabled", false),
+            tiktokUsername = s.stringOrNull("tiktokUsername"),
             idleSeconds = s.optInt("idleSeconds", 45),
             dailyBudgetUsd = s.optDouble("dailyBudgetUsd", 0.0),
         )

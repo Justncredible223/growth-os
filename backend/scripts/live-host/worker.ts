@@ -12,8 +12,11 @@
  *   - turns each line into speech with the same free edge-tts voice the videos use, and confirms it was spoken;
  *   - starts and stops the OBS stream when the owner flips the switch in the app (when OBS control is set up).
  *
+ *   - reads TikTok LIVE chat through an unofficial library, only while the owner has TikTok chat switched on
+ *     (tiktokChat.ts explains the owner decision and its limits). YouTube chat is read by the server.
+ *
  * It holds one credential, the automation token, which can tick and confirm lines but cannot flip the switch or
- * change settings. It does not read TikTok chat: there is no official way to (docs/TIKTOK_COMMENTS_BLOCKED.md).
+ * change settings.
  * See docs/LIVE_HOST.md for setup.
  */
 import { execFile } from "node:child_process";
@@ -25,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { respellFillbookForTts } from "../video-factory/voiceover.js";
 import { ObsClient } from "./obsClient.js";
 import { OBS_SOURCE_NAME } from "./setupObs.js";
+import { TiktokChatReader } from "./tiktokChat.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
@@ -32,8 +36,8 @@ const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py"
 
 /** Same voice the videos use; the only one verified by ear to say "Fillbook" correctly (see voiceover.ts). */
 export const LIVE_HOST_DEFAULT_VOICE = "en-US-AndrewNeural";
-/** A touch quicker than the videos: live banter drags at reading pace. */
-export const LIVE_HOST_DEFAULT_RATE = "+12%";
+/** Close to the voice's natural pace. +12% was tried first and the owner found the captions hard to follow (2026-10-09). */
+export const LIVE_HOST_DEFAULT_RATE = "+4%";
 const TICK_MS = 3_000;
 const TTS_TIMEOUT_MS = 30_000;
 
@@ -85,6 +89,8 @@ interface TickResult {
   desired: "on" | "off";
   reason: string | null;
   sessionId: string | null;
+  /** Whether the owner switched TikTok chat reading on, and for which account. */
+  tiktok?: { chatEnabled: boolean; username: string | null };
   utterance: TickUtterance | null;
   note: string | null;
 }
@@ -246,14 +252,25 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     }
   }
 
+  // TikTok chat, read only while the owner has it switched on (see tiktokChat.ts for what that involves).
+  const tiktok = new TiktokChatReader(log);
+
   let lastNote: string | null = null;
 
   async function tick(): Promise<void> {
     await reviveStage();
+    const messages = tiktok.drain();
     let result: TickResult;
     try {
-      result = (await api({ action: "tick", busy: speaking !== null, workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false } })) as TickResult;
+      result = (await api({
+        action: "tick",
+        busy: speaking !== null,
+        messages,
+        workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
+      })) as TickResult;
     } catch (err) {
+      // Put chat back so a network blip loses nothing.
+      tiktok.restore(messages);
       log(`tick failed: ${err instanceof Error ? err.message : String(err)}`);
       return;
     }
@@ -272,6 +289,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
         speaking = null;
       }
     }
+
+    await tiktok.ensure(live && result.tiktok?.chatEnabled === true, result.tiktok?.username ?? null);
 
     const line = result.utterance;
     if (!live || !line || speaking) return;
@@ -299,6 +318,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     if (stopping) return;
     stopping = true;
     log("Shutting down");
+    tiktok.stop();
     // The owner's switch is untouched: closing the worker only stops this PC from streaming.
     await setStreaming(false);
     obs?.close();
