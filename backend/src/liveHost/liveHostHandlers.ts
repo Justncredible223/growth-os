@@ -44,6 +44,11 @@ export const JOIN_WELCOME_EVERY_MS = 40_000;
 /** Names said in one welcome; anyone beyond that is welcomed as "and N more". */
 export const JOIN_WELCOME_MAX_NAMES = 3;
 export const JOIN_WELCOME_SEGMENT = "join_welcome";
+/**
+ * Owner rule (2026-10-09): the host does not talk to an empty room. In audience-only mode a segment runs only
+ * while someone has joined or chatted within this long; otherwise he stays quiet until the next person arrives.
+ */
+export const AUDIENCE_PRESENT_FOR_MS = 3 * 60_000;
 const JOIN_WELCOME_TITLE = "New Arrivals";
 /** Most messages taken from the worker in one tick; a flood is trimmed, newest kept. */
 const MAX_INCOMING_PER_TICK = 40;
@@ -434,6 +439,12 @@ export interface TickInput {
   /** True while the worker is still speaking the previous line: ingest chat, but do not draft another yet. */
   busy?: boolean;
   /**
+   * True when the host should only speak to people who are there: answer chat, welcome joiners, and keep a
+   * room that has recently joined or chatted engaged. With nobody around he says nothing. The worker sends this
+   * by default (owner rule); LIVE_HOST_IDLE_SEGMENTS=on turns the always-talking behaviour back on.
+   */
+  audienceOnly?: boolean;
+  /**
    * Where the worker is streaming. The website is only said out loud when this is "youtube" and TikTok chat is
    * off; anything else (TikTok, both, or not stated) points to the link in the bio, because TikTok treats
    * directing viewers off-platform as a LIVE violation.
@@ -681,6 +692,17 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   if (batch.length === 0 && !joinWelcome) {
     const quietSince = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : 0;
     if (now.getTime() - quietSince < settings.idleSeconds * 1000) return base;
+    if (input.audienceOnly) {
+      // Is anyone here? A join sent with this tick, a recent welcome, or a recent chat message all count.
+      const { data: lastMessageRows } = await client.from("live_host_messages").select("received_at").eq("session_id", session.id).order("received_at", { ascending: false }).limit(1);
+      const lastMessageAt = ((lastMessageRows ?? []) as Array<{ received_at: string }>)[0]?.received_at;
+      const lastSeen = Math.max(
+        rawJoins.length > 0 ? now.getTime() : 0,
+        lastWelcome ? new Date(lastWelcome.createdAt).getTime() : 0,
+        lastMessageAt ? new Date(lastMessageAt).getTime() : 0,
+      );
+      if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS) return base;
+    }
     const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS;
     segment = nextSegment(session.lastSegment, spotDue);
   }

@@ -65,6 +65,8 @@ describe("live host OBS setup", () => {
     const base = { GROWTH_OS_AUTOMATION_TOKEN: "a".repeat(40) };
     expect(loadWorkerConfig(base).obsControlsStream).toBe(true);
     expect(loadWorkerConfig({ ...base, LIVE_HOST_OBS_STREAM: "off" }).obsControlsStream).toBe(false);
+    expect(loadWorkerConfig(base).idleSegments).toBe(false);
+    expect(loadWorkerConfig({ ...base, LIVE_HOST_IDLE_SEGMENTS: "on" }).idleSegments).toBe(true);
   });
 });
 
