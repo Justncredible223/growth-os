@@ -622,6 +622,7 @@
 
   /** Speak one line: { id, spokenText, mood, kind, segmentTitle, tiltLevel, card, replyingTo, audioUrl, words, durationSeconds }. */
   function speak(line) {
+    $("hook").classList.remove("show"); document.body.classList.remove("hooked");
     clearTimeout(finishTimer);
     clearProps();
     const hasAudio = !DEMO && line.audioUrl;
@@ -677,6 +678,7 @@
   ];
   let hookIndex = Math.floor(Math.random() * HOOKS.length);
   let hookSince = 0;
+  let lastSpokeAt = 0;
   let lastAutoMove = 0, nextAutoMoveIn = 6000, idleSince = 0, lastBit = "";
   // What goes through his head while he waits. Nothing here asks for or offers advice.
   const THOUGHTS = [
@@ -724,7 +726,9 @@
     if (move && ["yawn", "sleep", "peek", "watch", "sigh"].includes(move.name)) move = null;
   }
   function updateHook(t) {
-    const idle = !current && !DEMO_SILENT;
+    // Not until the last caption has cleared: the hook sits where the captions are, and showing it the instant he
+    // stops talking covered the end of his sentence.
+    const idle = !current && !DEMO_SILENT && $("caption").textContent === "" && t - lastSpokeAt > 1200;
     const hook = $("hook");
     if (idle && (!hook.classList.contains("show") || t - hookSince > 6500)) {
       if (hook.classList.contains("show")) hookIndex = (hookIndex + 1) % HOOKS.length;
@@ -759,6 +763,7 @@
     const dt = Math.min(64, t - last); last = t;
     drawChart(dt);
     if (current) {
+      lastSpokeAt = t;
       const seconds = current.hasAudio ? voice.currentTime : (t - current.startedAt) / 1000;
       updateCaption(seconds);
       if (current.hasAudio) {
