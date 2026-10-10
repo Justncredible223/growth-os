@@ -50,11 +50,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install edge-tts (voiceover)
-        run: pip install edge-tts
+        run: pip install --disable-pip-version-check edge-tts
 
-      - name: npm install
+      # npm ci installs exactly package-lock.json from setup-node's cache (npm install re-resolves and rewrites the
+      # lock file on every render for no benefit; CI already uses npm ci on the same lock file).
+      - name: npm ci
         working-directory: backend
-        run: npm install
+        run: npm ci --no-audit --no-fund
+
+      # The Chromium download (~150 MB) is cached per lock file; "install --with-deps" below still installs the OS
+      # libraries on a fresh runner but skips the download on a cache hit.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
 
       - name: Install Chromium (HTML product-mock slides)
         working-directory: backend

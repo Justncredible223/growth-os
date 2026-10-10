@@ -112,8 +112,8 @@ describe("runAutoDraftStep", () => {
     expect(result.status).toBe("drafted");
     expect(result.aiCalls).toBe(10);
     expect(result.costUsd).toBeGreaterThan(0);
-    expect(deps.runCampaignDeps.markOpportunityActioned).toHaveBeenCalled();
-    expect(deps.runCampaignDeps.markCampaignInReview).toHaveBeenCalled();
+    expect(deps.runCampaignDeps!.markOpportunityActioned).toHaveBeenCalled();
+    expect(deps.runCampaignDeps!.markCampaignInReview).toHaveBeenCalled();
   });
 
   it("no qualifying opportunities -> no draft (correct result, not a failure)", async () => {
@@ -144,7 +144,7 @@ describe("runAutoDraftStep", () => {
 
     expect(first.status).toBe("drafted");
     expect(second.status).toBe("already_ran");
-    expect((deps.runCampaignDeps.campaignRepo as InMemoryCampaignRepository).campaignCount).toBe(1);
+    expect((deps.runCampaignDeps!.campaignRepo as InMemoryCampaignRepository).campaignCount).toBe(1);
   });
 
   it("system paused -> skip without claiming a run or touching the LLM", async () => {
@@ -222,8 +222,8 @@ describe("runAutoDraftStep", () => {
 
     expect(result.status).toBe("failed");
     expect(result.error).toContain("Claude API unavailable");
-    expect(deps.runCampaignDeps.markOpportunityActioned).not.toHaveBeenCalled();
-    expect(deps.runCampaignDeps.markCampaignInReview).not.toHaveBeenCalled();
+    expect(deps.runCampaignDeps!.markOpportunityActioned).not.toHaveBeenCalled();
+    expect(deps.runCampaignDeps!.markCampaignInReview).not.toHaveBeenCalled();
     const lastRun = await runRepo.getLastRun();
     expect(lastRun?.status).toBe("failed");
   });
@@ -244,6 +244,46 @@ describe("runAutoDraftStep", () => {
     // as finalStage (see campaignPipeline.ts) -- this asserts the auto-draft
     // path never bypasses that by checking the campaign/asset never advances
     // via any code path other than runCampaignForOpportunity itself.
-    expect(deps.runCampaignDeps.markCampaignInReview).toHaveBeenCalledTimes(1);
+    expect(deps.runCampaignDeps!.markCampaignInReview).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("runAutoDraftStep lazy drafting deps", () => {
+  function lazyDeps(fetchMock: ReturnType<typeof vi.fn>, oppRepo: InMemoryOpportunityRepository, overrides: Partial<AutoDraftStepDeps> = {}) {
+    const base = buildStepDeps(fetchMock, oppRepo, overrides);
+    const loader = vi.fn(async () => ({ runCampaignDeps: base.runCampaignDeps!, usageLog: base.usageLog! }));
+    const { runCampaignDeps: _r, usageLog: _u, ...rest } = base;
+    return { deps: { ...rest, loadRunCampaignDeps: loader } as AutoDraftStepDeps, loader };
+  }
+
+  it("does not build drafting deps when paused, backlog-full, over budget or nothing qualifies", async () => {
+    const oppRepo = new InMemoryOpportunityRepository();
+    await seedOpportunity(oppRepo);
+    const paused = lazyDeps(vi.fn(), oppRepo, { isPaused: async () => true });
+    expect((await runAutoDraftStep(paused.deps, "2026-09-08", now)).skipReason).toBe("system_paused");
+    expect(paused.loader).not.toHaveBeenCalled();
+
+    const full = lazyDeps(vi.fn(), oppRepo, { countReadyForOwnerAssets: async () => 99 });
+    expect((await runAutoDraftStep(full.deps, "2026-09-08", now)).status).toBe("skipped");
+    expect(full.loader).not.toHaveBeenCalled();
+
+    const emptyRepo = new InMemoryOpportunityRepository();
+    const none = lazyDeps(vi.fn(), emptyRepo);
+    expect((await runAutoDraftStep(none.deps, "2026-09-08", now)).skipReason).toBe("no_qualifying_opportunity");
+    expect(none.loader).not.toHaveBeenCalled();
+  });
+
+  it("builds them exactly once, right before drafting", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(draftResponse("Most funded accounts get pulled for violating a rule nobody reads twice."))
+      .mockResolvedValue(verdictResponse(true));
+    const oppRepo = new InMemoryOpportunityRepository();
+    await seedOpportunity(oppRepo);
+    const { deps, loader } = lazyDeps(fetchMock, oppRepo);
+    const result = await runAutoDraftStep(deps, "2026-09-08", now);
+    expect(result.status).toBe("drafted");
+    expect(result.aiCalls).toBe(10);
+    expect(loader).toHaveBeenCalledTimes(1);
   });
 });

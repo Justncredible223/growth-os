@@ -46,9 +46,10 @@ jobs:
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
-      - name: npm install
+      # npm ci installs exactly package-lock.json from setup-node's cache (same as ci.yml).
+      - name: npm ci
         working-directory: backend
-        run: npm install
+        run: npm ci --no-audit --no-fund
 
       # Lets run-single.ts push "script ready to approve". Harmless when the secret is missing: the push is skipped.
       - name: Write Firebase service account
