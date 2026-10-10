@@ -211,7 +211,10 @@ of as a solo, automated host. YouTube stays fully automated; duo mode is for Tik
 - You type prompts for Tilt at `http://127.0.0.1:8790/host` (the worker serves it, local only). Two ways to use it:
   - say something to Tilt directly ("Tilt, explain trailing drawdown to them"), and he answers you like a co-host;
   - paste a viewer's question into the box and put their name in "Viewer's name": Tilt answers it for that viewer.
-- Tilt speaks only when you send something. No idle segments, no unprompted welcomes, no spoken line without a
+- **Run a segment** button: pick a segment (or leave it on "Next in rotation") and press the button to have Tilt
+  run one right now, skipping the quiet-time wait. A typed prompt waiting goes first. The Fillbook spot is not
+  offered; the server rations it.
+- Tilt speaks only when you send something or press the button. No idle segments, no unprompted welcomes, no spoken line without a
   prompt. The same screening, safety checks, owner switch and firewall rule apply to what you type as to chat.
 
 **Run it**

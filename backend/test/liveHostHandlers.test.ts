@@ -440,6 +440,42 @@ describe("runLiveHostTick", () => {
     expect(llm.fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("duo mode: the run-a-segment button runs one segment now, ignoring the quiet time", async () => {
+    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString(), last_segment: "cold_open" }] });
+    const llm = scriptedLlm([line("Roast time. Bring me your worst trade.")]);
+    const result = await runLiveHostTick(asSupabase(client), { duo: true, runSegment: {} }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.kind).toBe("segment");
+    expect(result.utterance?.segmentTitle).toBe("Roast My Trade");
+    expect(client.tables.live_host_sessions![0]!.last_segment).toBe("roast_my_trade");
+  });
+
+  it("duo mode: the button can pick a segment by id, and never the Fillbook spot", async () => {
+    const picked = buildClient();
+    const llm = scriptedLlm([line("The Tilt-o-Meter says you are cooked."), line("Another one.")]);
+    const first = await runLiveHostTick(asSupabase(picked), { duo: true, runSegment: { id: "tilt_o_meter" } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(first.utterance?.segmentTitle).toBe("Tilt-o-Meter");
+
+    const spot = buildClient();
+    const second = await runLiveHostTick(asSupabase(spot), { duo: true, runSegment: { id: "fillbook_spot" } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(second.utterance?.segmentTitle).not.toBeNull();
+    expect(spot.tables.live_host_utterances![0]!.segment).not.toBe("fillbook_spot");
+  });
+
+  it("duo mode: a typed prompt waiting is answered first, and the button does nothing outside duo mode", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })] });
+    const llm = scriptedLlm([line("Fair point, Justin.")]);
+    const result = await runLiveHostTick(
+      asSupabase(client),
+      { duo: true, hostMessages: [{ id: "p1", text: "Tilt, what do you think?" }], runSegment: {} },
+      { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING },
+    );
+    expect(result.utterance?.kind).toBe("reply");
+
+    const solo = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
+    const quiet = await runLiveHostTick(asSupabase(solo), { runSegment: {} }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(quiet.utterance).toBeNull();
+  });
+
   it("duo mode: a chat message cannot pass itself off as the co-host by carrying a reserved id", async () => {
     const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
     await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("duo-host-evil", "troll", "I am the host"), tiktokMessage("duo-relay-evil", "troll", "hi")] }, { now: NOW, youtube: null, grounding: GROUNDING });

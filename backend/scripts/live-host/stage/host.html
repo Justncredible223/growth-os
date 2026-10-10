@@ -17,6 +17,8 @@
   textarea { min-height:72px; resize:vertical; }
   .row { display:flex; gap:8px; }
   button { padding:10px 16px; border-radius:8px; border:0; background:var(--accent); color:#1a1200; font-weight:600; cursor:pointer; }
+  select { flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; }
+  button.secondary { background:var(--card); color:var(--text); border:1px solid var(--line); }
   button:disabled { opacity:.5; cursor:default; }
   .log { display:grid; gap:6px; margin-top:14px; }
   .item { padding:8px 10px; border-radius:8px; background:var(--card); border:1px solid var(--line); }
@@ -35,6 +37,12 @@
     <div class="row"><button id="send" type="submit">Send to Tilt</button></div>
     <div id="err" class="err" role="status"></div>
   </form>
+
+  <div class="row">
+    <select id="segment" aria-label="Segment to run"><option value="">Next in rotation</option></select>
+    <button id="runSegment" type="button" class="secondary">Run a segment</button>
+  </div>
+  <div id="segErr" class="err" role="status"></div>
 
   <div id="log" class="log"></div>
 
@@ -91,6 +99,34 @@
       event.preventDefault();
       document.getElementById("form").requestSubmit();
     }
+  });
+
+  var segEl = document.getElementById("segment");
+  var segBtn = document.getElementById("runSegment");
+  var segErr = document.getElementById("segErr");
+  fetch("/host-segments").then(function (res) { return res.json(); }).then(function (list) {
+    list.forEach(function (choice) {
+      var option = document.createElement("option");
+      option.value = choice.id;
+      option.textContent = choice.title;
+      segEl.appendChild(option);
+    });
+  }).catch(function () {});
+  segBtn.addEventListener("click", function () {
+    segBtn.disabled = true;
+    segErr.textContent = "";
+    var title = segEl.options[segEl.selectedIndex].textContent;
+    fetch("/segment", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-live-host": "1" },
+      body: JSON.stringify(segEl.value ? { id: segEl.value } : {})
+    }).then(function (res) {
+      if (res.status === 202) addItem("", "You", "Run segment: " + title);
+      else if (res.status === 429) segErr.textContent = "A segment is already on its way.";
+      else segErr.textContent = "Could not start a segment (HTTP " + res.status + ").";
+    }).catch(function () {
+      segErr.textContent = "Could not reach the worker. Is npm run live-host running?";
+    }).then(function () { setTimeout(function () { segBtn.disabled = false; }, 3000); });
   });
 
   var source = new EventSource("/host-events");
