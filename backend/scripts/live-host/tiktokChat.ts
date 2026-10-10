@@ -55,6 +55,16 @@ export function toChatMessage(event: TiktokChatEvent, now: Date = new Date(), se
   };
 }
 
+/** A join is only worth welcoming for this long; after that the viewer has settled in or left. */
+export const JOIN_FRESH_MS = 90_000;
+const MAX_JOINS = 30;
+
+/** The display name from a join (member) event, or null. */
+export function joinerName(event: TiktokChatEvent): string | null {
+  const name = event.user?.nickname ?? event.nickname ?? event.user?.uniqueId ?? event.uniqueId;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
 /** Most messages held between two ticks. A flood keeps the newest; the server trims further. */
 const MAX_BUFFERED = 200;
 const RETRY_AFTER_MS = 30_000;
@@ -72,6 +82,7 @@ export class TiktokChatReader {
   private lastProblem: string | null = null;
   private sequence = 0;
   private readonly buffer: TiktokChatMessage[] = [];
+  private joins: Array<{ name: string; at: number }> = [];
 
   constructor(private log: (line: string) => void = () => {}) {}
 
@@ -82,6 +93,24 @@ export class TiktokChatReader {
   /** Takes everything read since the last call. */
   drain(): TiktokChatMessage[] {
     return this.buffer.splice(0, this.buffer.length);
+  }
+
+  /** Viewers who joined recently and have not been welcomed yet. Not removed until clearJoins(). */
+  recentJoins(now: number = Date.now()): Array<{ name: string }> {
+    this.joins = this.joins.filter((join) => now - join.at < JOIN_FRESH_MS);
+    return this.joins.map((join) => ({ name: join.name }));
+  }
+
+  /** Called when the server says it welcomed (or dropped) the joins it was sent. */
+  clearJoins(): void {
+    this.joins = [];
+  }
+
+  /** Records one join. Public so it can be exercised without a live connection. */
+  noteJoin(name: string | null, now: number = Date.now()): void {
+    if (!name || this.joins.some((join) => join.name === name)) return;
+    this.joins.push({ name, at: now });
+    if (this.joins.length > MAX_JOINS) this.joins.splice(0, this.joins.length - MAX_JOINS);
   }
 
   /** Puts messages back at the front, for when a tick failed and they were not delivered. */
@@ -116,6 +145,9 @@ export class TiktokChatReader {
         this.buffer.push(message);
         if (this.buffer.length > MAX_BUFFERED) this.buffer.splice(0, this.buffer.length - MAX_BUFFERED);
       });
+      connection.on(events.MEMBER ?? "member", (data) => this.noteJoin(joinerName(data)));
+      // Without a listener, an "error" event from the library would crash the whole worker.
+      connection.on("error", (data) => this.log(`TikTok chat: ${String((data as { info?: unknown })?.info ?? "connection error").slice(0, 160)}`));
       const dropped = () => {
         if (this.connection === connection) {
           this.connection = null;
@@ -145,6 +177,7 @@ export class TiktokChatReader {
     const connection = this.connection;
     this.connection = null;
     this.username = null;
+    this.joins = [];
     try {
       connection?.disconnect?.();
     } catch {

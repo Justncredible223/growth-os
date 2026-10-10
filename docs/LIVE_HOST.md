@@ -75,8 +75,17 @@ Enforced in code (guardrails, then the firewall), not only in the prompt:
 - Fillbook is mentioned in at most one of the last six lines unless a
   viewer asks about it. The explicit "what Fillbook is" segment runs at
   most every 12 minutes and never in a stream's first 4 minutes.
-- He stops drafting once today's recorded spend reaches the daily budget
-  (default $3, all Growth OS features combined).
+- He stops drafting once his own spend today reaches the daily budget
+  (default $3). Only Live Host model calls count; the rest of Growth OS
+  has its own limits.
+- No financial advice of any kind: he explains how things work and never
+  tells a viewer what to do with a trade, a plan or their money. He says
+  out loud, when welcoming people and whenever asked for advice, that the
+  stream is entertainment and education only.
+- He only says the website when the worker states the stream is on
+  YouTube (`LIVE_HOST_PLATFORM=youtube`) and TikTok chat is off. On
+  TikTok, on both, or when it is not stated, he says the link is in the
+  bio.
 - He never types in chat. Posting a chat message would be an
   `EXTERNAL_WRITE` and stays rejected.
 
@@ -160,9 +169,29 @@ One Claude call per spoken line (Sonnet, cached system prompt), plus up to
 two retries when a line fails a check. Voice is free (edge-tts). The daily
 budget setting is the hard stop. Not yet measured on a real stream.
 
+## Welcoming people who join
+
+On TikTok the reader also sees who joins. When nobody is waiting on an
+answer and Tilt is not mid-line, he welcomes up to three new arrivals by
+name (and "the others" together), at most every 40 seconds. A name that is
+hard to say gets his best attempt and a joke about butchering it. Names go
+through the same cleaning as chat names; an unsafe one is counted among the
+others and never said. Chat always comes first. YouTube does not say who
+joins, so there he welcomes people on their first chat message instead.
+
+## Hardening after the first run (2026-10-09)
+
+An independent review before the first public stream found, and this
+version fixes: a line could be spoken twice when its confirmation was slow;
+a segment that kept failing checks was redrafted on every tick; switching
+off did not stop a line already being written or playing; a failed OBS stop
+was never retried; the blocked-word and trade-call filters had both false
+positives and misses; a message the model ignored could be shown on screen;
+and "link in bio" was itself on a shared banned-phrase list. Each has a
+regression test in `backend/test/liveHost*.test.ts`.
+
 ## Not built yet
 
-- Greeting TikTok viewers as they join (the reader only passes chat on).
 - The TikTok LIVE Studio hand-off from OBS.
 - A premium voice. The voice is one function in the worker (`synthesize`);
   swapping providers means replacing it and returning word timings.

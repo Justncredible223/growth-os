@@ -1,15 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLlmClient, type LlmClient } from "../content/llmClient.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
-import { getTodaySpendUsd, recordCostEvent } from "../cost/costTracking.js";
+import { recordCostEvent } from "../cost/costTracking.js";
 import { authorizeLiveHostSpeechAndAudit, LiveHostSpeechRejectedError, type AuditSink } from "../firewall/externalWriteFirewall.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
 import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../signals/adapters/youtubeLiveChatAdapter.js";
-import { checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
-import { LIVE_HOST_NAME, nextSegment } from "./liveHostPersona.js";
+import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
+import { LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import type {
   IncomingChatMessage,
@@ -30,17 +30,41 @@ export const SESSION_ABANDONED_AFTER_MS = 5 * 60_000;
 /** Chat messages answered together in one spoken line. */
 export const MAX_MESSAGES_PER_LINE = 3;
 /** A message nobody got to within this long is skipped: answering it later reads as a non sequitur. */
-export const MESSAGE_STALE_AFTER_MS = 4 * 60_000;
+export const MESSAGE_STALE_AFTER_MS = 90_000;
+/** With more than this many waiting, the host answers the newest and lets the rest go, instead of always replying to chat from minutes ago. */
+export const BACKLOG_LIMIT = 6;
 /** Fillbook may be mentioned in at most this many of the last PROMO_WINDOW lines, unless a viewer asks. */
 export const PROMO_MAX_MENTIONS = 1;
 export const PROMO_WINDOW = 6;
 /** The explicit "what Fillbook is" segment runs at most this often, and never in a session's first minutes. */
 export const FILLBOOK_SPOT_EVERY_MS = 12 * 60_000;
 export const FILLBOOK_SPOT_NOT_BEFORE_MS = 4 * 60_000;
+/** Welcomes for viewers who just joined are spaced at least this far apart, so arrivals never crowd out the show. */
+export const JOIN_WELCOME_EVERY_MS = 40_000;
+/** Names said in one welcome; anyone beyond that is welcomed as "and N more". */
+export const JOIN_WELCOME_MAX_NAMES = 3;
+export const JOIN_WELCOME_SEGMENT = "join_welcome";
+const JOIN_WELCOME_TITLE = "New Arrivals";
 /** Most messages taken from the worker in one tick; a flood is trimmed, newest kept. */
 const MAX_INCOMING_PER_TICK = 40;
 const RECENT_EXCHANGES = 12;
 const FEED_LIMIT = 60;
+
+/** The cost_events context tag every Live Host model call is recorded under. */
+export const LIVE_HOST_COST_ENDPOINT = "live-host-line";
+
+/**
+ * What the Live Host itself has spent today (UTC day). The daily budget is the host's own: the rest of Growth OS
+ * (campaign runs, drafts, research) has its own limits, and a busy day there must not silence a stream.
+ */
+export async function getLiveHostSpendTodayUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  const { data, error } = await client.from("cost_events").select("cost_usd, context").gte("created_at", startOfToday);
+  if (error) throw new Error(`getLiveHostSpendTodayUsd failed: ${error.message}`);
+  return ((data ?? []) as Array<{ cost_usd: number | null; context: { endpoint?: unknown } | null }>)
+    .filter((row) => row.context?.endpoint === LIVE_HOST_COST_ENDPOINT)
+    .reduce((sum, row) => sum + Number(row.cost_usd ?? 0), 0);
+}
 
 const TABLES = /(live_host_settings|live_host_sessions|live_host_messages|live_host_utterances)/;
 /** True for the error Supabase returns before migration 0049 is applied. */
@@ -316,7 +340,7 @@ export async function getLiveHostStatus(client: SupabaseClient, now: Date = new 
     }
     throw err;
   }
-  const [systemPaused, live, todaySpendUsd] = await Promise.all([loadSystemPaused(client), loadLiveSession(client), getTodaySpendUsd(client, now)]);
+  const [systemPaused, live, todaySpendUsd] = await Promise.all([loadSystemPaused(client), loadLiveSession(client), getLiveHostSpendTodayUsd(client, now)]);
 
   let feedSessionId = live?.id ?? null;
   let lastSession: LiveHostStatus["lastSession"] = null;
@@ -409,7 +433,18 @@ export interface TickInput {
   messages?: IncomingChatMessage[];
   /** True while the worker is still speaking the previous line: ingest chat, but do not draft another yet. */
   busy?: boolean;
+  /**
+   * Where the worker is streaming. The website is only said out loud when this is "youtube" and TikTok chat is
+   * off; anything else (TikTok, both, or not stated) points to the link in the bio, because TikTok treats
+   * directing viewers off-platform as a LIVE violation.
+   */
+  platform?: string;
   workerInfo?: Record<string, unknown>;
+  /**
+   * Viewers who joined since the worker last had a welcome confirmed (TikTok only: YouTube does not say who
+   * joins). Raw display names; they are cleaned here before anything is said. Never stored.
+   */
+  joins?: Array<{ name?: unknown }>;
 }
 
 export interface TickUtterance {
@@ -433,6 +468,8 @@ export interface TickResult {
   /** The next line to speak, or null when there is nothing to say this tick. */
   utterance: TickUtterance | null;
   note: string | null;
+  /** True when the joins sent with this tick were used or deliberately dropped: the worker clears its list. */
+  joinsWelcomed?: boolean;
 }
 
 export interface TickDeps {
@@ -521,7 +558,7 @@ async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession,
 
 /** Viewer asked about the product, the site or what the stream is for: a Fillbook mention is the honest answer. */
 export function viewerAskedAboutFillbook(body: string): boolean {
-  return /fill-?book|\bjournal(?:ing|s)?\b|\bwhat (?:is|'s) this\b|\bwhat app\b|\bwhich app\b|\bthe app\b|\bwebsite\b|\blink\b|\bsign ?up\b|\bprice\b|\bpricing\b|\bhow much\b|\bcost\b|\bfree trial\b/i.test(body);
+  return /fill-?book|\bjournal(?:ing|s)?\b|\bwhat (?:is|'s) this\b|\bwhat app\b|\bwhich app\b|\bthe app\b|\bwebsite\b|\blink\b|\bsign ?up\b|\bprice\b|\bpricing\b|\bhow much\b|\bcost\b|\bfree trial\b/i.test(body.replace(/\[link\]/g, " "));
 }
 
 /**
@@ -530,6 +567,17 @@ export function viewerAskedAboutFillbook(body: string): boolean {
  * drafts ONE line, runs it through the guardrails and the firewall, stores it and hands it back to be spoken.
  */
 export async function runLiveHostTick(client: SupabaseClient, input: TickInput = {}, deps: TickDeps = {}): Promise<TickResult> {
+  // Cost rows are written in the background while drafting. On a serverless host anything still in flight when
+  // the response is sent can be lost, and the daily budget depends on these rows, so wait for them.
+  const costWrites: Array<Promise<unknown>> = [];
+  try {
+    return await runTick(client, input, deps, costWrites);
+  } finally {
+    await Promise.allSettled(costWrites);
+  }
+}
+
+async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps, costWrites: Array<Promise<unknown>>): Promise<TickResult> {
   const now = deps.now ?? new Date();
   const settings = await loadSettings(client);
   const systemPaused = await loadSystemPaused(client);
@@ -575,14 +623,15 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   if (input.busy) return base;
 
   // A line already drafted but not yet confirmed spoken is handed out again rather than drafting a second one.
-  const { data: queuedRows } = await client.from("live_host_utterances").select("*").eq("session_id", session.id).eq("status", "queued").order("created_at", { ascending: true }).limit(1);
+  const { data: queuedRows, error: queuedError } = await client.from("live_host_utterances").select("*").eq("session_id", session.id).eq("status", "queued").order("created_at", { ascending: true }).limit(1);
+  if (queuedError) return { ...base, note: `Could not check for a waiting line: ${queuedError.message}` };
   const queued = ((queuedRows ?? []) as UtteranceRow[])[0];
   if (queued) {
     const { data: answered } = await client.from("live_host_messages").select("*").eq("utterance_id", queued.id);
     return { ...base, utterance: toTickUtterance(toUtterance(queued), ((answered ?? []) as MessageRow[]).map(toMessage), null) };
   }
 
-  const todaySpend = await getTodaySpendUsd(client, now);
+  const todaySpend = await getLiveHostSpendTodayUsd(client, now);
   if (todaySpend >= settings.dailyBudgetUsd) {
     return { ...base, note: `Daily budget reached ($${todaySpend.toFixed(2)} of $${settings.dailyBudgetUsd.toFixed(2)}). The host is staying quiet.` };
   }
@@ -596,7 +645,12 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   if (stale.length > 0) {
     await client.from("live_host_messages").update({ status: "skipped", status_reason: "waited too long" }).in("id", stale.map((m) => m.id));
   }
-  const pending = pendingAll.filter((m) => new Date(m.receivedAt).getTime() >= staleCutoff);
+  let pending = pendingAll.filter((m) => new Date(m.receivedAt).getTime() >= staleCutoff);
+  if (pending.length > BACKLOG_LIMIT) {
+    const passedOver = pending.slice(0, pending.length - MAX_MESSAGES_PER_LINE);
+    await client.from("live_host_messages").update({ status: "skipped", status_reason: "chat moved on" }).in("id", passedOver.map((m) => m.id));
+    pending = pending.slice(-MAX_MESSAGES_PER_LINE);
+  }
   const batch = pending.slice(0, MAX_MESSAGES_PER_LINE);
 
   // Recent lines: the host's memory for this stream, and the basis for rationing Fillbook mentions.
@@ -604,12 +658,27 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   const recentUtterances = ((recentRows ?? []) as UtteranceRow[]).map(toUtterance);
   const recentMentions = recentUtterances.slice(0, PROMO_WINDOW).filter((u) => u.mentionsFillbook).length;
   const askedDirectly = batch.some((m) => viewerAskedAboutFillbook(m.body));
-  const lastMention = recentUtterances.find((u) => u.mentionsFillbook);
-  const sinceLastMentionMs = lastMention ? now.getTime() - new Date(lastMention.createdAt).getTime() : Number.POSITIVE_INFINITY;
+  const { data: mentionRows } = await client.from("live_host_utterances").select("created_at").eq("session_id", session.id).eq("mentions_fillbook", true).neq("status", "dropped").order("created_at", { ascending: false }).limit(1);
+  const lastMentionAt = ((mentionRows ?? []) as Array<{ created_at: string }>)[0]?.created_at;
+  const sinceLastMentionMs = lastMentionAt ? now.getTime() - new Date(lastMentionAt).getTime() : Number.POSITIVE_INFINITY;
   const sessionAgeMs = now.getTime() - new Date(session.startedAt).getTime();
 
+  // People who just joined are welcomed by name, but only when nobody is waiting on an answer (and never
+  // mid-sentence: this point is only reached when the worker is not speaking). Names are cleaned first, and a
+  // name that is not safe to say is simply counted among "the others".
+  const rawJoins = settings.tiktokChatEnabled && Array.isArray(input.joins) ? input.joins : [];
+  const cleanJoiners = [...new Set(rawJoins.map((join) => safeAuthorName(typeof join?.name === "string" ? join.name : "")))];
+  const namedJoiners = cleanJoiners.filter((name) => name !== FALLBACK_AUTHOR_NAME).slice(0, JOIN_WELCOME_MAX_NAMES);
+  const otherJoiners = Math.max(0, rawJoins.length - namedJoiners.length);
+  const lastWelcome = recentUtterances.find((u) => u.segment === JOIN_WELCOME_SEGMENT);
+  const welcomeDue = !lastWelcome || now.getTime() - new Date(lastWelcome.createdAt).getTime() >= JOIN_WELCOME_EVERY_MS;
+  const joinWelcome = batch.length === 0 && namedJoiners.length > 0 && welcomeDue;
+  // Once a welcome is attempted the worker's list is cleared whatever happens, so a failed draft is never retried
+  // on every tick.
+  if (joinWelcome) base.joinsWelcomed = true;
+
   let segment = null;
-  if (batch.length === 0) {
+  if (batch.length === 0 && !joinWelcome) {
     const quietSince = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : 0;
     if (now.getTime() - quietSince < settings.idleSeconds * 1000) return base;
     const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS;
@@ -617,7 +686,7 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   }
   const fillbookMentionAllowed = askedDirectly || segment?.isFillbookSpot === true || recentMentions < PROMO_MAX_MENTIONS;
   // TikTok chat on means the stream is on TikTok, where sending viewers off-platform is a LIVE violation.
-  const linkInBio = settings.tiktokChatEnabled;
+  const linkInBio = settings.tiktokChatEnabled || input.platform !== "youtube";
   const previousLine = recentUtterances[0]?.spokenText ?? null;
 
   // Who has spoken before in this session, to welcome first-timers by name.
@@ -643,7 +712,7 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   const llmClient =
     deps.llmClient ??
     createLlmClient(process.env, (usage) => {
-      void recordCostEvent(client, usage, { liveHostSessionId: sessionId, endpoint: "live-host-line" });
+      costWrites.push(recordCostEvent(client, usage, { liveHostSessionId: sessionId, endpoint: LIVE_HOST_COST_ENDPOINT }));
     });
   const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
 
@@ -655,7 +724,7 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, retryFeedback }, grounding);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, retryFeedback }, grounding);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0) {
           const violations = await brandConstitution.checkVocabulary(draft.reply);
@@ -672,7 +741,9 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
     accepted = result.draft;
     hardReason = result.hardReason;
   } catch (err) {
-    // A model outage or timeout must not take the stream down: say nothing this tick and try again on the next.
+    // A model outage or timeout must not take the stream down: say nothing this tick. A failed segment waits out
+    // the quiet time before the next try; a failed reply is retried on the next tick while the viewer is waiting.
+    if (segment) await backOffSegment(client, session.id, segment.id, now);
     return { ...base, note: `Could not draft a line: ${errorMessage(err)}` };
   }
 
@@ -681,6 +752,9 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
     if (batch.length > 0) {
       await client.from("live_host_messages").update({ status: "skipped", status_reason: `no safe reply (${hardReason ?? "unknown"})`.slice(0, 200) }).in("id", batch.map((m) => m.id));
     }
+    // Without this a segment that keeps failing would be redrafted on every 3-second tick, three model calls a
+    // time. Treat it as said: wait out the quiet time, then move on to the next segment.
+    if (segment) await backOffSegment(client, session.id, segment.id, now);
     return { ...base, note: `No line passed the checks: ${hardReason ?? "unknown"}` };
   }
 
@@ -695,10 +769,17 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
     return base;
   }
 
-  // The firewall has the last word. It re-reads nothing: it is given exactly what was checked above.
+  // Drafting took seconds. The owner may have switched off, or paused the system, in that time: read the switch,
+  // the pause flag and the session again now, so the firewall decides on what is true at this moment.
+  const [settingsNow, pausedNow, sessionNow] = await Promise.all([loadSettings(client), loadSystemPaused(client), loadLiveSession(client)]);
+  if (settingsNow.desiredState !== "on" || pausedNow || sessionNow?.id !== session.id) {
+    return { ...offResult(settingsNow, pausedNow ? "The system is paused." : "The Live Host is switched off."), joinsWelcomed: base.joinsWelcomed };
+  }
+
+  // The firewall has the last word, on the values just read.
   try {
     await authorizeLiveHostSpeechAndAudit(
-      { ownerSwitchedOn: settings.desiredState === "on", systemPaused, sessionId: session.id, guardrailProblem: verdicts.get(accepted) ?? null, text: accepted.reply },
+      { ownerSwitchedOn: settingsNow.desiredState === "on", systemPaused: pausedNow, sessionId: sessionNow.id, guardrailProblem: verdicts.get(accepted) ?? null, text: accepted.reply },
       deps.auditSink ?? supabaseAuditSink(client),
     );
   } catch (err) {
@@ -711,8 +792,8 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
     .from("live_host_utterances")
     .insert({
       session_id: session.id,
-      kind: segment ? "segment" : "reply",
-      segment: segment?.id ?? null,
+      kind: segment || joinWelcome ? "segment" : "reply",
+      segment: joinWelcome ? JOIN_WELCOME_SEGMENT : (segment?.id ?? null),
       spoken_text: accepted.reply,
       mood: accepted.mood,
       card: accepted.card,
@@ -727,7 +808,13 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
 
   const batchIds = new Set(batch.map((m) => m.id));
   const skippedReasons = new Map(accepted.skippedMessages.filter((s) => batchIds.has(s.id)).map((s) => [s.id, s.reason]));
-  const answeredIds = batch.filter((m) => !skippedReasons.has(m.id)).map((m) => m.id);
+  // A message is shown on stream as answered only if the model says it answered it. If the model named none
+  // (it sometimes forgets), fall back to everything it did not skip. Anything left over is closed as skipped.
+  const claimed = new Set(accepted.answeredMessageIds.filter((id) => batchIds.has(id) && !skippedReasons.has(id)));
+  const answeredIds = batch.filter((m) => (claimed.size > 0 ? claimed.has(m.id) : !skippedReasons.has(m.id))).map((m) => m.id);
+  for (const m of batch) {
+    if (!answeredIds.includes(m.id) && !skippedReasons.has(m.id)) skippedReasons.set(m.id, "not answered");
+  }
   if (answeredIds.length > 0) {
     await client.from("live_host_messages").update({ status: "answered", utterance_id: utterance.id }).in("id", answeredIds);
   }
@@ -741,15 +828,21 @@ export async function runLiveHostTick(client: SupabaseClient, input: TickInput =
 
   return {
     ...base,
-    utterance: toTickUtterance(utterance, batch.filter((m) => answeredIds.includes(m.id)), accepted.tiltLevel, segment?.title ?? null),
+    utterance: toTickUtterance(utterance, batch.filter((m) => answeredIds.includes(m.id)), accepted.tiltLevel, joinWelcome ? JOIN_WELCOME_TITLE : (segment?.title ?? null)),
   };
+}
+
+/** A segment that could not be drafted counts as run: the quiet time restarts and the rotation moves on. */
+async function backOffSegment(client: SupabaseClient, sessionId: string, segmentId: string, now: Date): Promise<void> {
+  await client.from("live_host_sessions").update({ last_utterance_at: now.toISOString(), last_segment: segmentId }).eq("id", sessionId);
 }
 
 function toTickUtterance(utterance: LiveHostUtterance, answered: LiveHostMessage[], tiltLevel: number | null, segmentTitle: string | null = null): TickUtterance {
   return {
     id: utterance.id,
     kind: utterance.kind,
-    segmentTitle,
+    // A line handed out a second time (the worker restarted mid-line) still gets its banner.
+    segmentTitle: segmentTitle ?? (utterance.segment === JOIN_WELCOME_SEGMENT ? JOIN_WELCOME_TITLE : (LIVE_HOST_SEGMENTS.find((candidate) => candidate.id === utterance.segment)?.title ?? null)),
     spokenText: utterance.spokenText,
     mood: utterance.mood,
     tiltLevel,

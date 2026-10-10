@@ -358,7 +358,7 @@ private fun SessionCard(session: LiveHostSession, status: LiveHostStatus) {
             Stat("Lines said", session.linesSpoken.toString())
             Stat("Fillbook mentions", session.fillbookMentions.toString())
             Stat(
-                "Spend today",
+                "Host spend today",
                 String.format(Locale.US, "$%.2f / $%.2f", status.todaySpendUsd, status.settings?.dailyBudgetUsd ?: 0.0),
                 warn = status.budgetReached,
             )

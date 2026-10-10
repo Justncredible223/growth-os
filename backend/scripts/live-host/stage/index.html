@@ -498,15 +498,26 @@
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
       voice.src = line.audioUrl;
       voice.onended = () => finish(line.id);
-      voice.onerror = () => { current.hasAudio = false; current.startedAt = performance.now(); };
-      voice.play().catch(() => { current.hasAudio = false; current.startedAt = performance.now(); });
+      const noAudio = () => { if (current && current.id === line.id) { current.hasAudio = false; current.startedAt = performance.now(); } };
+      voice.onerror = noAudio;
+      voice.play().catch(noAudio);
     }
   }
-  window.tiltStage = { speak, setMood };
+  /** Cuts the current line off without reporting it as spoken. */
+  function silence() {
+    try { voice.pause(); voice.removeAttribute("src"); voice.load(); } catch (err) { /* nothing was playing */ }
+    current = null;
+    state.talking = false; state.targetOpen = 0;
+    setMood("neutral");
+    clearProps(); setSegment(null); $("caption").textContent = "";
+  }
+  window.tiltStage = { speak, setMood, silence };
 
   // ---- main loop ----
   let last = performance.now();
   function frame(t) {
+    // Re-armed first: if anything below throws, the next frame still runs and the stage never freezes.
+    requestAnimationFrame(frame);
     const dt = Math.min(64, t - last); last = t;
     drawChart(dt);
     if (current) {
@@ -523,7 +534,6 @@
       if (Math.random() < dt / 2600) state.gesture = 1;
     }
     drawTilt(t, dt);
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
@@ -547,7 +557,12 @@
       events.onopen = () => offline.classList.remove("show");
       events.onerror = () => { offline.classList.add("show"); };
       events.addEventListener("speak", (event) => { offline.classList.remove("show"); speak(JSON.parse(event.data)); });
-      events.addEventListener("state", (event) => { const data = JSON.parse(event.data); offline.classList.toggle("show", data.live !== true); });
+      events.addEventListener("state", (event) => {
+        const data = JSON.parse(event.data);
+        offline.classList.toggle("show", data.live !== true);
+        // Switched off mid-line: stop the voice at once. The line is not reported as said.
+        if (data.live !== true) silence();
+      });
     }
     connect();
   }

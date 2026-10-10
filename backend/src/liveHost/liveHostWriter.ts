@@ -79,6 +79,10 @@ export interface LiveLineRequest {
   viewersWaiting: number;
   /** True on a TikTok stream: point to the link in the bio, never say the website. */
   linkInBio?: boolean;
+  /** Viewers who just joined, to welcome by name when there is no chat to answer. Names are already cleaned. */
+  joiners?: string[];
+  /** How many more joined than are named in `joiners`. */
+  otherJoiners?: number;
   retryFeedback?: string;
 }
 
@@ -129,6 +133,14 @@ export function buildLiveLineUserMessage(request: LiveLineRequest): string {
     if (request.viewersWaiting > request.messages.length) {
       lines.push(`${request.viewersWaiting - request.messages.length} more message(s) are waiting, so keep this one tight.`);
     }
+  } else if (request.joiners && request.joiners.length > 0) {
+    lines.push("CHAT IS QUIET AND PEOPLE JUST JOINED. Welcome them in:");
+    lines.push(`Names: ${request.joiners.join(", ")}${request.otherJoiners ? ` (and ${request.otherJoiners} more who joined with them)` : ""}`);
+    lines.push(
+      "One or two spoken sentences. Say each name once, the way a host would. Say a name as a person would say it out loud: drop strings of numbers, underscores and symbols, and say the wordy part. " +
+        "If a name is hard to pronounce or you had to guess, take your best shot and joke that you probably butchered it; do that for at most one name, and be warm about it, never mocking the name itself. " +
+        "If more joined than are named, welcome the rest together. Then give them one easy thing to type. Do not repeat a welcome line from the recent lines. Leave answeredMessageIds and skippedMessages empty.",
+    );
   } else if (request.segment) {
     lines.push(`CHAT IS QUIET. Run the segment "${request.segment.title}":`);
     lines.push(request.segment.brief);

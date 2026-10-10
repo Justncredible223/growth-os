@@ -52,6 +52,8 @@ export interface WorkerConfig {
   obsPassword: string | undefined;
   /** False when the owner starts and stops the stream in OBS by hand; the worker still keeps the stage page loaded. */
   obsControlsStream: boolean;
+  /** Where OBS is streaming: "youtube", "tiktok" or "both". Only "youtube" lets the host say the website. */
+  platform: string;
   pythonCommand: string;
 }
 
@@ -71,6 +73,8 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     obsUrl: env.OBS_WEBSOCKET_URL === "off" ? null : env.OBS_WEBSOCKET_URL || "ws://127.0.0.1:4455",
     obsPassword: env.OBS_WEBSOCKET_PASSWORD || undefined,
     obsControlsStream: env.LIVE_HOST_OBS_STREAM !== "off",
+    // Not stated means the careful choice: the host points to the bio instead of saying the website.
+    platform: (env.LIVE_HOST_PLATFORM || "unknown").toLowerCase(),
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
   };
 }
@@ -93,6 +97,7 @@ interface TickResult {
   tiktok?: { chatEnabled: boolean; username: string | null };
   utterance: TickUtterance | null;
   note: string | null;
+  joinsWelcomed?: boolean;
 }
 export interface WordCue {
   text: string;
@@ -163,15 +168,32 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     return JSON.parse(text);
   }
 
-  async function finishLine(id: string, outcome: "spoken" | "dropped"): Promise<void> {
-    if (!speaking || speaking.id !== id) return;
-    clearTimeout(speaking.timer);
-    speaking = null;
+  /**
+   * Lines this worker has finished with, and how. The server keeps handing a line out until it is confirmed, so
+   * if a confirmation is slow or fails, the same line comes back on the next tick: it is confirmed again from
+   * here and never spoken a second time.
+   */
+  const finished = new Map<string, "spoken" | "dropped">();
+
+  async function confirm(id: string): Promise<void> {
+    const outcome = finished.get(id);
+    if (!outcome) return;
     try {
       await api({ action: "spoken", utteranceId: id, outcome });
     } catch (err) {
       log(`could not confirm line ${id}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  async function finishLine(id: string, outcome: "spoken" | "dropped"): Promise<void> {
+    if (!speaking || speaking.id !== id || finished.has(id)) return;
+    clearTimeout(speaking.timer);
+    finished.set(id, outcome);
+    if (finished.size > 200) finished.delete(finished.keys().next().value as string);
+    for (const extension of ["mp3", "json", "txt"]) rmSync(join(workDir, `${id}.${extension}`), { force: true });
+    // Stay "speaking" until the server has the confirmation, so the tick in between does not ask for this line again.
+    await confirm(id);
+    if (speaking?.id === id) speaking = null;
   }
 
   const server = createServer((req, res) => {
@@ -256,6 +278,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   const tiktok = new TiktokChatReader(log);
 
   let lastNote: string | null = null;
+  let ticksSinceStreamCheck = 0;
+  /** After the voice fails, wait this long before trying the same line again. */
+  let voiceRetryAt = 0;
+  let voiceFailures = 0;
 
   async function tick(): Promise<void> {
     await reviveStage();
@@ -264,8 +290,12 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     try {
       result = (await api({
         action: "tick",
-        busy: speaking !== null,
+        // Busy also covers "nothing can be said right now": no stage page to say it on, or the voice is being
+        // retried. The server then takes chat in but does not spend a model call on a line nobody would hear.
+        busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt,
+        platform: config.platform,
         messages,
+        joins: speaking === null ? tiktok.recentJoins() : [],
         workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
       })) as TickResult;
     } catch (err) {
@@ -275,6 +305,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
       return;
     }
 
+    if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
 
@@ -283,33 +314,47 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
       live = shouldBeLive;
       log(live ? "Live Host switched ON" : `Live Host is off (${result.reason ?? "switched off"})`);
       broadcast("state", { live });
+      ticksSinceStreamCheck = 0;
       await setStreaming(live);
       if (!live && speaking) {
         clearTimeout(speaking.timer);
         speaking = null;
       }
+    } else if (++ticksSinceStreamCheck >= 5) {
+      // Every 15 seconds make sure OBS matches the switch. A stop that failed once (OBS busy, connection lost)
+      // must not leave the broadcast running after the owner switched off.
+      ticksSinceStreamCheck = 0;
+      await setStreaming(live);
     }
 
     await tiktok.ensure(live && result.tiktok?.chatEnabled === true, result.tiktok?.username ?? null);
 
     const line = result.utterance;
     if (!live || !line || speaking) return;
-    if (stageClients.size === 0) {
-      log("A line is ready but no stage page is open (is the OBS Browser Source showing?). Dropping it.");
-      speaking = { id: line.id, timer: setTimeout(() => {}, 0) };
-      await finishLine(line.id, "dropped");
+    if (finished.has(line.id)) {
+      // Already said (or dropped) and the confirmation did not land: confirm again, do not say it again.
+      await confirm(line.id);
       return;
     }
+    if (stageClients.size === 0 || Date.now() < voiceRetryAt) return;
     try {
       const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText);
+      voiceFailures = 0;
       const timer = setTimeout(() => void finishLine(line.id, "spoken"), (durationSeconds + 6) * 1000);
       speaking = { id: line.id, timer };
       broadcast("speak", { ...line, audioUrl: `/audio/${line.id}.mp3`, words, durationSeconds });
       log(`${line.kind === "segment" ? `[${line.segmentTitle}]` : `-> ${line.replyingTo.map((m) => m.authorName).join(", ") || "chat"}`}: ${line.spokenText}`);
     } catch (err) {
-      log(err instanceof Error ? err.message : String(err));
-      speaking = { id: line.id, timer: setTimeout(() => {}, 0) };
-      await finishLine(line.id, "dropped");
+      // The line stays queued on the server and comes back after the wait. Only after repeated failures is it
+      // given up on, so one hiccup in the voice service does not throw away a line that was already paid for.
+      voiceFailures++;
+      voiceRetryAt = Date.now() + 20_000;
+      log(`${err instanceof Error ? err.message : String(err)} (attempt ${voiceFailures}; retrying in 20 seconds)`);
+      if (voiceFailures >= 3) {
+        voiceFailures = 0;
+        speaking = { id: line.id, timer: setTimeout(() => {}, 0) };
+        await finishLine(line.id, "dropped");
+      }
     }
   }
 
@@ -325,6 +370,9 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     server.close();
     process.exit(0);
   };
+  // A stray error in a library (the TikTok reader, a socket) must not kill the worker while OBS keeps broadcasting.
+  process.on("uncaughtException", (err) => log(`unexpected error (continuing): ${err instanceof Error ? err.message : String(err)}`));
+  process.on("unhandledRejection", (err) => log(`unexpected rejection (continuing): ${err instanceof Error ? err.message : String(err)}`));
   process.on("SIGINT", () => void shutdown());
   process.on("SIGTERM", () => void shutdown());
 
