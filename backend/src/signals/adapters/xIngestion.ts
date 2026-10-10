@@ -3,7 +3,8 @@ import type { Signal } from "../types.js";
 import type { XSignalAdapter } from "./xAdapter.js";
 import type { IngestionCursorStore } from "./ingestionCursorStore.js";
 
-const CURSOR_SOURCE = "x_mention";
+export const X_MENTION_CURSOR_SOURCE = "x_mention";
+const CURSOR_SOURCE = X_MENTION_CURSOR_SOURCE;
 
 /**
  * Pulls @FillbookHQ's recent mentions and feeds each one through
@@ -18,7 +19,7 @@ const CURSOR_SOURCE = "x_mention";
  * non-empty response is the new cursor value.
  */
 export async function ingestXMentions(
-  adapter: XSignalAdapter,
+  adapter: Pick<XSignalAdapter, "fetchOwnMentions">,
   signalGraph: SignalGraph,
   cursorStore: IngestionCursorStore,
   userId: string,

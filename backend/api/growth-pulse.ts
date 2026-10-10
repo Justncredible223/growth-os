@@ -5,9 +5,10 @@ import { constantTimeEquals } from "../src/lib/requireAppAuth.js";
 import { SignalGraph } from "../src/signals/signalGraph.js";
 import { SupabaseSignalRepository } from "../src/signals/supabaseSignalRepository.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
+import { RunScopedXReads } from "../src/signals/adapters/runScopedXReads.js";
 import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionCursorStore.js";
-import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
-import { ingestInboundMentions } from "../src/inbound/inboundIngestion.js";
+import { ingestXMentions, X_MENTION_CURSOR_SOURCE } from "../src/signals/adapters/xIngestion.js";
+import { ingestInboundMentions, INBOUND_CURSOR_SOURCE } from "../src/inbound/inboundIngestion.js";
 import { ingestInboundYoutubeComments } from "../src/inbound/inboundYoutubeIngestion.js";
 import { SupabaseInboundRepository } from "../src/inbound/supabaseInboundRepository.js";
 import { findCreatorIdByHandle } from "../src/creators/supabaseCreatorRepository.js";
@@ -159,6 +160,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cursorStore = new SupabaseIngestionCursorStore(client);
   const results: StepResult[] = [];
 
+  // One X adapter and one set of paid reads for the whole run (see RunScopedXReads): the account's user id is looked
+  // up once and the mentions are fetched once for both x_mentions and x_inbound, each keeping its own cursor.
+  // Built lazily inside the step that needs it so a missing X credential is still reported by that step.
+  let xReads: RunScopedXReads | null = null;
+  const getXReads = (): RunScopedXReads => {
+    xReads ??= new RunScopedXReads(createXSignalAdapter(client), cursorStore, [X_MENTION_CURSOR_SOURCE, INBOUND_CURSOR_SOURCE]);
+    return xReads;
+  };
+
   // Connection warm-up (2026-09-13): three separate scheduled runs in a row
   // (2026-09-12T22:00, plus the 2026-09-13T01:00 slot GitHub's own
   // scheduler silently skipped, then the manual catch-up run at 05:50) all
@@ -180,9 +190,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (runX) {
     results.push(
       await runStep("x_mentions", async () => {
-        const adapter = createXSignalAdapter(client);
-        const userId = await adapter.resolveOwnUserId();
-        const signals = await ingestXMentions(adapter, signalGraph, cursorStore, userId);
+        const reads = getXReads();
+        const userId = await reads.resolveOwnUserId();
+        const signals = await ingestXMentions(reads, signalGraph, cursorStore, userId);
         return `${signals.length} ingested`;
       }),
     );
@@ -190,13 +200,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await runStep("x_inbound", async () => {
         await recordSyncAttempt(client, "x_inbound");
         try {
-          const adapter = createXSignalAdapter(client);
-          const userId = await adapter.resolveOwnUserId();
+          const reads = getXReads();
+          const userId = await reads.resolveOwnUserId();
           const repo = new SupabaseInboundRepository(client);
           const prospectingRepo = new SupabaseProspectingRepository(client);
           const result = await ingestInboundMentions(
             {
-              adapter,
+              adapter: reads,
               repo,
               findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle),
               hasProspectingOutreach: (authorExternalId) => prospectingRepo.hasPriorOutreach("x", authorExternalId),
@@ -216,7 +226,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await runStep("x_prospecting", async () => {
         await recordSyncAttempt(client, "prospecting");
         try {
-          const adapter = createXSignalAdapter(client);
+          const adapter = getXReads().adapter;
           const repo = new SupabaseProspectingRepository(client);
           const result = await runProspectingSearch({
             adapter,
@@ -251,7 +261,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await runStep("partnerships_discovery", async () => {
         let adapter = null;
         try {
-          adapter = createXSignalAdapter(client);
+          adapter = getXReads().adapter;
         } catch {
           // X credentials not configured -- discovery still runs against
           // existing-records sources (creators/prospecting/inbound) only.
@@ -392,9 +402,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Checked first so a missing table never spends an X read.
         const { error: tableError } = await client.from("x_own_posts").select("tweet_id").limit(1);
         if (tableError && isMissingPostingTables(new Error(`x_own_posts: ${tableError.message} ${tableError.code ?? ""}`))) return "skipped -- migration 0043 not applied yet";
-        const adapter = createXSignalAdapter(client);
-        const userId = await adapter.resolveOwnUserId(now);
-        const tweets = await adapter.fetchOwnTweets(userId, 60, now);
+        const reads = getXReads();
+        const userId = await reads.resolveOwnUserId(now);
+        const tweets = await reads.adapter.fetchOwnTweets(userId, 60, now);
         const cost = await recordXOwnedReadCostEvent(client, tweets.length, { endpoint: "users/tweets", purpose: "results_tracking" });
         const saved = await saveOwnTweets(client, tweets, now);
         return `${saved.saved} own tweets (${saved.replies} replies, ${saved.matched} matched to Prospecting), $${cost.toFixed(3)}`;

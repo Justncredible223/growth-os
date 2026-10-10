@@ -181,16 +181,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const runDate = isoDate(now);
         let currentOpportunityId = "unknown";
 
-        const { deps: runCampaignDeps, usage } = await buildSupabaseRunCampaignDeps(
-          client,
-          () => currentOpportunityId,
-          "auto-draft",
-        );
-
         const result = await runAutoDraftStep(
           {
-            runCampaignDeps,
-            usageLog: usage.usages,
+            // Built only once an opportunity is about to be drafted: on a paused, backlog-full, over-budget or
+            // nothing-qualifies day none of its brand/knowledge/recent-content reads are made.
+            loadRunCampaignDeps: async () => {
+              const { deps: runCampaignDeps, usage } = await buildSupabaseRunCampaignDeps(client, () => currentOpportunityId, "auto-draft");
+              return { runCampaignDeps, usageLog: usage.usages };
+            },
             opportunityRepo: new SupabaseOpportunityRepository(client),
             runRepo: new SupabaseAutoDraftRunRepository(client),
             // Counts only genuinely reviewable rows (stage='ready_for_owner'
@@ -325,6 +323,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await runStep("x_feed_post", async () => {
         const now = new Date();
         const operatingDate = getOperatingDate(now, getScheduleTimezone());
+        // Cheapest guard first: a paused system never needs the brand/knowledge/recent-post reads below. Same
+        // reason string runDailyXFeedPostStep itself reports, so the step output is unchanged.
+        const { data: pausedRow } = await client.from("system_settings").select("paused").eq("id", true).maybeSingle();
+        if ((pausedRow as { paused?: boolean } | null)?.paused) return "skipped -- system_paused";
         const { deps } = await buildXFeedPostStepDeps(client);
         // maxDuration is 60s for THIS FILE regardless of which group is
         // running -- when x_feed_post shares an invocation with `core`
