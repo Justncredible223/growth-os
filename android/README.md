@@ -28,13 +28,8 @@ Three real screens, wired to a `GrowthOsRepository` interface:
   this screen, and no code path in this app, that publishes anything. See
   `docs/EXTERNAL_WRITE_FIREWALL.md`.
 
-`FakeGrowthOsRepository` is the only implementation right now — the
-backend isn't deployed yet (see `docs/PROGRESS_LEDGER.md`). Its sample
-data is drawn from FillbookHQ's real growth history, not generic
-placeholder text, so the app is honest about what it will show once wired
-to the live API. Swapping in a real `NetworkGrowthOsRepository` later
-should not require changing any screen code — that's the point of the
-interface.
+`NetworkGrowthOsRepository` is the implementation behind that interface;
+no screen code depends on a concrete repository.
 
 ## Known gaps, honestly
 

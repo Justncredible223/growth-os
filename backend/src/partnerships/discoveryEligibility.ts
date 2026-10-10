@@ -36,8 +36,8 @@ function isFresh(prospect: PartnershipProspect, now: Date): boolean {
  * stage is either not yet qualified (plain 'prospect'), already past
  * discovery's job (contacted onward), or an owner-driven terminal state
  * (archived / do_not_contact), so none of those count toward this
- * backlog. A prospect with a non-null suppressedReason (see
- * recommendationReassessment.ts) is also excluded -- it isn't real,
+ * backlog. A prospect with a non-null suppressedReason
+ * is also excluded -- it isn't real,
  * workable backlog even while its stage still technically says
  * 'qualified'. Evidence must still meet BOTH freshness
  * (BACKLOG_FRESHNESS_DAYS) and the same personalization-sufficiency bar

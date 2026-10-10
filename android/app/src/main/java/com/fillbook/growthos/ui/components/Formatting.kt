@@ -186,8 +186,7 @@ fun signalSourceDisplayName(source: String): String = when (source) {
 
 // ---------------------------------------------------------------------
 // Creator relationship stage -- a plain-language read of the existing
-// 0-10 readinessScore (CreatorNetwork.advanceReadiness(), backend/src/
-// creators/creatorNetwork.ts). Purely a label over the real score; the
+// 0-10 readinessScore. Purely a label over the real score; the
 // score itself, and the rule for how it advances, are untouched.
 // ---------------------------------------------------------------------
 

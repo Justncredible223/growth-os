@@ -2,7 +2,7 @@ import type { PartnershipStage } from "./types.js";
 
 /**
  * Enforced in code, not purely by the DB CHECK constraint -- same
- * discipline as creatorNetwork.ts's advanceReadiness for Creators. The DB
+ * discipline as the Creators readiness score. The DB
  * constraint only guards against a garbage stage value; THIS is what
  * guards against an illegal jump (e.g. 'prospect' straight to 'pilot').
  *
