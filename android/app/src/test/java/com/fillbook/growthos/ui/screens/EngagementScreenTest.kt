@@ -39,7 +39,8 @@ class EngagementScreenTest {
              "status": "new", "source": "pasted",
              "block": {"code": "creator_cooldown", "message": "You engaged with this creator recently."}, "createdAt": "2026-10-10T18:01:00.000Z"}
           ],
-          "watchlist": [{"id": "w1", "kind": "query", "value": "prop firm", "label": null, "active": true}]
+          "watchlist": [{"id": "w1", "kind": "query", "value": "prop firm", "label": null, "active": true}],
+          "autoFill": {"targetWaiting": 10, "nextRunAt": "2026-10-11T01:00:00.000Z", "nextRunLabel": "6:00 PM Arizona time", "lastRunAt": null, "lastRunNote": "discovered 3, drafted 3, queue 3"}
         }
     """.trimIndent()
 
@@ -83,6 +84,19 @@ class EngagementScreenTest {
         val s = status(queueJson.replace("\"youtubeConfigured\": true", "\"youtubeConfigured\": false"))
         assertTrue(engagementEmptyMessage(s).contains("YOUTUBE_API_KEY"))
         assertFalse(engagementEmptyMessage(status(queueJson)).contains("YOUTUBE_API_KEY"))
+    }
+
+    @Test
+    fun emptyQueueSaysWhenTheNextAutomaticFillRuns() {
+        val s = status(queueJson)
+        assertEquals("6:00 PM Arizona time", s.nextFillLabel)
+        assertEquals("discovered 3, drafted 3, queue 3", s.lastFillNote)
+        val message = engagementEmptyMessage(s)
+        assertTrue(message.contains("6:00 PM Arizona time"))
+        assertFalse(message.contains("add a creator"))
+        val old = status(queueJson.replace("\"autoFill\"", "\"ignored\""))
+        assertNull(old.nextFillLabel)
+        assertTrue(engagementEmptyMessage(old).contains("automatically"))
     }
 
     @Test

@@ -27,6 +27,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { respellFillbookForTts } from "../video-factory/voiceover.js";
 import { ObsClient } from "./obsClient.js";
+import { TtsDaemon } from "./ttsDaemon.js";
 import { OBS_SOURCE_NAME } from "./setupObs.js";
 import { TiktokChatReader } from "./tiktokChat.js";
 import { LIVE_HOST_SEGMENTS } from "../../src/liveHost/liveHostPersona.js";
@@ -36,6 +37,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
 const HOST_PAGE_FILE = join(HERE, "stage", "host.html");
 const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py");
+const TTS_SERVER_SCRIPT = join(HERE, "tts_server.py");
 
 /** Same voice the videos use; the only one verified by ear to say "Fillbook" correctly (see voiceover.ts). */
 export const LIVE_HOST_DEFAULT_VOICE = "en-US-AndrewNeural";
@@ -259,12 +261,24 @@ export function captionWords(words: WordCue[]): WordCue[] {
   return words.map((word) => ({ ...word, text: word.text.replace(/fill-book/gi, "Fillbook") }));
 }
 
+/** The warm voice helper, started by runWorker. Null (or not ready) means each line launches the script itself. */
+let ttsDaemon: TtsDaemon | null = null;
+
 async function synthesize(config: WorkerConfig, workDir: string, id: string, spokenText: string, voice: string = config.voice, rate: string = config.rate): Promise<{ words: WordCue[]; durationSeconds: number }> {
   const textFile = join(workDir, `${id}.txt`);
   const audioFile = join(workDir, `${id}.mp3`);
   const wordsFile = join(workDir, `${id}.json`);
   writeFileSync(textFile, prepareSpeechText(spokenText), "utf-8");
-  await new Promise<void>((resolve, reject) => {
+  let done = false;
+  if (ttsDaemon?.ready) {
+    try {
+      await ttsDaemon.synthesize({ voice, rate, textFile, mediaPath: audioFile, wordsPath: wordsFile }, TTS_TIMEOUT_MS);
+      done = true;
+    } catch {
+      // Fall through to the one-shot script below; the helper restarts itself.
+    }
+  }
+  if (!done) await new Promise<void>((resolve, reject) => {
     execFile(
       config.pythonCommand,
       [WORD_TIMING_SCRIPT, "--voice", voice, "--rate", rate, "--file", textFile, "--out-media", audioFile, "--out-words", wordsFile],
@@ -281,6 +295,10 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   const workDir = join(tmpdir(), "fillbook-live-host");
   rmSync(workDir, { recursive: true, force: true });
   mkdirSync(workDir, { recursive: true });
+
+  // Keep one voice process warm: starting Python and importing edge_tts costs several seconds on some PCs.
+  ttsDaemon = new TtsDaemon(config.pythonCommand, [TTS_SERVER_SCRIPT], log);
+  ttsDaemon.start();
 
   const stageClients = new Set<ServerResponse>();
   /** Browser tabs showing the duo host page. Kept apart from the stage clients: a host tab is not a stage. */
@@ -547,6 +565,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   let voiceFailures = 0;
 
   async function tick(): Promise<void> {
+    ttsDaemon?.start();
     await reviveStage();
     const messages = tiktok.drain().filter((message) => {
       if (isPromoSpam(message.body)) {
@@ -639,7 +658,9 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     if (stageClients.size === 0 || Date.now() < voiceRetryAt) return;
     try {
       const singing = line.kind === "segment" && line.segmentTitle === SINGING_TITLE;
+      const synthStartedAt = Date.now();
       const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, singing ? SINGING_RATE : config.rate);
+      log(`voice ready in ${((Date.now() - synthStartedAt) / 1000).toFixed(1)}s${ttsDaemon?.ready ? "" : " (per-line voice)"}`);
       // Red's interruption, when there is one, is voiced separately and played first. If his voice fails he is
       // simply left out.
       let sidekick: { text: string; audioUrl: string; durationSeconds: number } | null = null;
@@ -677,6 +698,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     stopping = true;
     log("Shutting down");
     tiktok.stop();
+    ttsDaemon?.stop();
     // The owner's switch is untouched: closing the worker only stops this PC from streaming.
     await setStreaming(false);
     obs?.close();

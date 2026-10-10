@@ -47,12 +47,12 @@ export class YoutubeDataClient {
   }
 
   /** videos.list, 1 unit for up to 50 ids. */
-  async videos(ids: string[]): Promise<Array<VideoMetadata & { durationSeconds: number | null }>> {
+  async videos(ids: string[]): Promise<Array<VideoMetadata & { durationSeconds: number | null; publishedAt: string | null }>> {
     if (ids.length === 0) return [];
     const json = await this.get<{
       items?: Array<{
         id: string;
-        snippet?: { title?: string; channelId?: string; channelTitle?: string; description?: string; thumbnails?: Record<string, { url?: string }> };
+        snippet?: { title?: string; publishedAt?: string; channelId?: string; channelTitle?: string; description?: string; thumbnails?: Record<string, { url?: string }> };
         statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
         contentDetails?: { duration?: string };
       }>;
@@ -76,6 +76,7 @@ export class YoutubeDataClient {
         description: item.snippet?.description ? item.snippet.description.slice(0, 400) : null,
         stats: Object.keys(stats).length > 0 ? stats : null,
         durationSeconds: parseIsoDurationSeconds(item.contentDetails?.duration),
+        publishedAt: item.snippet?.publishedAt ?? null,
       };
     });
   }

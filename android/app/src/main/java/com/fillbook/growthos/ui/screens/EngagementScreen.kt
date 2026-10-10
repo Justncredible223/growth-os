@@ -72,9 +72,10 @@ fun engagementPlatformLabel(platform: String): String = if (platform == "tiktok"
 /** What the empty queue should tell the owner to do next. */
 fun engagementEmptyMessage(status: EngagementStatus): String =
     if (status.youtubeConfigured) {
-        "Paste a TikTok or YouTube link above, or add a creator to the watchlist and tap Find new videos."
+        val next = status.nextFillLabel?.let { "The next automatic fill runs around $it." } ?: "The queue refills automatically a few times a day."
+        "You're caught up. $next TikTok links still need to be pasted below."
     } else {
-        "Paste a TikTok link above. YouTube discovery turns on once YOUTUBE_API_KEY is set on the server."
+        "Paste a TikTok link below. YouTube discovery turns on once YOUTUBE_API_KEY is set on the server."
     }
 
 /**
@@ -215,6 +216,43 @@ fun EngagementScreen(repo: GrowthOsRepository) {
                             Text(engagementTodayLine(current), style = MaterialTheme.typography.bodySmall, color = TextTertiary)
                             engagementSpacingLine(current)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Warning) }
                         }
+                        if (current.queue.isEmpty()) {
+                            item {
+                                PolishedEmptyState(icon = Icons.Filled.ThumbUp, headline = "All caught up", subtitle = engagementEmptyMessage(current))
+                            }
+                        }
+                        items(current.queue, key = { it.id }) { item ->
+                            GrowthCard(accentBar = Accent, onClick = { selectedId = item.id }) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Pill(engagementPlatformLabel(item.platform), TextSecondary)
+                                    Pill(if (item.drafts.isEmpty()) "DRAFT PENDING" else "READY: ${item.drafts.size} DRAFTS", Accent)
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, color = TextPrimary)
+                                Text(item.creatorName, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                item.drafts.firstOrNull()?.let {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(it.text, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis, color = TextSecondary)
+                                }
+                                item.blockMessage?.let {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = Warning)
+                                }
+                            }
+                        }
+                        item {
+                            Text(
+                                "Add one yourself",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextTertiary,
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
+                            Text(
+                                "The queue fills itself. Use these to add a video or a creator on top.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextTertiary,
+                            )
+                        }
                         item {
                             AddRow(
                                 label = "Paste a TikTok or YouTube link",
@@ -271,26 +309,6 @@ fun EngagementScreen(repo: GrowthOsRepository) {
                                     color = TextTertiary,
                                     modifier = Modifier.padding(top = 4.dp),
                                 )
-                            }
-                        }
-                        if (current.queue.isEmpty()) {
-                            item {
-                                PolishedEmptyState(icon = Icons.Filled.ThumbUp, headline = "Queue is clear", subtitle = engagementEmptyMessage(current))
-                            }
-                        }
-                        items(current.queue, key = { it.id }) { item ->
-                            GrowthCard(accentBar = Accent, onClick = { selectedId = item.id }) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Pill(engagementPlatformLabel(item.platform), TextSecondary)
-                                    Pill(if (item.drafts.isEmpty()) "NEEDS DRAFT" else "${item.drafts.size} DRAFTS", Accent)
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, color = TextPrimary)
-                                Text(item.creatorName, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                item.blockMessage?.let {
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(it, style = MaterialTheme.typography.bodySmall, color = Warning)
-                                }
                             }
                         }
                     }

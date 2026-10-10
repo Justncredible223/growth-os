@@ -814,7 +814,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, retryFeedback }, grounding, joinWelcome ? MODEL_HAIKU : undefined);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, retryFeedback }, grounding, joinWelcome || (input.duo === true && batch.length > 0) ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0) {
           const violations = await brandConstitution.checkVocabulary(draft.reply);
