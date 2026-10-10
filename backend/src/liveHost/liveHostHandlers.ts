@@ -482,6 +482,11 @@ export interface TickInput {
   hostMessages?: Array<{ id?: unknown; text?: unknown; relayedFrom?: unknown }>;
   /** The name the co-host goes by on stream. Cleaned like any name. */
   hostName?: unknown;
+  /**
+   * Duo mode only: the co-host pressed "run a segment". Runs one segment now, skipping the quiet-time wait, as
+   * long as nobody is waiting on an answer. `id` picks a segment; without it the rotation continues.
+   */
+  runSegment?: { id?: unknown } | null;
 }
 
 export interface TickUtterance {
@@ -741,9 +746,16 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   if (joinWelcome) base.joinsWelcomed = true;
 
   let segment = null;
+  // The co-host's "run a segment" button, honoured only in duo mode. A typed prompt waiting comes first: the
+  // button is ignored on that tick and the worker keeps asking until a segment line comes back.
+  const forceSegment = input.duo === true && input.runSegment != null && batch.length === 0;
   // Duo mode: Tilt speaks when he is spoken to. Nothing typed, nothing said.
-  if (input.duo && batch.length === 0) return base;
-  if (batch.length === 0 && !joinWelcome) {
+  if (input.duo && batch.length === 0 && !forceSegment) return base;
+  if (forceSegment) {
+    const requestedId = input.runSegment?.id;
+    const requested = typeof requestedId === "string" ? LIVE_HOST_SEGMENTS.find((candidate) => candidate.id === requestedId && !candidate.isFillbookSpot) : undefined;
+    segment = requested ?? nextSegment(session.lastSegment, false);
+  } else if (batch.length === 0 && !joinWelcome) {
     const quietSince = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : 0;
     const gapMs = input.audienceOnly ? Math.min(settings.idleSeconds * 1000, ENGAGED_GAP_MS) : settings.idleSeconds * 1000;
     if (now.getTime() - quietSince < gapMs) return base;

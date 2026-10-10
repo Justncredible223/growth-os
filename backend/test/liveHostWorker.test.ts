@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { DUO_MAX_PROMPT_CHARS, captionWords, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, prepareSpeechText } from "../scripts/live-host/worker";
+import { DUO_MAX_PROMPT_CHARS, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -55,6 +55,16 @@ describe("live host duo mode", () => {
     expect(isTrustedHostRequest({ ...ok, origin: "https://evil.example" }, 8790)).toBe(false);
     expect(isTrustedHostRequest({ ...ok, host: "evil.example:8790" }, 8790)).toBe(false);
     expect(isTrustedHostRequest({ host: "127.0.0.1:8790" }, 8790)).toBe(false);
+  });
+
+  it("accepts only known segment ids for the run-a-segment button", () => {
+    expect(parseSegmentRequest({})).toEqual({ id: null });
+    expect(parseSegmentRequest({ id: "tilt_o_meter" })).toEqual({ id: "tilt_o_meter" });
+    expect(parseSegmentRequest({ id: "nope" })).toBeNull();
+    expect(parseSegmentRequest({ id: "fillbook_spot" })).toBeNull();
+    expect(parseSegmentRequest({ id: 7 })).toBeNull();
+    expect(parseSegmentRequest(null)).toBeNull();
+    expect(duoSegmentChoices().map((choice) => choice.id)).not.toContain("fillbook_spot");
   });
 
   it("ships a host page that loads nothing from the internet", () => {

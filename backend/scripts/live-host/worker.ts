@@ -29,6 +29,7 @@ import { respellFillbookForTts } from "../video-factory/voiceover.js";
 import { ObsClient } from "./obsClient.js";
 import { OBS_SOURCE_NAME } from "./setupObs.js";
 import { TiktokChatReader } from "./tiktokChat.js";
+import { LIVE_HOST_SEGMENTS } from "../../src/liveHost/liveHostPersona.js";
 import { screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -97,6 +98,23 @@ export function parseDuoPrompt(raw: unknown, id: string): DuoPrompt | null {
   if (clean.length === 0) return null;
   const from = typeof relayedFrom === "string" ? relayedFrom.replace(/\s+/g, " ").trim().slice(0, 40) : "";
   return from ? { id, text: clean, relayedFrom: from } : { id, text: clean };
+}
+
+/** How long a pressed "run a segment" waits for its line to come back before it is given up on. */
+export const DUO_SEGMENT_REQUEST_MS = 30_000;
+
+/** The segments the host page offers: everything except the Fillbook spot, which the server rations itself. */
+export function duoSegmentChoices(): Array<{ id: string; title: string }> {
+  return LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot).map((segment) => ({ id: segment.id, title: segment.title }));
+}
+
+/** Reads the body of a "run a segment" press: a known segment id, or null for the next one in the rotation. */
+export function parseSegmentRequest(raw: unknown): { id: string | null } | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const id = (raw as { id?: unknown }).id;
+  if (id === undefined || id === null || id === "") return { id: null };
+  if (typeof id !== "string") return null;
+  return duoSegmentChoices().some((choice) => choice.id === id) ? { id } : null;
 }
 
 /**
@@ -270,6 +288,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   /** Prompts typed on the host page, waiting for the next tick (duo mode). */
   let hostQueue: DuoPrompt[] = [];
   let promptCounter = 0;
+  /** A pressed "run a segment", repeated every tick until a segment line comes back or it times out. */
+  let segmentRequest: { id: string | null; until: number } | null = null;
   let live = false;
   /** The line currently being spoken, with the timer that gives up on it if the stage never reports back. */
   let speaking: { id: string; timer: NodeJS.Timeout } | null = null;
@@ -358,6 +378,43 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
 `);
       hostClients.add(res);
       req.on("close", () => hostClients.delete(res));
+      return;
+    }
+    if (config.duo && req.method === "GET" && url.pathname === "/host-segments") {
+      if (!isTrustedHostRequest({ ...req.headers, "x-live-host": "1" }, config.port)) {
+        res.writeHead(403).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(duoSegmentChoices()));
+      return;
+    }
+    if (config.duo && req.method === "POST" && url.pathname === "/segment") {
+      if (!isTrustedHostRequest(req.headers, config.port)) {
+        res.writeHead(403).end();
+        return;
+      }
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+        if (raw.length > 1_000) req.destroy();
+      });
+      req.on("end", () => {
+        let parsed: unknown = {};
+        try {
+          parsed = raw.trim() ? JSON.parse(raw) : {};
+        } catch {
+          parsed = null;
+        }
+        const request = parseSegmentRequest(parsed);
+        if (!request) {
+          res.writeHead(400).end();
+        } else if (segmentRequest) {
+          res.writeHead(429).end();
+        } else {
+          segmentRequest = { id: request.id, until: Date.now() + DUO_SEGMENT_REQUEST_MS };
+          res.writeHead(202, { "content-type": "application/json" }).end("{}");
+        }
+      });
       return;
     }
     if (config.duo && req.method === "POST" && url.pathname === "/ask") {
@@ -536,7 +593,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
         joins,
-        ...(config.duo ? { duo: true, hostName: config.hostName, hostMessages } : {}),
+        ...(config.duo ? { duo: true, hostName: config.hostName, hostMessages, ...(segmentRequest ? { runSegment: { id: segmentRequest.id } } : {}) } : {}),
         workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
       })) as TickResult;
     } catch (err) {
@@ -547,6 +604,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       return;
     }
 
+    if (segmentRequest && (result.utterance?.kind === "segment" || Date.now() > segmentRequest.until)) segmentRequest = null;
     if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
