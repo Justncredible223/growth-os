@@ -17,6 +17,38 @@ import {
 const LIVE_HOST_WORKER_ACTIONS = new Set(["tick", "spoken"]);
 
 /** True for the Live Host calls the automation token may make: reading status, and the worker's own tick/spoken. */
+/**
+ * The tick fields a worker may send, and nothing else. Anything not named here is dropped before it reaches the
+ * handler, so a new TickInput field has to be added here as well (duo mode's fields were missing once).
+ */
+export function tickInputFromBody(body: {
+  messages?: TickInput["messages"];
+  busy?: boolean;
+  audienceOnly?: boolean;
+  joins?: TickInput["joins"];
+  duo?: boolean;
+  hostMessages?: TickInput["hostMessages"];
+  hostName?: unknown;
+  runSegment?: TickInput["runSegment"];
+  workerInfo?: Record<string, unknown>;
+  platform?: string;
+}): TickInput {
+  const duo = body.duo === true;
+  return {
+    messages: Array.isArray(body.messages) ? body.messages : [],
+    busy: body.busy === true,
+    audienceOnly: body.audienceOnly === true,
+    platform: typeof body.platform === "string" ? body.platform : undefined,
+    workerInfo: body.workerInfo && typeof body.workerInfo === "object" ? body.workerInfo : {},
+    joins: Array.isArray(body.joins) ? body.joins.slice(0, 50) : [],
+    // Duo-only fields are ignored unless the worker says it is in duo mode.
+    duo,
+    hostMessages: duo && Array.isArray(body.hostMessages) ? body.hostMessages.slice(0, 10) : [],
+    hostName: duo && typeof body.hostName === "string" ? body.hostName.slice(0, 40) : undefined,
+    runSegment: duo && body.runSegment && typeof body.runSegment === "object" ? body.runSegment : null,
+  };
+}
+
 export function isLiveHostAutomationRequest(req: VercelRequest): boolean {
   if (req.query.resource !== "live-host") return false;
   if (req.method === "GET") return true;
@@ -63,6 +95,10 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
       busy?: boolean;
       audienceOnly?: boolean;
       joins?: TickInput["joins"];
+      duo?: boolean;
+      hostMessages?: TickInput["hostMessages"];
+      hostName?: unknown;
+      runSegment?: TickInput["runSegment"];
       workerInfo?: Record<string, unknown>;
       platform?: string;
       utteranceId?: string;
@@ -85,14 +121,7 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
         return;
       case "tick":
         res.status(200).json(
-          await runLiveHostTick(client, {
-            messages: Array.isArray(body.messages) ? body.messages : [],
-            busy: body.busy === true,
-            audienceOnly: body.audienceOnly === true,
-            platform: typeof body.platform === "string" ? body.platform : undefined,
-            workerInfo: body.workerInfo && typeof body.workerInfo === "object" ? body.workerInfo : {},
-            joins: Array.isArray(body.joins) ? body.joins.slice(0, 50) : [],
-          }),
+          await runLiveHostTick(client, tickInputFromBody(body)),
         );
         return;
       case "spoken":
