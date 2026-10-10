@@ -12,7 +12,7 @@ import {
   updateLiveHostSettings,
   viewerAskedAboutFillbook,
 } from "../src/liveHost/liveHostHandlers";
-import { isLiveHostAutomationRequest } from "../src/liveHost/liveHostApi";
+import { isLiveHostAutomationRequest, tickInputFromBody } from "../src/liveHost/liveHostApi";
 import type { YoutubeLiveChatAdapter } from "../src/signals/adapters/youtubeLiveChatAdapter";
 
 const NOW = new Date("2026-10-09T18:00:00.000Z");
@@ -606,3 +606,34 @@ describe("market hours awareness", () => {
   });
 });
 
+
+describe("tickInputFromBody", () => {
+  it("passes the duo fields through when the worker is in duo mode", () => {
+    const input = tickInputFromBody({
+      duo: true,
+      hostName: "Justin",
+      hostMessages: [{ id: "p1", text: "hi Tilt" }],
+      runSegment: { id: "tilt_o_meter" },
+      messages: [],
+    });
+    expect(input.duo).toBe(true);
+    expect(input.hostName).toBe("Justin");
+    expect(input.hostMessages).toEqual([{ id: "p1", text: "hi Tilt" }]);
+    expect(input.runSegment).toEqual({ id: "tilt_o_meter" });
+  });
+
+  it("drops the duo fields unless duo is true", () => {
+    const input = tickInputFromBody({ hostMessages: [{ id: "p1", text: "hi" }], hostName: "Justin", runSegment: {} });
+    expect(input.duo).toBe(false);
+    expect(input.hostMessages).toEqual([]);
+    expect(input.hostName).toBeUndefined();
+    expect(input.runSegment).toBeNull();
+  });
+
+  it("keeps the existing fields and caps the lists", () => {
+    const input = tickInputFromBody({ busy: true, audienceOnly: true, platform: "tiktok", joins: Array.from({ length: 80 }, () => ({ name: "a" })), duo: true, hostMessages: Array.from({ length: 30 }, (_, i) => ({ id: String(i), text: "x" })) });
+    expect(input).toMatchObject({ busy: true, audienceOnly: true, platform: "tiktok" });
+    expect(input.joins).toHaveLength(50);
+    expect(input.hostMessages).toHaveLength(10);
+  });
+});
