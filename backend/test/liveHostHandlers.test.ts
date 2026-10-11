@@ -416,6 +416,38 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.spokenText).toContain("Which rule got you");
   });
 
+  it("variety: an opening never defaults to the closed market, and a Tilt-o-Meter without a rating is sent back", async () => {
+    const young = { id: "s1", status: "live", started_at: new Date(NOW.getTime() - 5_000).toISOString(), last_heartbeat_at: NOW.toISOString() };
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [young] });
+    const llm = scriptedLlm([line("Someone gave a candle a microphone. Ask me anything, and this is entertainment, not advice.")]);
+    await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("OVERUSED RIGHT NOW");
+    expect(sent.messages[0]!.content).toContain("the market being closed");
+
+    // Tilt-o-Meter comes after Welcome In in the rotation; a draft without tiltLevel is redone once.
+    const next = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ ...young, started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: "roast_my_trade" }],
+    });
+    const meter = scriptedLlm([line("A trader moves his stop three times. How tilted is that?"), line("A trader moves his stop three times. Seven out of ten.", { tiltLevel: 7 })]);
+    const result = await runLiveHostTick(asSupabase(next), { platform: "youtube" }, { now: NOW, llmClient: meter.client, youtube: null, grounding: GROUNDING });
+    expect(meter.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.utterance?.tiltLevel).toBe(7);
+  });
+
+  it("variety: an invented chat reaction from an empty room is dropped even when the retry repeats it", async () => {
+    const client = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: "roast_my_trade" }],
+    });
+    const claim = "Nobody guessed, which tells me everything. A trader moves his stop three times and calls it research. Seven out of ten.";
+    const llm = scriptedLlm([line(claim, { tiltLevel: 7 }), line(claim, { tiltLevel: 7 })]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.spokenText).not.toContain("Nobody guessed");
+    expect(result.utterance?.spokenText).toContain("moves his stop three times");
+  });
+
   it("variety: with nobody chatting, a segment is told not to end by asking chat to type", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() }] });
     const llm = scriptedLlm([line("A trader moved his stop and then wrote a poem about it.")]);
@@ -675,7 +707,7 @@ describe("runLiveHostTick", () => {
 
   it("duo mode: the button can pick a segment by id, and never the Fillbook spot", async () => {
     const picked = buildClient();
-    const llm = scriptedLlm([line("The Tilt-o-Meter says you are cooked."), line("Another one.")]);
+    const llm = scriptedLlm([line("The Tilt-o-Meter says you are cooked.", { tiltLevel: 8 }), line("Another one.")]);
     const first = await runLiveHostTick(asSupabase(picked), { duo: true, runSegment: { id: "tilt_o_meter" } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(first.utterance?.segmentTitle).toBe("Tilt-o-Meter");
 

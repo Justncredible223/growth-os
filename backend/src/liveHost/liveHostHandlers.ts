@@ -11,7 +11,7 @@ import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../si
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
 import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
 import { FACT_SEGMENTS, parseCostMode, useFastModel } from "./liveHostModels.js";
-import { varietyGuidance, varietyProblem } from "./liveHostVariety.js";
+import { OPENING_DEFAULTS, stripChatReactionClaims, varietyGuidance, varietyProblem } from "./liveHostVariety.js";
 import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
@@ -855,6 +855,12 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   const lastChatAt = ((lastChatRows ?? []) as Array<{ received_at: string }>)[0]?.received_at;
   const roomEngaged = input.duo === true || batch.length > 0 || (lastChatAt !== undefined && now.getTime() - new Date(lastChatAt).getTime() < AUDIENCE_PRESENT_FOR_MS);
   const variety = varietyGuidance(recentTiltLines, roomEngaged);
+  // An opening starts the stream: it must not default to the closed market or the hour, whatever was said before.
+  if (segment?.id === "cold_open" || segment?.show === true) {
+    for (const label of OPENING_DEFAULTS) if (!variety.avoid.includes(label)) variety.avoid.push(label);
+  }
+  // Has anyone in the room actually said anything lately? Without that, claims about chat's reaction are invented.
+  const viewerSpoke = batch.length > 0 || (lastChatAt !== undefined && now.getTime() - new Date(lastChatAt).getTime() < 15 * 60_000);
   const viewerAskedForAdvice = batch.some((message) => /\badvice\b|\bshould i\b|\bwhat should\b|\btell me (?:what|which|when)\b/i.test(message.body));
 
   // Red is a recurring character, so he is scheduled: due when none of the last three lines had him. The model still
@@ -902,7 +908,14 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
         const words = wordCount(draft.reply);
         const soft = wordLimit !== null && words > Math.ceil(wordLimit * 1.25) ? `is ${words} words and the limit is ${wordLimit}: cut it down, keeping the joke and the question or the turn to your co-host` : null;
         const isOpening = segment?.id === "cold_open" || segment?.show === true;
-        const sameOldTricks = varietyProblem(draft.reply, variety, recentTiltLines, { isSegment: segment !== null, isOpening, viewerAskedForAdvice });
+        const sameOldTricks = varietyProblem(draft.reply, variety, recentTiltLines, {
+          isSegment: segment !== null,
+          isOpening,
+          viewerAskedForAdvice,
+          viewerSpoke,
+          segmentId: segment?.id ?? null,
+          tiltLevel: draft.tiltLevel,
+        });
         return { hard, soft: soft ?? sameOldTricks };
       },
     });
@@ -935,6 +948,16 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       }
     }
     return base;
+  }
+
+  // Still claiming a reaction from an empty room after the retry: drop that sentence (prompting does not hold this).
+  if (!viewerSpoke && accepted.reply.length > 0) {
+    const stripped = stripChatReactionClaims(accepted.reply);
+    if (stripped !== accepted.reply && !checkSpokenLine(stripped, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine })) {
+      const original = accepted;
+      accepted = { ...accepted, reply: stripped };
+      verdicts.set(accepted, verdicts.get(original) ?? null);
+    }
   }
 
   // Still over the limit after the retry: drop whole sentences (middle first) rather than say something that long.
