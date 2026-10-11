@@ -418,6 +418,7 @@ describe("runLiveHostTick", () => {
     const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
     expect(sent.messages[0]!.content).toContain("YOUR CO-HOST, a real person on camera next to you");
     expect(sent.messages[0]!.content).toContain("DUO MODE");
+    expect(sent.messages[0]!.content).toContain("speech-to-text");
   });
 
   it("duo mode: replies use the fast model and ask for a short, banter-style line", async () => {
