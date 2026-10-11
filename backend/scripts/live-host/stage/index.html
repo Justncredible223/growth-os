@@ -174,6 +174,47 @@
   .notice small { display: block; margin-top: 6px; font-size: 26px; font-weight: 700; }
   body.safe-tiktok .notice { top: 410px; left: 110px; right: 110px; font-size: 36px; }
 
+  /*
+   * YouTube on a phone, upright: the app lays its live chat (welcome banner, "say hi" prompt, newest messages and the
+   * input box) over the bottom of the video, from about y=1370 of this 1080x1920 scene down. Everything that has to be
+   * read (captions, hook, footer, site card) therefore lives above y=1340. Desktop viewers just see a slightly
+   * higher arrangement with some chart background below it.
+   */
+  /* The app's fan/crown badge sits over the top-left corner of the video (about x<150, y<170): keep the brand clear of it. */
+  body.safe-youtube .topbar { left: 170px; }
+  body.safe-youtube .segment { top: 196px; }
+  body.safe-youtube .asks { top: 290px; }
+  body.safe-youtube #tiltWrap { top: 400px; width: 480px; height: 556px; margin-left: -240px; }
+  body.safe-youtube #floor { top: 935px; width: 390px; margin-left: -195px; }
+  body.safe-youtube .captions { top: 1105px; min-height: 230px; left: 70px; right: 70px; }
+  body.safe-youtube .captions p { font-size: 50px; line-height: 1.2; }
+  body.safe-youtube .hook { top: 1105px; left: 90px; right: 90px; }
+  body.safe-youtube .hook .text { font-size: 48px; }
+  body.safe-youtube .hook .label { font-size: 22px; }
+  body.safe-youtube .hook .arrow { font-size: 36px; margin-top: 6px; }
+  body.safe-youtube .footer { bottom: auto; top: 972px; font-size: 24px; }
+  body.safe-youtube .footer .fine { font-size: 19px; margin-top: 4px; }
+  body.safe-youtube.hooked .footer { opacity: 0; }
+  body.safe-youtube .sitecard { top: 960px; }
+  body.safe-youtube .showcase { top: 430px; height: 460px; width: 250px; right: 30px; }
+  body.safe-youtube .meter { top: 600px; left: 56px; width: 220px; padding: 12px; }
+  body.safe-youtube .meter svg { width: 180px; height: 103px; }
+  body.safe-youtube .meter .num { font-size: 48px; }
+  body.safe-youtube .meter h3 { font-size: 18px; letter-spacing: 2px; }
+  body.safe-youtube .card { top: 600px; right: 56px; width: 236px; padding: 14px 16px; }
+  body.safe-youtube .card.show { transform: translateX(0) rotate(1deg); }
+  body.safe-youtube .card li { font-size: 20px; padding: 6px 0; overflow-wrap: anywhere; }
+  body.safe-youtube .card h3 { font-size: 18px; letter-spacing: 2px; overflow-wrap: anywhere; }
+  body.safe-youtube .thought { top: 300px; }
+  body.safe-youtube .zzz { top: 400px; }
+  body.safe-youtube .zzz.z2 { top: 340px; }
+  body.safe-youtube .zzz.z3 { top: 290px; }
+  body.safe-youtube .tumbleweed { top: 900px; }
+  /* Red stands bottom-left and his bubble sits under Tilt, never over him (Tilt spans y 400 to 956). */
+  body.safe-youtube .red { top: 760px; width: 190px; }
+  body.safe-youtube .red svg { width: 190px; height: 250px; }
+  body.safe-youtube .redsay { left: 215px; top: 975px; font-size: 32px; max-width: 640px; }
+
   /* Red, the foil: peeks in from the left edge, blurts a line in a speech bubble, and ducks back out. */
   .red { position: absolute; left: -260px; top: 760px; width: 230px; transition: left 0.45s cubic-bezier(.2, .9, .2, 1.2); pointer-events: none; }
   .red.show { left: 26px; }
@@ -341,6 +382,7 @@
   const DEMO_SILENT = params.has("nohook");
   // ?safe=tiktok keeps everything clear of the TikTok app's own overlays (see the stylesheet).
   if (params.get("safe") === "tiktok") document.body.classList.add("safe-tiktok");
+  else document.body.classList.add("safe-youtube");
 
   // ---- fit the 1080x1920 scene to the window ----
   const scene = $("scene");
@@ -437,7 +479,7 @@
 
   // ---- moves: short physical bits. Viewers trigger them from chat ("dance", "spin", "jump"), likes and gifts
   // set them off, and he does one by himself now and then so the stage is never still.
-  const MOVES = { dance: 4200, spin: 1300, jump: 950, wave: 1600, shake: 1100, moonwalk: 3200, flex: 1800, yawn: 2800, sleep: 7000, peek: 3600, watch: 2600, sigh: 2200 };
+  const MOVES = { dance: 4200, spin: 1300, jump: 950, wave: 1600, shake: 1100, moonwalk: 3200, flex: 1800, yawn: 2800, sleep: 7000, peek: 3600, watch: 2600, sigh: 2200, pace: 4600, scan: 3800, beckon: 2600 };
   /** Eyelids and mouth as the current bored bit wants them (0 to 1). Read by the face drawing. */
   const boredFace = { lid: 0, mouth: 0 };
   let move = null; // { name, start }
@@ -490,6 +532,12 @@
         return { ...none, sy: 1 - 0.07 * ease, sx: 1 + 0.05 * ease, dy: 16 * ease, armL: 14 * ease, armR: -14 * ease };
       case "flex":
         return { ...none, armL: 100 * ease, armR: -100 * ease, sx: 1 + 0.08 * ease, dy: -10 * ease };
+      case "pace": // paces the floor like a host waiting for the room to fill up
+        return { ...none, dx: Math.sin(p * TAU) * 190 * ease, dy: -Math.abs(Math.sin(p * TAU * 5)) * 12 * ease, rot: Math.cos(p * TAU) * 5 * ease, armL: Math.sin(p * TAU * 5) * 22 * ease, armR: -Math.sin(p * TAU * 5) * 22 * ease };
+      case "scan": // slow look around the room: leans one way, then the other, hand over the eyes
+        return { ...none, dx: Math.sin(p * TAU) * 70 * ease, rot: Math.sin(p * TAU) * 9 * ease, armR: -70 * ease };
+      case "beckon": // waves a hand toward the chat box: come on, type something
+        return { ...none, dy: 12 * ease, sy: 1 - 0.03 * ease, armR: -50 * ease + Math.sin(p * TAU * 4) * 32 * ease, rot: 3 * ease };
       default:
         return none;
     }
@@ -972,8 +1020,8 @@
     if (idle && !move && t - lastAutoMove > nextAutoMoveIn) {
       const longWait = t - idleSince > 20000;
       const bits = longWait
-        ? ["watch", "thought", "dance", "thought", "yawn", "spin"]
-        : ["wave", "watch", "thought", "dance", "spin"];
+        ? ["pace", "beckon", "thought", "scan", "watch", "dance", "yawn", "beckon", "pace"]
+        : ["wave", "pace", "scan", "beckon", "thought", "dance", "spin", "watch"];
       let bit = bits[Math.floor(Math.random() * bits.length)];
       if (bit === lastBit) bit = bits[(bits.indexOf(bit) + 1) % bits.length];
       lastBit = bit;
@@ -981,7 +1029,7 @@
       else if (bit === "thought") showThought();
       else if (bit === "tumbleweed") { rollTumbleweed(); doMove("sigh"); }
       else doMove(bit);
-      lastAutoMove = t; nextAutoMoveIn = (bit === "sleep" ? 9500 : 6000) + Math.random() * 5000;
+      lastAutoMove = t; nextAutoMoveIn = (bit === "sleep" ? 9500 : 2200) + Math.random() * 3500;
     }
   }
 

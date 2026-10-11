@@ -1,3 +1,4 @@
+import { pureMoveRequest } from "./liveHostMoves.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MODEL_HAIKU, createLlmClient, type LlmClient } from "../content/llmClient.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
@@ -77,7 +78,7 @@ export function splitRedLine(spokenText: string): { redLine: string | null; tilt
  */
 export const AUDIENCE_PRESENT_FOR_MS = 3 * 60_000;
 /** On YouTube the host opens the room for this long even if nobody has chatted yet. */
-export const YOUTUBE_OPENING_GRACE_MS = 6 * 60_000;
+export const YOUTUBE_OPENING_GRACE_MS = 2 * 60_000;
 const JOIN_WELCOME_TITLE = "New Arrivals";
 /** Most messages taken from the worker in one tick; a flood is trimmed, newest kept. */
 const MAX_INCOMING_PER_TICK = 40;
@@ -532,6 +533,8 @@ export interface TickResult {
   joinsWelcomed?: boolean;
   /** Today's recorded Live Host spend in dollars, when this tick looked it up. */
   spendTodayUsd?: number;
+  /** Moves viewers asked for in new chat this tick ("dance", "spin"...). The worker plays them on the stage at once. */
+  moves?: string[];
 }
 
 export interface TickDeps {
@@ -553,15 +556,19 @@ function offResult(settings: LiveHostSettings | null, reason: string): TickResul
   };
 }
 
-async function storeIncoming(client: SupabaseClient, sessionId: string, incoming: IncomingChatMessage[], now: Date): Promise<void> {
+async function storeIncoming(client: SupabaseClient, sessionId: string, incoming: IncomingChatMessage[], now: Date): Promise<string[]> {
   const batch = incoming
     .filter((m) => (m.platform === "youtube" || m.platform === "tiktok") && typeof m.externalId === "string" && m.externalId.length > 0 && typeof m.body === "string")
     .slice(-MAX_INCOMING_PER_TICK);
-  if (batch.length === 0) return;
+  if (batch.length === 0) return [];
 
+  const moves: string[] = [];
   const rows = batch.map((m) => {
     const screening = screenIncomingMessage(m.body);
+    // A message that is only "dance" is a move request: played on stage, never answered with a sentence.
+    const move = screening.blockedReason ? null : pureMoveRequest(screening.cleanBody);
     return {
+      move,
       session_id: sessionId,
       platform: m.platform,
       external_id: m.externalId.slice(0, 200),
@@ -569,8 +576,8 @@ async function storeIncoming(client: SupabaseClient, sessionId: string, incoming
       author_name: safeAuthorName(typeof m.authorName === "string" ? m.authorName : ""),
       body: screening.cleanBody,
       received_at: m.receivedAt && !Number.isNaN(Date.parse(m.receivedAt)) ? new Date(m.receivedAt).toISOString() : now.toISOString(),
-      status: screening.blockedReason ? "blocked" : "pending",
-      status_reason: screening.blockedReason,
+      status: screening.blockedReason ? "blocked" : move ? "skipped" : "pending",
+      status_reason: screening.blockedReason ?? (move ? "move request" : null),
     };
   });
 
@@ -578,12 +585,14 @@ async function storeIncoming(client: SupabaseClient, sessionId: string, incoming
   const { data: existing } = await client.from("live_host_messages").select("platform, external_id").in("external_id", rows.map((r) => r.external_id));
   const seen = new Set(((existing ?? []) as Array<{ platform: string; external_id: string }>).map((r) => `${r.platform}:${r.external_id}`));
   const fresh = rows.filter((r) => !seen.has(`${r.platform}:${r.external_id}`));
-  if (fresh.length === 0) return;
-  const { error } = await client.from("live_host_messages").upsert(fresh, { onConflict: "platform,external_id", ignoreDuplicates: true });
+  if (fresh.length === 0) return [];
+  for (const row of fresh) if (row.move) moves.push(row.move);
+  const { error } = await client.from("live_host_messages").upsert(fresh.map(({ move: _move, ...row }) => row), { onConflict: "platform,external_id", ignoreDuplicates: true });
   if (error) throw new Error(`insert live_host_messages failed: ${error.message}`);
+  return moves;
 }
 
-async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession, settings: LiveHostSettings, adapter: YoutubeLiveChatAdapter, now: Date): Promise<string | null> {
+async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession, settings: LiveHostSettings, adapter: YoutubeLiveChatAdapter, now: Date, moves: string[] = []): Promise<string | null> {
   if (!settings.youtubeVideoId) return null;
   if (session.youtubeNextPollAt && new Date(session.youtubeNextPollAt).getTime() > now.getTime()) return null;
   try {
@@ -600,16 +609,17 @@ async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession,
     const page = await adapter.fetchMessages(chatId, session.youtubePageToken ?? null);
     await client
       .from("live_host_sessions")
-      .update({ youtube_live_chat_id: chatId, youtube_page_token: page.nextPageToken, youtube_next_poll_at: new Date(now.getTime() + page.pollAfterMs).toISOString() })
+      .update({ youtube_live_chat_id: chatId, youtube_page_token: page.nextPageToken, youtube_next_poll_at: new Date(now.getTime() + (page.messages.length > 0 && page.activePollAfterMs ? page.activePollAfterMs : page.pollAfterMs)).toISOString() })
       .eq("id", session.id);
     // The first page is chat history from before the host started. Answering it would be answering the past.
     if (!firstPage) {
-      await storeIncoming(
+      const found = await storeIncoming(
         client,
         session.id,
         page.messages.map((m) => ({ platform: "youtube" as const, externalId: m.id, authorName: m.authorDisplayName, body: m.text, receivedAt: m.publishedAt ?? undefined })),
         now,
       );
+      moves.push(...found);
     }
     return null;
   } catch (err) {
@@ -732,7 +742,11 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     await storeIncoming(client, session.id, duoMessages(input), now);
   }
   const youtube = deps.youtube === undefined ? createYoutubeLiveChatAdapter() : deps.youtube;
-  if (youtube) base.note = await pollYoutubeChat(client, session, settings, youtube, now);
+  if (youtube) {
+    const moves: string[] = [];
+    base.note = await pollYoutubeChat(client, session, settings, youtube, now, moves);
+    if (moves.length > 0) base.moves = moves;
+  }
   // A YouTube stream with no live link in the app runs fine and silently reads no chat: say so in the worker's log.
   if (input.platform === "youtube" && !settings.youtubeVideoId) {
     base.note = "No YouTube live link is set in the app (More, Live Host): chat is not being read, so nobody can be answered by name.";
@@ -828,6 +842,9 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       // YouTube show he opens the room anyway (the welcome and the first segments are what bring chat in); after that
       // the owner's rule applies again and he is quiet until someone says something.
       const openingGrace = input.platform === "youtube" && sessionAgeMs < YOUTUBE_OPENING_GRACE_MS;
+      // On YouTube he only answers: after the opening a chat message earns a reply, not a string of unprompted segments
+      // (a viewer who typed once and then got a lecture every 30 seconds found it random).
+      if (input.platform === "youtube" && !openingGrace) return base;
       if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS && !openingGrace) return base;
     }
     const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS && chatIsLive;

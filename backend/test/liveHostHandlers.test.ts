@@ -491,6 +491,15 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.segmentTitle).toBe("Welcome In");
   });
 
+  it("on YouTube, after the opening, he stays quiet until someone types, even with recent chat", async () => {
+    const live = { id: "live", status: "live", started_at: new Date(NOW.getTime() - 20 * 60_000).toISOString(), last_heartbeat_at: new Date(NOW.getTime() - 5_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 120_000).toISOString(), last_segment: "roast_my_trade" };
+    const answered = { id: "m1", session_id: "live", platform: "youtube", external_id: "x1", author_name: "Dana", body: "hello", received_at: new Date(NOW.getTime() - 60_000).toISOString(), status: "answered", status_reason: null, utterance_id: null };
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [live], live_host_messages: [answered] });
+    const llm = scriptedLlm([line("Unprompted.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance).toBeNull();
+  });
+
   it("a worker that restarts in the middle of a show carries on the same session", async () => {
     const live = { id: "live", status: "live", started_at: new Date(NOW.getTime() - 25 * 60_000).toISOString(), last_heartbeat_at: new Date(NOW.getTime() - 5_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 40_000).toISOString(), last_segment: "roast_my_trade" };
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [live] });
@@ -1013,5 +1022,17 @@ describe("copiesExampleLine", () => {
     );
     expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
     expect(result.utterance?.spokenText).toContain("bouncer");
+  });
+});
+
+import { pureMoveRequest, moveWord as chatMoveWord } from "../src/liveHost/liveHostMoves.js";
+describe("chat move requests", () => {
+  it("treats a message that is only a move word as a move request", () => {
+    for (const body of ["dance", "Dance!!", "can you moonwalk?", "tilt spin", "please do a flex", "dancing lol"]) expect(pureMoveRequest(body), body).not.toBeNull();
+    expect(pureMoveRequest("dancing lol")).toBe("dance");
+  });
+  it("does not swallow real questions that mention a move word", () => {
+    for (const body of ["why did the market spin out after the news", "how do I wave off a bad trade", "what is a flex account"]) expect(pureMoveRequest(body), body).toBeNull();
+    expect(chatMoveWord("what is a flex account")).toBe("flex");
   });
 });
