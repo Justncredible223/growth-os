@@ -20,6 +20,7 @@ import {
   nextAutoFillRun,
   AUTOFILL_TARGET_WAITING,
   pacificDayKey,
+  type SearchOrder,
   resolveLimits,
   type Block,
   type EngagementLimits,
@@ -35,6 +36,13 @@ export { isMissingEngagementTables } from "./engagementRepository.js";
 
 /** A request the owner can fix (bad input, nothing to draft). Maps to HTTP 400. */
 export class EngagementActionError extends Error {}
+
+/** The drafter chose not to comment (off topic, sensitive, nothing to add). Still an owner-visible 400. */
+export class EngagementDraftDeclined extends EngagementActionError {
+  constructor(readonly reason: string) {
+    super(`Nothing worth saying here (${reason}). Skip it.`);
+  }
+}
 
 /** integration_health row the scheduled fill reports to (api/growth-pulse.ts) and the status endpoint reads. */
 export const AUTOFILL_HEALTH_KEY = "engagement_autofill";
@@ -203,6 +211,63 @@ export async function removeWatch(client: SupabaseClient, id: string): Promise<v
 
 // ---- discovery ----------------------------------------------------------------------------------------------
 
+/**
+ * Where a discovery run lost its candidates, in the order the filters run. Every candidate id lands in exactly one
+ * bucket (or in `added`), so `seen` equals the sum of the drop counters, `roomExhausted` and `added`.
+ */
+export interface DiscoveryDiagnostics {
+  /** The exact search queries run, with the search order used and how many ids each returned. */
+  queries: Array<{ q: string; order: string; hits: number }>;
+  /** Unique candidate ids from search and from watched channels. */
+  seen: number;
+  seenFromSearch: number;
+  seenFromChannels: number;
+  /** Already waiting in the queue. */
+  alreadyQueued: number;
+  /** Already done or skipped earlier (including earlier auto-skips). */
+  alreadyHandled: number;
+  /** videos.list did not return the id (private, removed). */
+  notReturned: number;
+  /** Not a Short length (over 3 minutes). */
+  notShortLength: number;
+  tooOld: number;
+  tooFewViews: number;
+  /** Search hits with no trading words in the title or description. */
+  noTradingWords: number;
+  /** No creator id, or our own channel. */
+  noCreatorOrOwn: number;
+  creatorCooldown: number;
+  /** Another video from the same creator is already waiting or was taken this run. */
+  creatorAlreadyQueued: number;
+  /** Usable candidates left over because the room in the queue was used up. */
+  roomExhausted: number;
+  added: number;
+  /** Rejected-for-views videos by view band, to tell whether the floor is the bottleneck. */
+  viewsBelowFloor: { under10: number; under50: number; under100: number };
+}
+
+export function emptyDiagnostics(): DiscoveryDiagnostics {
+  return {
+    queries: [],
+    seen: 0,
+    seenFromSearch: 0,
+    seenFromChannels: 0,
+    alreadyQueued: 0,
+    alreadyHandled: 0,
+    notReturned: 0,
+    notShortLength: 0,
+    tooOld: 0,
+    tooFewViews: 0,
+    noTradingWords: 0,
+    noCreatorOrOwn: 0,
+    creatorCooldown: 0,
+    creatorAlreadyQueued: 0,
+    roomExhausted: 0,
+    added: 0,
+    viewsBelowFloor: { under10: 0, under50: 0, under100: 0 },
+  };
+}
+
 export interface DiscoveryResult {
   added: number;
   considered: number;
@@ -210,6 +275,7 @@ export interface DiscoveryResult {
   skippedHandled: number;
   stoppedReason: string | null;
   errors: string[];
+  diagnostics: DiscoveryDiagnostics;
 }
 
 /**
@@ -230,11 +296,15 @@ export interface DiscoverOptions {
   curate?: boolean;
   /** Varies which watchlist queries run so several runs a day cover the whole list. Defaults to the day number. */
   rotationSeed?: number;
+  /** search.list `order` for the i-th search of the run (wraps). Defaults to newest first. */
+  searchOrders?: readonly SearchOrder[];
+  /** Ids requested per search (same 100 units at any size). Defaults to 10. */
+  searchResultsPerQuery?: number;
 }
 
 /** Cheap relevance pre-filter for search hits; the drafter still declines anything off topic. */
 const TRADING_WORDS =
-  /\b(trad(?:e|es|er|ers|ing)|futures?|prop|topstep|apex|tradeify|funded|payout|combine|drawdown|scalp\w*|nq|mnq|es|mes|nasdaq|s&p|stocks?|options?|forex|market|journal|stop ?loss|risk|p&l|pnl|revenge)\b/i;
+  /\b(trad(?:e|es|er|ers|ing)|futures?|prop|topstep|apex|tradeify|funded|payout|combine|drawdown|scalp\w*|nq|mnq|es|mes|nasdaq|s&p|stocks?|options?|forex|market|journal|stop ?loss|risk|p&l|pnl|revenge|evals?|evaluation|ninjatrader|tradovate|tradingview|breakout|candlestick)\b/i;
 
 export function looksTradingRelated(title: string, description: string | null): boolean {
   return TRADING_WORDS.test(`${title} ${description ?? ""}`);
@@ -244,7 +314,8 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
   const yt = requireYoutube(client, deps);
   const now = clockOf(deps);
   const limits = limitsOf(deps);
-  const result: DiscoveryResult = { added: 0, considered: 0, skippedCooldown: 0, skippedHandled: 0, stoppedReason: null, errors: [] };
+  const diag = emptyDiagnostics();
+  const result: DiscoveryResult = { added: 0, considered: 0, skippedCooldown: 0, skippedHandled: 0, stoppedReason: null, errors: [], diagnostics: diag };
 
   const room = Math.min(limits.maxPendingItems - (await repo.countPending(client)), options.maxNew ?? MAX_NEW_ITEMS_PER_RUN);
   if (room <= 0) {
@@ -266,7 +337,9 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
   const seed = options.rotationSeed ?? Math.floor(now.getTime() / DAY_MS);
   const offset = queries.length > 0 ? (seed * searchCap) % queries.length : 0;
   const todaysQueries = [...queries.slice(offset), ...queries.slice(0, offset)].slice(0, searchCap);
-  const publishedAfter = new Date(now.getTime() - 7 * DAY_MS).toISOString();
+  const publishedAfter = new Date(now.getTime() - (options.maxAgeDays ?? 7) * DAY_MS).toISOString();
+  const orders: readonly SearchOrder[] = options.searchOrders && options.searchOrders.length > 0 ? options.searchOrders : ["date"];
+  const perQuery = options.searchResultsPerQuery ?? 10;
 
   try {
     for (const entry of channels) {
@@ -282,9 +355,12 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
         result.errors.push(`Channel ${entry.value}: ${(err as Error).message}`);
       }
     }
-    for (const entry of todaysQueries) {
+    for (const [i, entry] of todaysQueries.entries()) {
+      const order = orders[i % orders.length]!;
       try {
-        for (const id of await yt.searchRecentShorts(entry.value, publishedAfter, 10)) if (!sourceById.has(id)) sourceById.set(id, "search");
+        const ids = await yt.searchRecentShorts(entry.value, publishedAfter, perQuery, order);
+        diag.queries.push({ q: entry.value, order, hits: ids.length });
+        for (const id of ids) if (!sourceById.has(id)) sourceById.set(id, "search");
       } catch (err) {
         if (err instanceof EngagementBlockedError) throw err;
         result.errors.push(`Search "${entry.value}": ${(err as Error).message}`);
@@ -297,11 +373,20 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
 
   // Drop what is already queued or already handled before spending a videos.list on it.
   const fresh: string[] = [];
-  for (const id of sourceById.keys()) {
+  for (const [id, source] of sourceById) {
     result.considered++;
-    if (await repo.findItemByVideo(client, "youtube", id)) continue;
+    diag.seen++;
+    if (source === "search") diag.seenFromSearch++;
+    else diag.seenFromChannels++;
+    const known = await repo.findItemByVideo(client, "youtube", id);
+    if (known) {
+      if (known.status === "done" || known.status === "skipped") diag.alreadyHandled++;
+      else diag.alreadyQueued++;
+      continue;
+    }
     if (await repo.isVideoHandled(client, "youtube", id)) {
       result.skippedHandled++;
+      diag.alreadyHandled++;
       continue;
     }
     fresh.push(id);
@@ -319,25 +404,61 @@ export async function discoverYoutube(client: SupabaseClient, deps: EngagementDe
     throw err;
   }
 
+  diag.notReturned = Math.max(0, fresh.length - metas.length);
+
   const done = await repo.loadRecentDoneActions(client, now, doneWindowDays(limits));
+  // One waiting card per creator: a second video from the same creator would sit behind the cooldown the moment
+  // the first is posted. Only creators with an OPEN card count, so a skipped or declined video never blocks the
+  // creator's other videos.
+  const creatorsWaiting = new Set((await repo.listQueue(client, 500)).map((i) => i.creatorId.trim().toLowerCase()).filter((c) => c.length > 0));
   const cap = Math.min(room, MAX_NEW_ITEMS_PER_RUN);
   const ordered = options.curate
     ? [...metas].sort((a, b) => (b.stats?.commentCount ?? 0) - (a.stats?.commentCount ?? 0) || (b.stats?.viewCount ?? 0) - (a.stats?.viewCount ?? 0))
     : metas;
   const oldestAllowed = options.maxAgeDays !== undefined ? now.getTime() - options.maxAgeDays * DAY_MS : null;
   for (const meta of ordered) {
-    if (result.added >= cap) break;
-    if (meta.durationSeconds !== null && meta.durationSeconds > SHORTS_MAX_SECONDS) continue;
-    if (oldestAllowed !== null && meta.publishedAt && new Date(meta.publishedAt).getTime() < oldestAllowed) continue;
-    if (options.minViews !== undefined && meta.stats && (meta.stats.viewCount ?? 0) < options.minViews) continue;
-    if (options.curate && sourceById.get(meta.externalId) === "search" && !looksTradingRelated(meta.title, meta.description)) continue;
-    if (!meta.creatorId || /fill-?book/i.test(meta.creatorName)) continue;
+    if (meta.durationSeconds !== null && meta.durationSeconds > SHORTS_MAX_SECONDS) {
+      diag.notShortLength++;
+      continue;
+    }
+    if (oldestAllowed !== null && meta.publishedAt && new Date(meta.publishedAt).getTime() < oldestAllowed) {
+      diag.tooOld++;
+      continue;
+    }
+    if (options.minViews !== undefined && meta.stats && (meta.stats.viewCount ?? 0) < options.minViews) {
+      const views = meta.stats.viewCount ?? 0;
+      diag.tooFewViews++;
+      if (views < 10) diag.viewsBelowFloor.under10++;
+      else if (views < 50) diag.viewsBelowFloor.under50++;
+      else diag.viewsBelowFloor.under100++;
+      continue;
+    }
+    if (options.curate && sourceById.get(meta.externalId) === "search" && !looksTradingRelated(meta.title, meta.description)) {
+      diag.noTradingWords++;
+      continue;
+    }
+    if (!meta.creatorId || /fill-?book/i.test(meta.creatorName)) {
+      diag.noCreatorOrOwn++;
+      continue;
+    }
     if (checkCreatorCooldown("youtube", meta.creatorId, done, now, limits)) {
       result.skippedCooldown++;
+      diag.creatorCooldown++;
+      continue;
+    }
+    const creatorKey = meta.creatorId.trim().toLowerCase();
+    if (creatorsWaiting.has(creatorKey)) {
+      diag.creatorAlreadyQueued++;
+      continue;
+    }
+    if (result.added >= cap) {
+      diag.roomExhausted++;
       continue;
     }
     await repo.insertItem(client, meta, sourceById.get(meta.externalId) ?? "watchlist", now);
+    creatorsWaiting.add(creatorKey);
     result.added++;
+    diag.added++;
   }
   return result;
 }
@@ -468,7 +589,7 @@ export async function draftItem(client: SupabaseClient, id: unknown, deps: Engag
   }
 
   if (accepted.length === 0) {
-    if (skipReason) throw new EngagementActionError(`Nothing worth saying here (${skipReason}). Skip it.`);
+    if (skipReason) throw new EngagementDraftDeclined(skipReason);
     throw new EngagementActionError(`Could not write a comment that passes the guardrails (${feedback.slice(0, 2).join("; ") || "no usable options"}). Try again or skip.`);
   }
 

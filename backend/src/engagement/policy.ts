@@ -151,6 +151,40 @@ export function checkQuotaBudget(usedToday: number, units: number, limits: Engag
 export const AUTOFILL_TARGET_WAITING = 10;
 
 /**
+ * Scheduled-fill discovery knobs, all in one place (docs/ENGAGEMENT_ASSISTANT.md, "Tuning knobs").
+ *
+ * Quota math (YouTube Data API units; search.list is 100 per CALL no matter how many results it returns):
+ *   one fill  = 3 searches (300) + at most 2 videos.list (2, 50 ids each) + at most 10 top-comment reads (10)
+ *               + 1 channels.list and 1 playlistItems.list per watched channel (0 today, no channel is seeded)
+ *             = about 312 units
+ *   one day   = 3 fills (01:00, 15:00, 20:00 UTC) = about 940 units, comfortably under the 3,000 budget
+ * and a fill with a full queue spends 0. The unit spender still refuses any call that would cross the budget.
+ */
+export const AUTOFILL_MAX_SEARCHES_PER_RUN = 3;
+/** Results requested per search. The call costs the same 100 units at 10 or 50, so ask for plenty. */
+export const AUTOFILL_SEARCH_RESULTS_PER_QUERY = 25;
+/** The fill pre-drafts at most this many items per run; each draft may cost one top-comments read. */
+export const AUTOFILL_MAX_DRAFTS_PER_RUN = 10;
+/** Videos older than this are dropped, and the search window uses the same value. */
+export const AUTOFILL_MAX_AGE_DAYS = 14;
+/** Videos with fewer views are dropped. Unchanged until a run's rejection breakdown shows it is the bottleneck. */
+export const AUTOFILL_MIN_VIEWS = 100;
+/**
+ * search.list `order` used by the i-th search of a fill. Newest-first (`date`) mostly returns uploads with a handful
+ * of views that the views floor then throws away, so the fill ranks by views and by relevance inside the window.
+ */
+export const AUTOFILL_SEARCH_ORDERS = ["viewCount", "relevance", "viewCount"] as const;
+export type SearchOrder = "date" | "viewCount" | "relevance";
+/** Worst-case-typical units a day of scheduled fills is designed to spend (see the math above). */
+export function estimatedAutoFillUnitsPerDay(): number {
+  const perRun =
+    AUTOFILL_MAX_SEARCHES_PER_RUN * YOUTUBE_UNIT_COSTS.searchList +
+    2 * YOUTUBE_UNIT_COSTS.videosList +
+    AUTOFILL_MAX_DRAFTS_PER_RUN * YOUTUBE_UNIT_COSTS.commentThreadsList;
+  return perRun * AUTOFILL_RUN_HOURS_UTC.length;
+}
+
+/**
  * UTC hours of the pulse runs the scheduled fill rides on (.github/workflows/growth-pulse.yml: 08:00, 13:00 and
  * 18:00 America/Phoenix, which has no DST).
  */
