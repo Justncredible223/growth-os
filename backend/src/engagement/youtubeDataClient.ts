@@ -46,9 +46,14 @@ export class YoutubeDataClient {
     return (await res.json()) as T;
   }
 
-  /** videos.list, 1 unit for up to 50 ids. */
+  /** videos.list, 1 unit per 50 ids (more than 50 ids are read in 50-id chunks). */
   async videos(ids: string[]): Promise<Array<VideoMetadata & { durationSeconds: number | null; publishedAt: string | null }>> {
     if (ids.length === 0) return [];
+    if (ids.length > 50) {
+      const all: Array<VideoMetadata & { durationSeconds: number | null; publishedAt: string | null }> = [];
+      for (let i = 0; i < ids.length; i += 50) all.push(...(await this.videos(ids.slice(i, i + 50))));
+      return all;
+    }
     const json = await this.get<{
       items?: Array<{
         id: string;
@@ -108,11 +113,24 @@ export class YoutubeDataClient {
     return (json.items ?? []).map((i) => i.contentDetails?.videoId).filter((id): id is string => Boolean(id));
   }
 
-  /** search.list, 100 units: recent short videos for a query. Use sparingly. */
-  async searchRecentShorts(query: string, publishedAfterIso: string, maxResults = 10): Promise<string[]> {
+  /**
+   * search.list, 100 units regardless of maxResults: short videos for a query published after a date. Use sparingly.
+   * `videoDuration=short` is under 4 minutes; callers still enforce the 3-minute Shorts limit from videos.list.
+   */
+  async searchRecentShorts(query: string, publishedAfterIso: string, maxResults = 10, order: "date" | "viewCount" | "relevance" = "date"): Promise<string[]> {
     const json = await this.get<{ items?: Array<{ id?: { videoId?: string } }> }>(
       "search",
-      { part: "snippet", type: "video", videoDuration: "short", order: "date", q: query, publishedAfter: publishedAfterIso, maxResults: String(maxResults) },
+      {
+        part: "snippet",
+        type: "video",
+        videoDuration: "short",
+        order,
+        q: query,
+        publishedAfter: publishedAfterIso,
+        relevanceLanguage: "en",
+        regionCode: "US",
+        maxResults: String(Math.min(Math.max(maxResults, 1), 50)),
+      },
       "search.list",
       YOUTUBE_UNIT_COSTS.searchList,
     );
