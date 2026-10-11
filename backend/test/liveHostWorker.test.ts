@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { STAGE_ASSET_NAMES, stageAssetFile, MOOD_PROSODY, applyMoodProsody, DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
+import { splitLead, STAGE_ASSET_NAMES, stageAssetFile, MOOD_PROSODY, applyMoodProsody, DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -289,6 +289,15 @@ describe("live host stage page", () => {
       const bytes = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "assets", name));
       expect(createHash("sha256").update(bytes).digest("hex"), name).toBe(entry!.sha256);
     }
+  });
+
+  it("splits a long line after its first sentence so the voice can start sooner", () => {
+    const text = "A trailing drawdown follows your highest balance, not your starting one. That means a good day tightens the floor under you, and the buffer you see in the app is the number that actually matters.";
+    const split = splitLead(text);
+    expect(split?.lead).toBe("A trailing drawdown follows your highest balance, not your starting one.");
+    expect(`${split?.lead} ${split?.rest}`).toBe(text);
+    expect(splitLead("Short line. Two bits.")).toBeNull();
+    expect(splitLead("One very long sentence that never ends with a break until the very last word of the whole thing and then stops")).toBeNull();
   });
 
   it("serves a stage asset by exact name only", () => {
