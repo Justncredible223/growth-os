@@ -76,6 +76,8 @@ export interface WorkerConfig {
   duo: boolean;
   /** What Tilt calls the co-host on stream. */
   hostName: string;
+  /** Where the co-host is relative to Tilt on screen, so his eyes and lean go the right way. */
+  cohostSide: "left" | "right" | "down";
 }
 
 /** Longest typed prompt the host page accepts, and how many can wait for the next tick. */
@@ -127,6 +129,23 @@ export function pickFiller(count: number, lastIndex: number, lastAt: number, now
   let index = Math.floor(random() * count);
   if (index === lastIndex) index = (index + 1) % count;
   return index;
+}
+
+export interface Reaction {
+  mode?: "listening" | "thinking" | "idle";
+  nod?: boolean;
+}
+
+/** Reads a reaction the host page sent: what Tilt should be doing with his eyes and body while the co-host talks. */
+export function parseReaction(raw: unknown): Reaction | null {
+  if (raw === null || typeof raw !== "object") return null;
+  const { mode, nod } = raw as { mode?: unknown; nod?: unknown };
+  const reaction: Reaction = {};
+  if (mode === "listening" || mode === "thinking" || mode === "idle") reaction.mode = mode;
+  else if (mode !== undefined) return null;
+  if (nod === true) reaction.nod = true;
+  else if (nod !== undefined && nod !== false) return null;
+  return reaction.mode !== undefined || reaction.nod === true ? reaction : null;
 }
 
 /** How long a pressed "run a segment" waits for its line to come back before it is given up on. */
@@ -183,6 +202,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
     duo: (env.LIVE_HOST_MODE || "").toLowerCase() === "duo",
     hostName: env.LIVE_HOST_COHOST_NAME || "Host",
+    cohostSide: (["left", "right", "down"] as const).find((side) => side === (env.LIVE_HOST_COHOST_SIDE || "").toLowerCase()) ?? "down",
   };
 }
 
@@ -519,9 +539,38 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
           res.writeHead(429).end();
         } else {
           segmentRequest = { id: request.id, until: Date.now() + DUO_SEGMENT_REQUEST_MS };
+          if (live) broadcast("react", { mode: "thinking", side: config.cohostSide });
           playFiller();
           res.writeHead(202, { "content-type": "application/json" }).end("{}");
         }
+      });
+      return;
+    }
+    if (config.duo && req.method === "POST" && url.pathname === "/react") {
+      if (!isTrustedHostRequest(req.headers, config.port)) {
+        res.writeHead(403).end();
+        return;
+      }
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+        if (raw.length > 500) req.destroy();
+      });
+      req.on("end", () => {
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+        const reaction = parseReaction(parsed);
+        if (!reaction) {
+          res.writeHead(400).end();
+          return;
+        }
+        // Not while he is mid-line: the stage ignores it anyway, and the host page may send these in a burst.
+        if (live) broadcast("react", { ...reaction, side: config.cohostSide });
+        res.writeHead(204).end();
       });
       return;
     }
@@ -549,6 +598,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
           res.writeHead(429).end();
         } else {
           hostQueue.push(prompt);
+          if (live) broadcast("react", { mode: "thinking", side: config.cohostSide });
           playFiller();
           res.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ queued: hostQueue.length }));
         }
