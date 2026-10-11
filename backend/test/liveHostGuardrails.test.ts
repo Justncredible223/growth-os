@@ -115,7 +115,10 @@ describe("nextSegment", () => {
       seen.push(last);
     }
     expect(seen).not.toContain("fillbook_spot");
-    expect(new Set(seen).size).toBe(LIVE_HOST_SEGMENTS.length - 1);
+    // The opening and sign-off are pressed by the co-host and never come up in the idle rotation.
+    expect(seen).not.toContain("show_open");
+    expect(seen).not.toContain("show_close");
+    expect(new Set(seen).size).toBe(LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot && !segment.show).length);
   });
 
   it("runs the Fillbook spot when due, then goes back to the rotation", () => {

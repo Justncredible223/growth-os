@@ -18,6 +18,9 @@
   .row { display:flex; gap:8px; }
   button { padding:10px 16px; border-radius:8px; border:0; background:var(--accent); color:#1a1200; font-weight:600; cursor:pointer; }
   select { flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; }
+  .showbar { margin:10px 0 14px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
+  .clock { display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; font-size:13px; color:var(--mute); }
+  .clock .hint { color:var(--accent); text-align:right; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
   .chip { padding:6px 12px; border-radius:99px; background:var(--card); color:var(--text); border:1px solid var(--line); font-weight:500; font-size:13px; }
   button.secondary { background:var(--card); color:var(--text); border:1px solid var(--line); }
@@ -32,6 +35,14 @@
 <body>
   <h1>Tilt co-host console</h1>
   <p class="sub">Type what you want Tilt to answer. He only speaks when you send something. <span id="status" class="status">connecting</span></p>
+
+  <div class="showbar" aria-label="Run of show">
+    <div class="clock"><span id="showClock">Show not started</span><span id="showHint" class="hint"></span></div>
+    <div class="row">
+      <button id="openShow" type="button">Open the show</button>
+      <button id="closeShow" type="button" class="secondary">Close the show</button>
+    </div>
+  </div>
 
   <form id="form">
     <textarea id="text" maxlength="400" placeholder="Say something to Tilt, or paste a viewer's question below" autofocus></textarea>
@@ -134,6 +145,43 @@
     });
   });
 
+  // ---- run of show: a clock and the two beats that frame the stream ----
+  var showStartedAt = null;
+  var lastBeatAt = null;
+  var clockEl = document.getElementById("showClock");
+  var hintEl = document.getElementById("showHint");
+  function fmt(ms) {
+    var total = Math.max(0, Math.floor(ms / 1000));
+    var m = Math.floor(total / 60), s = total % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+  function tickClock() {
+    if (showStartedAt === null) { clockEl.textContent = "Show not started"; hintEl.textContent = "Press Open the show"; return; }
+    var now = Date.now();
+    clockEl.textContent = "On air " + fmt(now - showStartedAt) + "  |  last beat " + fmt(now - lastBeatAt) + " ago";
+    var quiet = now - lastBeatAt;
+    hintEl.textContent = quiet > 240000 ? "A segment is due" : quiet > 150000 ? "Segment soon" : "";
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+  function noteBeat() { lastBeatAt = Date.now(); if (showStartedAt === null) showStartedAt = lastBeatAt; }
+  function pressBeat(id, label, button) {
+    button.disabled = true;
+    fetch("/segment", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-live-host": "1" },
+      body: JSON.stringify({ id: id })
+    }).then(function (res) {
+      if (res.status === 202) { addItem("", "You", label); noteBeat(); if (id === "show_open") showStartedAt = Date.now(); }
+      else if (res.status === 429) segErr.textContent = "A segment is already on its way.";
+      else segErr.textContent = "Could not start it (HTTP " + res.status + ").";
+    }).catch(function () {
+      segErr.textContent = "Could not reach the worker. Is npm run live-host running?";
+    }).then(function () { setTimeout(function () { button.disabled = false; }, 4000); });
+  }
+  document.getElementById("openShow").addEventListener("click", function () { pressBeat("show_open", "Open the show", this); });
+  document.getElementById("closeShow").addEventListener("click", function () { pressBeat("show_close", "Close the show", this); });
+
   var segEl = document.getElementById("segment");
   var segBtn = document.getElementById("runSegment");
   var segErr = document.getElementById("segErr");
@@ -154,7 +202,7 @@
       headers: { "content-type": "application/json", "x-live-host": "1" },
       body: JSON.stringify(segEl.value ? { id: segEl.value } : {})
     }).then(function (res) {
-      if (res.status === 202) addItem("", "You", "Run segment: " + title);
+      if (res.status === 202) { addItem("", "You", "Run segment: " + title); noteBeat(); }
       else if (res.status === 429) segErr.textContent = "A segment is already on its way.";
       else segErr.textContent = "Could not start a segment (HTTP " + res.status + ").";
     }).catch(function () {

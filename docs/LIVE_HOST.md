@@ -268,3 +268,23 @@ What changed after the first real duo runs, and why:
   voiced once at worker start, at most one every 20 seconds, and are fixed text: nothing a model wrote.
 - **Failure sign.** If the connection to Growth OS fails three times in a row, the stage shows "Hang on, Tilt lost his
   connection and is finding it again" instead of freezing in silence.
+
+## Run of show (duo mode)
+
+The console now has a show bar at the top:
+
+- **Open the show** starts the stream properly: a joke about the situation first, then who he is and what this is
+  (a comedy show about futures trading and prop firm rules, entertainment and not advice, link in the bio on TikTok),
+  then he turns to you with a question or a dare.
+- **Close the show** is the sign-off: a callback to the funniest thing of the stream, thanks, more next time, and you
+  get the last word as a joke or a dare (never a tip).
+- A **clock** shows how long you have been on air and how long since the last beat. It suggests "Segment soon" after
+  2.5 minutes of nothing and "A segment is due" after 4. These are hints only; nothing runs by itself.
+
+Both beats are normal segments on the server (`show: true` in `liveHostPersona.ts`), so they pass the same checks and
+the same firewall rule. They are never part of the idle rotation and do not move it. A suggested shape for a 30 to 45
+minute stream: Open the show, two or three quick prompts to settle in, a segment every 4 to 5 minutes (Roast My
+Trade and Tilt-o-Meter are the easy ones), a Desk Lesson once, and Close the show.
+
+Known limitation: openings and sign-offs tend to run 55 to 70 words against the 45 asked for, and the "market is
+closed, no hands" joke comes up often. Shorten or vary the briefs in the persona file if that bothers you on air.

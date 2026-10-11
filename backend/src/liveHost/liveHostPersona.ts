@@ -144,6 +144,8 @@ export interface LiveHostSegment {
   brief: string;
   /** True for the one segment that is an explicit product mention. Rationed separately. */
   isFillbookSpot?: boolean;
+  /** True for the run-of-show beats (opening, sign-off): pressed by the co-host, never part of the idle rotation. */
+  show?: boolean;
 }
 
 /**
@@ -242,6 +244,20 @@ export const LIVE_HOST_SEGMENTS: readonly LiveHostSegment[] = [
       "Ask chat one sharp, specific journaling question a trader could answer in a sentence (for example what they were feeling right before their worst trade this week). Say in one line why writing that down matters.",
   },
   {
+    id: "show_open",
+    title: "Opening",
+    show: true,
+    brief:
+      "The show is starting and your co-host is on camera next to you. Open it as a double act, in three sentences or fewer and under 45 words. The FIRST sentence is a joke about the situation itself (a candle hosting a trading show, no hands, the hour, the empty market) and not a greeting. Then say who you are and what this is in one breath: Tilt, the AI candle who lives in a trading journal, a comedy show about futures trading and prop firm rules. Fit in, in about five words, that it is entertainment and not advice. Finish by turning to your CO-HOST (not the room) with one easy, funny question or a dare about himself. If you point anywhere, say the link is in the bio.",
+  },
+  {
+    id: "show_close",
+    title: "Sign-off",
+    show: true,
+    brief:
+      "The show is ending and your co-host is next to you. Close it as a double act, in two or three sentences and under 45 words: land one callback to the funniest thing in the recent lines, thank the room, and promise more next time. Then give your CO-HOST the last word as a joke or a dare about the show itself (never a tip, a warning or anything a viewer might act on). If you point anywhere, say the link is in the bio. End on a joke, not on a goodbye.",
+  },
+  {
     id: "fillbook_spot",
     title: "Where Tilt Lives",
     isFillbookSpot: true,
@@ -252,7 +268,7 @@ export const LIVE_HOST_SEGMENTS: readonly LiveHostSegment[] = [
 
 /** The next segment after `lastSegmentId`, skipping the Fillbook spot unless a mention is due. */
 export function nextSegment(lastSegmentId: string | null, fillbookSpotDue: boolean): LiveHostSegment {
-  const pool = LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot || fillbookSpotDue);
+  const pool = LIVE_HOST_SEGMENTS.filter((segment) => !segment.show && (!segment.isFillbookSpot || fillbookSpotDue));
   if (fillbookSpotDue && lastSegmentId !== "fillbook_spot") {
     return LIVE_HOST_SEGMENTS.find((segment) => segment.isFillbookSpot)!;
   }

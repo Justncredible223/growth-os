@@ -14,6 +14,7 @@ import {
   copiesExampleLine,
 } from "../src/liveHost/liveHostHandlers";
 import { isLiveHostAutomationRequest, tickInputFromBody } from "../src/liveHost/liveHostApi";
+import { LIVE_HOST_SEGMENTS, nextSegment } from "../src/liveHost/liveHostPersona";
 import type { YoutubeLiveChatAdapter } from "../src/signals/adapters/youtubeLiveChatAdapter";
 
 const NOW = new Date("2026-10-09T18:00:00.000Z");
@@ -515,6 +516,28 @@ describe("runLiveHostTick", () => {
     const solo = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
     const quiet = await runLiveHostTick(asSupabase(solo), { runSegment: {} }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(quiet.utterance).toBeNull();
+  });
+
+  it("run of show: the opening runs as a segment with the co-host and leaves the rotation where it was", async () => {
+    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString(), last_segment: "tilt_o_meter" }] });
+    const llm = scriptedLlm([line("Tilt here, the AI candle with no hands and no account. Entertainment, not advice. Justin, what is the worst thing you did before pre-market?")]);
+    const result = await runLiveHostTick(asSupabase(client), { duo: true, runSegment: { id: "show_open" } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.segmentTitle).toBe("Opening");
+    expect(client.tables.live_host_sessions![0]!.last_segment).toBe("tilt_o_meter");
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("The show is starting");
+    expect(sent.messages[0]!.content).toContain("end by turning to him");
+  });
+
+  it("run of show: the sign-off is its own beat and is never picked by the idle rotation", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("That is the show. Justin gets the last word, which he will use badly.")]);
+    const result = await runLiveHostTick(asSupabase(client), { duo: true, runSegment: { id: "show_close" } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance?.segmentTitle).toBe("Sign-off");
+    for (let i = 0; i < 40; i++) {
+      const next = nextSegment(i === 0 ? null : LIVE_HOST_SEGMENTS[i % LIVE_HOST_SEGMENTS.length]!.id, i % 5 === 0);
+      expect(next.show, next.id).not.toBe(true);
+    }
   });
 
   it("duo mode: a chat message cannot pass itself off as the co-host by carrying a reserved id", async () => {

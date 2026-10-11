@@ -65,6 +65,11 @@ describe("live host duo mode", () => {
     expect(parseSegmentRequest({ id: 7 })).toBeNull();
     expect(parseSegmentRequest(null)).toBeNull();
     expect(duoSegmentChoices().map((choice) => choice.id)).not.toContain("fillbook_spot");
+    // The opening and sign-off have their own buttons: accepted by the parser, kept out of the picker.
+    expect(parseSegmentRequest({ id: "show_open" })).toEqual({ id: "show_open" });
+    expect(parseSegmentRequest({ id: "show_close" })).toEqual({ id: "show_close" });
+    expect(duoSegmentChoices().map((choice) => choice.id)).not.toContain("show_open");
+    expect(duoSegmentChoices().map((choice) => choice.id)).not.toContain("show_close");
   });
 
   it("offers quick prompts that go through the same /ask route as typed ones", () => {
@@ -98,6 +103,15 @@ describe("live host duo mode", () => {
       expect(text, text).not.toMatch(/fill-?book|https?:|\.com|buy|sell|signal|guarantee/i);
       expect(text.split(/\s+/).length, text).toBeLessThanOrEqual(10);
     }
+  });
+
+  it("gives the host page buttons for the opening and the sign-off and a show clock", () => {
+    const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
+    expect(html).toContain('id="openShow"');
+    expect(html).toContain('id="closeShow"');
+    expect(html).toContain('"show_open"');
+    expect(html).toContain('"show_close"');
+    expect(html).toContain('id="showClock"');
   });
 
   it("ships a host page that loads nothing from the internet", () => {
