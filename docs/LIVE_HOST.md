@@ -493,3 +493,14 @@ It is a convenience, not the recommended mode for a first TikTok run: rehearse i
 - **Shorter spoken disclaimer** in the opening (about five words); the footer carries the full statement on screen.
 - **The Fillbook pitch** waits for 15 minutes into the show and for chat that is alive (someone typed in the last
   3 minutes), instead of firing at minute 4 into an empty room. The site card still shows whenever the address is said.
+
+### Red, scheduled properly, and the trivia pair retired
+
+- **Red appeared once in seven lines** in the 2026-10-10 rehearsal. The first scheduling (asked for only when none of the
+  last three lines had him, never on fact segments) left almost no eligible lines, and a 3 second cameo once in seven
+  lines is easy to miss. He is now due when none of the last **two** lines had him, starting from the line after the
+  opening: about every third line. He is still skipped on fact segments, show beats, welcomes, duo mode and direct
+  questions.
+- **Rule Trivia and Trivia Answer are retired.** Three real runs produced a wrong or invented answer (an "80 percent"
+  rule, garbled arithmetic, "most firms set it at twenty percent" plus an invented five-day minimum). A teaching stream
+  cannot afford a confidently wrong fact. They can come back when the numbers are computed in code, not by the model.

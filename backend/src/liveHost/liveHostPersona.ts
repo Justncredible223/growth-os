@@ -184,12 +184,18 @@ export const LIVE_HOST_SEGMENTS: readonly LiveHostSegment[] = [
   },
   {
     id: "rule_trivia",
+    // Retired 2026-10-10: three real runs produced a wrong or invented answer (an 80 percent rule, garbled arithmetic,
+    // "most firms set it at twenty percent" and an invented five-day minimum). A teaching stream cannot afford a
+    // confidently wrong fact. Bring the pair back only with answers computed in code, not by the model.
+    retired: true,
     title: "Rule Trivia",
     brief:
       "Open on a joke or an absurd image, then ask chat one clear question about how a futures or prop-firm concept works (a question whose answer is one simple calculation with round numbers, such as a 50 percent rule on a 2,000 dollar target giving 1,000, so the answer can be checked at a glance) (drawdown types, daily loss limit, consistency rule, scaling plan, tick values, margin, order types). General concepts only, no specific firm's numbers, and not a question already asked in the recent lines. Do not give the answer yet; say you will take guesses and that the answer is coming.",
   },
   {
     id: "trivia_answer",
+    // Retired with rule_trivia: the answer is only as good as the question it answers.
+    retired: true,
     title: "Trivia Answer",
     brief:
       "Give the answer to the most recent Rule Trivia question in the recent lines, clearly and correctly, in two or three sentences, with one concrete example in numbers (one worked step only: starting number, the move, the single result, arithmetic checked before you say it). Land a joke first, then the answer. Restate the question's numbers and give the calculation once, in the form X times Y percent is Z. Do not say what chat guessed, or that chat was silent, unless a viewer's guess actually appears in the recent lines. If chat guessed, say who was closest. If there is no trivia question in the recent lines, explain the difference between an end-of-day and an intraday trailing drawdown instead.",

@@ -867,12 +867,14 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   const viewerSpoke = batch.length > 0 || (lastChatAt !== undefined && now.getTime() - new Date(lastChatAt).getTime() < 15 * 60_000);
   const viewerAskedForAdvice = batch.some((message) => /\badvice\b|\bshould i\b|\bwhat should\b|\btell me (?:what|which|when)\b/i.test(message.body));
 
-  // Red is a recurring character, so he is scheduled: due when none of the last three lines had him. The model still
+  // Red is a recurring character, so he is scheduled: due when none of the last two lines had him (about every third
+  // line), starting from the line after the opening. The first scheduling (one in four) was too stingy: with the fact
+  // segments excluded he appeared once in seven lines in the 2026-10-10 rehearsal, which nobody noticed. The model still
   // skips him when the moment needs a straight answer.
   const lastRedAt = recentUtterances.findIndex((utterance) => utterance.spokenText.startsWith("[RED]"));
   const batchAsksQuestion = batch.some((message) => looksLikeQuestion(message.body));
   const redDue =
-    input.duo !== true && !joinWelcome && !batchAsksQuestion && !(segment !== null && (segment.show === true || FACT_SEGMENTS.has(segment.id))) && recentUtterances.length >= 2 && (lastRedAt === -1 || lastRedAt >= 3);
+    input.duo !== true && !joinWelcome && !batchAsksQuestion && !(segment !== null && (segment.show === true || FACT_SEGMENTS.has(segment.id))) && recentUtterances.length >= 1 && (lastRedAt === -1 || lastRedAt >= 2);
   // Varies the angle of the opening joke from stream to stream (the session id is stable within one stream).
   const openingSeed = [...session.id].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) >>> 0, 7);
 

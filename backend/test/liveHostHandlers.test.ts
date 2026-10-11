@@ -323,9 +323,10 @@ describe("runLiveHostTick", () => {
       await runLiveHostTick(asSupabase(client), { platform: "youtube", costMode: "balanced" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
       return (JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { model?: string }).model ?? "default";
     };
-    // After tilt_o_meter the rotation reaches eval_graveyard (routine); after rule_trivia it reaches trivia_answer (fact).
+    // After tilt_o_meter the rotation reaches eval_graveyard (routine); after eval_graveyard it reaches desk_lesson (fact),
+    // because the trivia pair is retired.
     expect(await modelFor("tilt_o_meter")).toContain("haiku");
-    expect(await modelFor("rule_trivia")).not.toContain("haiku");
+    expect(await modelFor("eval_graveyard")).not.toContain("haiku");
   });
 
   it("cost: a small overage is trimmed without paying for a second draft, a large one is sent back once", async () => {
@@ -342,7 +343,7 @@ describe("runLiveHostTick", () => {
     expect(llmBig.fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("Red is scheduled: asked for when none of the last three lines had him, not for fact segments or right after him", async () => {
+  it("Red is scheduled: asked for about every third line, not for fact segments or right after him", async () => {
     const started = new Date(NOW.getTime() - 120_000).toISOString();
     const spoken = (id: string, text: string, offsetSeconds: number) => ({ id, session_id: "s1", kind: "segment", segment: null, spoken_text: text, mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - offsetSeconds * 1000).toISOString(), spoken_at: null });
     const askedForRed = async (utterances: Array<ReturnType<typeof spoken>>, lastSegment: string) => {
@@ -357,14 +358,17 @@ describe("runLiveHostTick", () => {
       return sent.messages[0]!.content.includes("RED IS DUE");
     };
     const plain = [spoken("u1", "One.", 90), spoken("u2", "Two.", 60), spoken("u3", "Three.", 30)];
-    // roast_my_trade follows welcome: a routine segment, no Red in the last three lines.
+    // Red in the most recent line, or the one before it: not due yet.
+    expect(await askedForRed([spoken("u1", "[RED] One more! [TILT] No.", 30), spoken("u2", "Two.", 60)], "cold_open")).toBe(false);
+    expect(await askedForRed([spoken("u1", "One.", 30), spoken("u2", "[RED] One more! [TILT] No.", 60), spoken("u3", "Three.", 90)], "cold_open")).toBe(false);
+    // Two lines without him: due.
+    expect(await askedForRed([spoken("u1", "One.", 30), spoken("u2", "Two.", 60), spoken("u3", "[RED] More! [TILT] No.", 90)], "cold_open")).toBe(true);
     expect(await askedForRed(plain, "cold_open")).toBe(true);
-    // Red was in the most recent line: not due.
-    expect(await askedForRed([spoken("u1", "[RED] One more! [TILT] No.", 30), spoken("u2", "Two.", 60), spoken("u3", "Three.", 90)], "cold_open")).toBe(false);
-    // A fact segment is next (rule_trivia then trivia_answer): not due.
-    expect(await askedForRed(plain, "rule_trivia")).toBe(false);
-    // Too early in the stream to have a pattern.
-    expect(await askedForRed([spoken("u1", "One.", 30)], "cold_open")).toBe(false);
+    // Straight after the opening he is already due (the line after "Welcome In").
+    expect(await askedForRed([spoken("u1", "Welcome.", 30)], "cold_open")).toBe(true);
+    // Never on the very first line, and never on a fact segment (desk_lesson).
+    expect(await askedForRed([], "cold_open")).toBe(false);
+    expect(await askedForRed(plain, "eval_graveyard")).toBe(false); // the trivia pair is retired, so the next segment is desk_lesson
   });
 
   it("a direct question is answered straight: no Red scheduled and no Red line kept", async () => {
@@ -576,7 +580,7 @@ describe("runLiveHostTick", () => {
     expect(client.tables.live_host_sessions![0]!.last_segment).toBe("eval_graveyard");
     await markUtteranceSpoken(asSupabase(client), spot.utterance!.id, "spoken", NOW);
     const next = await runLiveHostTick(asSupabase(client), {}, { now: new Date(NOW.getTime() + 60_000), llmClient: llm.client, youtube: null, grounding: GROUNDING });
-    expect(next.utterance?.segmentTitle).toBe("Rule Trivia");
+    expect(next.utterance?.segmentTitle).toBe("Desk Lesson");
   });
 
   it("in audience-only mode, says nothing to an empty room", async () => {
