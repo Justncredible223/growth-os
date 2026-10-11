@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { MOOD_PROSODY, applyMoodProsody, DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
+import { STAGE_ASSET_NAMES, stageAssetFile, MOOD_PROSODY, applyMoodProsody, DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -268,6 +268,35 @@ describe("live host stage page", () => {
     expect(html).toContain("glanceTo(16, 10, 1500, 1500)");
     expect(html).toContain("looks over at Red while Red talks");
     expect(html).toMatch(/\.redsay \{ position: absolute; left: 240px; top: 600px;/);
+  });
+
+  it("shows real app screens beside him with the example-data label, from the owner-verified set, on the YouTube layout only", async () => {
+    expect(html).toContain('id="showcase"');
+    expect(html).toContain("EXAMPLE DATA</b> from the Fillbook app");
+    expect(html).toContain("startShowcase();");
+    // It rides on the site card, which never shows on the TikTok layout.
+    expect(html).toContain('if (document.body.classList.contains("safe-tiktok")) return;');
+    // Every image the stage can load is a screen the owner verified, byte for byte.
+    const { createHash } = await import("node:crypto");
+    const manifest = JSON.parse(readFileSync(join(__dirname, "..", "scripts", "video-factory", "assets", "verified-manifest.json"), "utf-8")) as { assets: Array<{ file: string; sha256: string; verifiedByOwner: boolean; dataLabel: string }> };
+    const shown = [...html.matchAll(/src="\/assets\/([a-z0-9.-]+)"/g)].map((match) => match[1]!);
+    expect(shown.sort()).toEqual([...STAGE_ASSET_NAMES].sort());
+    for (const name of shown) {
+      const entry = manifest.assets.find((asset) => asset.file === `ui/${name}`);
+      expect(entry, name).toBeDefined();
+      expect(entry!.verifiedByOwner, name).toBe(true);
+      expect(entry!.dataLabel, name).toBe("EXAMPLE DATA");
+      const bytes = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "assets", name));
+      expect(createHash("sha256").update(bytes).digest("hex"), name).toBe(entry!.sha256);
+    }
+  });
+
+  it("serves a stage asset by exact name only", () => {
+    expect(stageAssetFile("trade-log-revenge.jpg")).toMatch(/stage[\\/]assets[\\/]trade-log-revenge\.jpg$/);
+    expect(stageAssetFile("../worker.ts")).toBeNull();
+    expect(stageAssetFile("..%2Fworker.ts")).toBeNull();
+    expect(stageAssetFile("calendar.jpg")).toBeNull();
+    expect(stageAssetFile("")).toBeNull();
   });
 
   it("has a site card that shows the approved address only on the YouTube layout", () => {

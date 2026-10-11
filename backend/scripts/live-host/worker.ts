@@ -38,6 +38,17 @@ const STAGE_FILE = join(HERE, "stage", "index.html");
 const HOST_PAGE_FILE = join(HERE, "stage", "host.html");
 const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py");
 const TTS_SERVER_SCRIPT = join(HERE, "tts_server.py");
+const STAGE_ASSETS_DIR = join(HERE, "stage", "assets");
+
+/**
+ * The only files the stage may load besides itself and the voice: real screenshots of the app from the seeded demo
+ * account (example data, owner-verified in verified-manifest.json). Looked up by exact name, never by a path.
+ */
+export const STAGE_ASSET_NAMES: readonly string[] = ["trade-log-revenge.jpg", "drawdown-bars.jpg", "month-overview-setups.jpg"];
+
+export function stageAssetFile(name: string): string | null {
+  return STAGE_ASSET_NAMES.includes(name) ? join(STAGE_ASSETS_DIR, name) : null;
+}
 
 /** Same voice the videos use; the only one verified by ear to say "Fillbook" correctly (see voiceover.ts). */
 export const LIVE_HOST_DEFAULT_VOICE = "en-US-AndrewNeural";
@@ -633,6 +644,17 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
           res.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ queued: hostQueue.length }));
         }
       });
+      return;
+    }
+    const asset = /^\/assets\/([A-Za-z0-9.-]+)$/.exec(url.pathname);
+    if (req.method === "GET" && asset) {
+      const file = stageAssetFile(asset[1]!);
+      if (!file || !existsSync(file)) {
+        res.writeHead(404).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "image/jpeg", "content-length": statSync(file).size, "cache-control": "max-age=3600" });
+      createReadStream(file).pipe(res);
       return;
     }
     const audio = /^\/audio\/([A-Za-z0-9-]+)\.mp3$/.exec(url.pathname);
