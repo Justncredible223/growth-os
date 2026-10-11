@@ -600,7 +600,7 @@ async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession,
     const page = await adapter.fetchMessages(chatId, session.youtubePageToken ?? null);
     await client
       .from("live_host_sessions")
-      .update({ youtube_live_chat_id: chatId, youtube_page_token: page.nextPageToken, youtube_next_poll_at: new Date(now.getTime() + page.pollAfterMs).toISOString() })
+      .update({ youtube_live_chat_id: chatId, youtube_page_token: page.nextPageToken, youtube_next_poll_at: new Date(now.getTime() + (page.messages.length > 0 && page.activePollAfterMs ? page.activePollAfterMs : page.pollAfterMs)).toISOString() })
       .eq("id", session.id);
     // The first page is chat history from before the host started. Answering it would be answering the past.
     if (!firstPage) {
