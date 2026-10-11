@@ -5,6 +5,7 @@ import { constantTimeEquals } from "../src/lib/requireAppAuth.js";
 import { SignalGraph } from "../src/signals/signalGraph.js";
 import { SupabaseSignalRepository } from "../src/signals/supabaseSignalRepository.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
+import { retiredStepSkip } from "../src/retiredSteps.js";
 import { RunScopedXReads } from "../src/signals/adapters/runScopedXReads.js";
 import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionCursorStore.js";
 import { ingestXMentions, X_MENTION_CURSOR_SOURCE } from "../src/signals/adapters/xIngestion.js";
@@ -165,7 +166,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Built lazily inside the step that needs it so a missing X credential is still reported by that step.
   let xReads: RunScopedXReads | null = null;
   const getXReads = (): RunScopedXReads => {
-    xReads ??= new RunScopedXReads(createXSignalAdapter(client), cursorStore, [X_MENTION_CURSOR_SOURCE, INBOUND_CURSOR_SOURCE]);
+    // Only the live consumers' cursors are listed: the shared request is bounded by the OLDEST of them, so a retired
+    // x_mentions step whose cursor no longer advances must not be in this list (it would pin every run's request to
+    // its stale cursor and re-read the same mentions each time).
+    const mentionCursorSources = [INBOUND_CURSOR_SOURCE, ...(retiredStepSkip("x_mentions") ? [] : [X_MENTION_CURSOR_SOURCE])];
+    xReads ??= new RunScopedXReads(createXSignalAdapter(client), cursorStore, mentionCursorSources);
     return xReads;
   };
 
@@ -190,6 +195,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (runX) {
     results.push(
       await runStep("x_mentions", async () => {
+        // Retired (see src/retiredSteps.ts): checked before the X adapter is even built, so no paid read is made.
+        const retired = retiredStepSkip("x_mentions");
+        if (retired) return retired;
         const reads = getXReads();
         const userId = await reads.resolveOwnUserId();
         const signals = await ingestXMentions(reads, signalGraph, cursorStore, userId);

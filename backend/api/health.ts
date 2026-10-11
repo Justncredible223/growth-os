@@ -4,6 +4,8 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { loadVideoHealth } from "../src/video/videoHealth.js";
+import { retiredStepSkip } from "../src/retiredSteps.js";
+import { INBOUND_CURSOR_SOURCE } from "../src/inbound/inboundIngestion.js";
 import { createSearchConsoleAdapter } from "../src/signals/adapters/searchConsoleAdapter.js";
 
 interface HealthItem {
@@ -45,14 +47,18 @@ function checkAiProvider(): HealthItem {
 async function checkCursorBackedIntegration(
   client: SupabaseClient,
   label: string,
-  cursorSource: string,
+  cursorSource: string | string[],
   notYetVerifiedDetail: string,
 ): Promise<HealthItem> {
   try {
+    const sources = Array.isArray(cursorSource) ? cursorSource : [cursorSource];
+    // Newest cursor across the given sources: with the x_mentions step retired, Inbound's cursor is the live evidence.
     const { data } = await client
       .from("signal_ingestion_cursors")
       .select("updated_at")
-      .eq("source", cursorSource)
+      .in("source", sources)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (data) {
       return { label, status: "HEALTHY", detail: `Verified live -- last synced ${(data as { updated_at: string }).updated_at}` };
@@ -217,7 +223,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   health.push(checkAiProvider());
   health.push(
-    await checkCursorBackedIntegration(client, "X", "x_mention", "Credentials wired, not yet verified against the real API"),
+    await checkCursorBackedIntegration(
+      client,
+      "X",
+      retiredStepSkip("x_mentions") ? ["x_mention", INBOUND_CURSOR_SOURCE] : "x_mention",
+      "Credentials wired, not yet verified against the real API"),
   );
   health.push(await checkSearchConsole(client));
   // YouTube and TikTok signal ingestion were removed outright (see

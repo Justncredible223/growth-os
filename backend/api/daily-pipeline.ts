@@ -17,6 +17,7 @@ import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js
 import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
 import { pruneOldCostEvents } from "../src/cost/costTracking.js";
 import { pruneOldVideoRenders } from "../src/video/videoRenderRetention.js";
+import { retiredStepSkip } from "../src/retiredSteps.js";
 import { generateStrategy } from "../src/strategy/strategyEngine.js";
 import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
 import { decideNotifications } from "../src/notifications/notificationEngine.js";
@@ -173,10 +174,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return `${signals.length} ingested`;
       }),
       await runStep("generate_opportunities", async () => {
+        const retired = retiredStepSkip("generate_opportunities");
+        if (retired) return retired;
         const result = await runGenerateOpportunities(client);
         return `${result.created} created, ${result.skipped} skipped`;
       }),
       await runStep("auto_draft", async () => {
+        const retired = retiredStepSkip("auto_draft");
+        if (retired) return retired;
         const now = new Date();
         const runDate = isoDate(now);
         let currentOpportunityId = "unknown";
@@ -246,6 +251,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // separate schedule state, so a missed cron run just means the next
       // one catches up instead of drifting.
       await runStep("strategy_evolution", async () => {
+        const retired = retiredStepSkip("strategy_evolution");
+        if (retired) return retired;
         const now = new Date();
         const strategyRepo = new SupabaseStrategyRepository(client);
         const latest = await strategyRepo.getLatest();
