@@ -456,3 +456,12 @@ prompt, and checks the draft (one retry, then it is accepted):
 
 Rule Trivia and Trivia Answer were rewritten after a real draft got the arithmetic wrong: the question uses one simple
 calculation with round numbers, and the answer states it once as X times Y percent is Z.
+
+### Variety, second pass
+
+- **Invented chat reactions** ("nobody guessed", "chat went so quiet") kept appearing in empty rooms in 3 of 3 test
+  answers even with an explicit rule, so prompting is not enough. A draft that makes the claim when nobody has spoken is
+  redone once, and if it still does, the sentence that makes the claim is dropped (`stripChatReactionClaims`).
+- **Tilt-o-Meter** without a rating is redone once. The rating drives the needle on screen as well as the line.
+- **Openings** are told to leave out the closed market (the opening angle list exists for that); the hour and the
+  weekend are allowed there because several angles legitimately use them.

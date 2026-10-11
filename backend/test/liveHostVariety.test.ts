@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asksChat, openingKey, opensWithWelcome, overusedBits, repeatsOpening, saidDisclaimer, varietyGuidance, varietyProblem } from "../src/liveHost/liveHostVariety";
+import { OPENING_DEFAULTS, asksChat, claimsChatReaction, stripChatReactionClaims, openingKey, opensWithWelcome, overusedBits, repeatsOpening, saidDisclaimer, varietyGuidance, varietyProblem } from "../src/liveHost/liveHostVariety";
 
 describe("overusedBits", () => {
   it("flags a bit used twice in the last six lines and not one used once", () => {
@@ -20,6 +20,59 @@ describe("openings", () => {
     expect(opensWithWelcome("Marcus, welcome. You walked into a stream.")).toBe(true);
     expect(opensWithWelcome("Welcome in. Pull up a chair.")).toBe(true);
     expect(opensWithWelcome("A stop that moves is a suggestion box.")).toBe(false);
+  });
+});
+
+describe("invented chat reactions", () => {
+  it("catches claims about what chat did", () => {
+    for (const text of [
+      "Chat went so quiet I thought I'd lost the last two of you.",
+      "Chat was split on that one.",
+      "Nobody guessed, which tells me everything.",
+      "Chat said fifty percent and chat was right.",
+      "You all went quiet when I said math.",
+    ]) expect(claimsChatReaction(text), text).toBe(true);
+  });
+
+  it("leaves ordinary lines alone", () => {
+    for (const text of [
+      "Chat, type a number from one to ten.",
+      "A trader moved his stop and called it research.",
+      "I read every journal in the chat of my mind, and none of them moved a stop twice.",
+      "The stop is a suggestion box.",
+    ]) expect(claimsChatReaction(text), text).toBe(false);
+  });
+
+  it("is a problem only when nobody has spoken", () => {
+    const guidance = varietyGuidance([], false);
+    const ctx = { isSegment: true, isOpening: false, viewerAskedForAdvice: false };
+    expect(varietyProblem("Chat went so quiet I could hear the mouse.", guidance, [], { ...ctx, viewerSpoke: false })).toContain("nobody in chat has said anything");
+    expect(varietyProblem("Chat went so quiet I could hear the mouse.", guidance, [], { ...ctx, viewerSpoke: true })).toBeNull();
+  });
+});
+
+describe("stripChatReactionClaims", () => {
+  it("drops the sentence that claims a reaction and keeps the rest", () => {
+    expect(stripChatReactionClaims("Nobody guessed, which tells me everything. The answer is one thousand. Fifty percent of two thousand.")).toBe("The answer is one thousand. Fifty percent of two thousand.");
+  });
+
+  it("leaves a line alone when there is no claim, or when the claim is the whole line", () => {
+    expect(stripChatReactionClaims("Fifty percent of two thousand is one thousand.")).toBe("Fifty percent of two thousand is one thousand.");
+    expect(stripChatReactionClaims("Chat went so quiet.")).toBe("Chat went so quiet.");
+  });
+});
+
+describe("the Tilt-o-Meter rating and opening defaults", () => {
+  it("wants a rating on the Tilt-o-Meter", () => {
+    const guidance = varietyGuidance([], true);
+    const ctx = { isSegment: true, isOpening: false, viewerAskedForAdvice: false, segmentId: "tilt_o_meter" };
+    expect(varietyProblem("A trader moves his stop. How tilted is that?", guidance, [], { ...ctx, tiltLevel: null })).toContain("Tilt-o-Meter rating");
+    expect(varietyProblem("A trader moves his stop. Seven out of ten.", guidance, [], { ...ctx, tiltLevel: 7 })).toBeNull();
+    expect(varietyProblem("A different segment entirely.", guidance, [], { ...ctx, segmentId: "roast_my_trade", tiltLevel: null })).toBeNull();
+  });
+
+  it("lists the defaults an opening must avoid", () => {
+    expect(OPENING_DEFAULTS).toContain("the market being closed");
   });
 });
 

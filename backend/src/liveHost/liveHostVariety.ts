@@ -72,6 +72,31 @@ export function saidDisclaimer(text: string): boolean {
   return DISCLAIMER.test(text);
 }
 
+/**
+ * Claims about what chat did ("chat went quiet", "nobody guessed", "chat is split"). They are only true if someone in
+ * chat actually did it, and a model with an empty room will make them up for a laugh.
+ */
+const CHAT_REACTION_CLAIM = /\bchat (?:went|has gone|is|was|got|stayed|keeps?|just|suddenly|already|clearly|collectively|unanimously)\b[^.!?]{0,30}\b(?:quiet|silent|silence|still|split|divided|agrees?|agreed|laughed|laughing|cheering|booing|spamming|asleep|gone|left|dead|nervous|scared|typed|answered|guessed)\b|\bnobody (?:answered|guessed|replied|typed|responded|said anything|is guessing)\b|\b(?:you|y'all|everyone) (?:all )?(?:went|got|stayed) (?:quiet|silent)\b|\bchat (?:said|guessed|answered|voted|thinks|thought|picked)\b/i;
+
+/** True when the draft says what chat did. Callers only treat it as a problem when no viewer has actually spoken. */
+export function claimsChatReaction(text: string): boolean {
+  return CHAT_REACTION_CLAIM.test(text);
+}
+
+/** Bits that must not open a stream: the opening angle list exists so he does not default to these. */
+export const OPENING_DEFAULTS: readonly string[] = ["the market being closed"];
+
+/**
+ * The last line of defence for invented chat reactions. Prompting does not hold this one (3 of 3 empty-room trivia
+ * answers still said "nobody guessed" or "chat went quiet"), so when nobody has spoken the sentence that makes the
+ * claim is dropped. If that would leave nothing, the line is returned untouched.
+ */
+export function stripChatReactionClaims(text: string): string {
+  const sentences = text.replace(/\s+/g, " ").trim().match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) ?? [];
+  const kept = sentences.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0 && !CHAT_REACTION_CLAIM.test(sentence));
+  return kept.length > 0 && kept.length < sentences.length ? kept.join(" ") : text;
+}
+
 export interface VarietyGuidance {
   /** Jokes and phrases to keep out of this line. */
   avoid: string[];
@@ -97,8 +122,10 @@ export function varietyProblem(
   draft: string,
   guidance: VarietyGuidance,
   recentTiltLines: string[],
-  context: { isSegment: boolean; isOpening: boolean; viewerAskedForAdvice: boolean },
+  context: { isSegment: boolean; isOpening: boolean; viewerAskedForAdvice: boolean; viewerSpoke?: boolean; segmentId?: string | null; tiltLevel?: number | null },
 ): string | null {
+  if (context.viewerSpoke === false && claimsChatReaction(draft)) return "says what chat did, but nobody in chat has said anything: leave chat's reactions out, or make the joke about the question";
+  if (context.segmentId === "tilt_o_meter" && context.tiltLevel === null) return "gives no Tilt-o-Meter rating: say the number out of ten (and set tiltLevel) before asking chat for theirs";
   const reused = reusedBits(draft, guidance.avoid);
   if (reused.length > 0) return `leans on ${reused.join(" and ")} again, which it has used a lot lately: find a different angle`;
   if (opensWithWelcome(draft) && recentTiltLines.slice(0, 6).some(opensWithWelcome)) return 'opens with a "name, welcome" greeting again: fold the hello into the answer or skip it';
