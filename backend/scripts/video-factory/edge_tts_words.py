@@ -25,10 +25,10 @@ import edge_tts
 TICKS_PER_SECOND = 10_000_000
 
 
-async def synthesize(voice: str, text: str, media_path: str, words_path: str, rate: str = "+0%") -> None:
+async def synthesize(voice: str, text: str, media_path: str, words_path: str, rate: str = "+0%", pitch: str = "+0Hz") -> None:
     # edge-tts 7.x defaults to sentence-level "SentenceBoundary" metadata --
     # must explicitly request "WordBoundary" to get per-word offset/duration.
-    communicate = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
     words = []
     with open(media_path, "wb") as audio_file:
         async for chunk in communicate.stream():
@@ -57,6 +57,7 @@ async def synthesize(voice: str, text: str, media_path: str, words_path: str, ra
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--voice", required=True)
+    parser.add_argument("--pitch", default="+0Hz", help='pitch relative to the voice default, e.g. "+4Hz" or "-6Hz"')
     parser.add_argument("--rate", default="+0%", help='speaking rate relative to the voice default, e.g. "+8%%" or "-5%%"')
     parser.add_argument("--file", required=True, help="path to a text file containing the script")
     parser.add_argument("--out-media", required=True, help="output .mp3 path")
@@ -66,7 +67,7 @@ def main() -> None:
     with open(args.file, "r", encoding="utf-8") as f:
         text = f.read()
 
-    asyncio.run(synthesize(args.voice, text, args.out_media, args.out_words, args.rate))
+    asyncio.run(synthesize(args.voice, text, args.out_media, args.out_words, args.rate, args.pitch))
 
 
 if __name__ == "__main__":

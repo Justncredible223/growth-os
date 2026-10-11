@@ -32,7 +32,7 @@ async def handle(request: dict) -> None:
     try:
         with open(request["textFile"], "r", encoding="utf-8") as handle_file:
             text = handle_file.read()
-        await synthesize(request["voice"], text, request["mediaPath"], request["wordsPath"], request.get("rate", "+0%"))
+        await synthesize(request["voice"], text, request["mediaPath"], request["wordsPath"], request.get("rate", "+0%"), request.get("pitch", "+0Hz"))
         reply({"id": request_id, "ok": True})
     except SystemExit as exit_error:  # synthesize() exits when the service returned no word timings
         reply({"id": request_id, "ok": False, "error": f"no word timings (exit {exit_error.code})"})

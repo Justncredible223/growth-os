@@ -425,3 +425,17 @@ Choose a tier with `LIVE_HOST_COST` in the worker's environment:
 - `low`: chat answers too, fact segments excepted; about 65 percent less.
 
 The worker prints `spent today $X` with every line it speaks.
+
+## Realism: voice, eyes and Red
+
+- **His voice moves with his mood.** Each line's mood (smirk, shocked, tilted, proud, thinking, sad) shifts the pace
+  and pitch a little (a shocked line is a touch faster and higher, a sad one slower and lower). Small steps, so it is
+  still recognisably him; singing keeps its own pace. Table: `MOOD_PROSODY` in `worker.ts`.
+- **He looks at what he is talking about.** A glance to the question bubble as he starts, to the card when it lands,
+  and over to Red while Red talks, then back. Stops the "staring down the lens at everything" puppet look.
+- **Red is scheduled.** The model volunteered him in 1 line of 8, against the brief's one in three. He is now asked for
+  when none of the last three lines had him, and never on a fact segment, a show beat, a welcome, in duo mode, or
+  when someone asked a direct question (a Red line that comes with a question is dropped). His bubble sits above
+  Tilt's head, and Tilt looks over at him.
+- **Numbers.** Any worked example is one exact, checked step, or no numbers at all (drawdown arithmetic came out
+  garbled in several real drafts).

@@ -12,6 +12,7 @@ import {
   updateLiveHostSettings,
   viewerAskedAboutFillbook,
   copiesExampleLine,
+  looksLikeQuestion,
 } from "../src/liveHost/liveHostHandlers";
 import { isLiveHostAutomationRequest, tickInputFromBody } from "../src/liveHost/liveHostApi";
 import { LIVE_HOST_SEGMENTS, nextSegment } from "../src/liveHost/liveHostPersona";
@@ -338,6 +339,53 @@ describe("runLiveHostTick", () => {
     const llmBig = scriptedLlm([line(make(90)), line("A shorter one, thank you.")]);
     await runLiveHostTick(asSupabase(big), { platform: "youtube", audienceOnly: false }, { now: NOW, llmClient: llmBig.client, youtube: null, grounding: GROUNDING });
     expect(llmBig.fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("Red is scheduled: asked for when none of the last three lines had him, not for fact segments or right after him", async () => {
+    const started = new Date(NOW.getTime() - 120_000).toISOString();
+    const spoken = (id: string, text: string, offsetSeconds: number) => ({ id, session_id: "s1", kind: "segment", segment: null, spoken_text: text, mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - offsetSeconds * 1000).toISOString(), spoken_at: null });
+    const askedForRed = async (utterances: Array<ReturnType<typeof spoken>>, lastSegment: string) => {
+      const client = buildClient({
+        live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+        live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: lastSegment }],
+        live_host_utterances: utterances,
+      });
+      const llm = scriptedLlm([line("A line.")]);
+      await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+      const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+      return sent.messages[0]!.content.includes("RED IS DUE");
+    };
+    const plain = [spoken("u1", "One.", 90), spoken("u2", "Two.", 60), spoken("u3", "Three.", 30)];
+    // roast_my_trade follows welcome: a routine segment, no Red in the last three lines.
+    expect(await askedForRed(plain, "cold_open")).toBe(true);
+    // Red was in the most recent line: not due.
+    expect(await askedForRed([spoken("u1", "[RED] One more! [TILT] No.", 30), spoken("u2", "Two.", 60), spoken("u3", "Three.", 90)], "cold_open")).toBe(false);
+    // A fact segment is next (rule_trivia then trivia_answer): not due.
+    expect(await askedForRed(plain, "rule_trivia")).toBe(false);
+    // Too early in the stream to have a pattern.
+    expect(await askedForRed([spoken("u1", "One.", 30)], "cold_open")).toBe(false);
+  });
+
+  it("a direct question is answered straight: no Red scheduled and no Red line kept", async () => {
+    expect(looksLikeQuestion("what is a trailing drawdown")).toBe(true);
+    expect(looksLikeQuestion("is this a bot?")).toBe(true);
+    expect(looksLikeQuestion("how do consistency rules work")).toBe(true);
+    expect(looksLikeQuestion("I revenge traded and blew my eval lol")).toBe(false);
+    expect(looksLikeQuestion("moved my stop 3 times")).toBe(false);
+
+    const started = new Date(NOW.getTime() - 120_000).toISOString();
+    const spoken = (id: string, text: string, offsetSeconds: number) => ({ id, session_id: "s1", kind: "segment", segment: null, spoken_text: text, mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - offsetSeconds * 1000).toISOString(), spoken_at: null });
+    const client = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() }],
+      live_host_utterances: [spoken("u1", "One.", 90), spoken("u2", "Two.", 60), spoken("u3", "Three.", 30)],
+      live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is a trailing drawdown exactly?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }],
+    });
+    const llm = scriptedLlm([line("Jo, a trailing drawdown follows your high-water mark.", { redLine: "I love trailing drawdowns." })]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).not.toContain("RED IS DUE");
+    expect(result.utterance?.redLine).toBeNull();
   });
 
   it("warns, in the tick note, when a YouTube stream has no live link set", async () => {

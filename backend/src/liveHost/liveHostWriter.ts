@@ -92,6 +92,8 @@ export interface LiveLineRequest {
   /** How many more joined than are named in `joiners`. */
   otherJoiners?: number;
   retryFeedback?: string;
+  /** Red is due: he has not interrupted in the last few lines, so this one should give him a redLine unless a straight answer is needed. */
+  redDue?: boolean;
   /** A number that is stable within one stream, used to vary the angle of the opening joke between streams. */
   seed?: number;
   /** Where the stream is, as the worker reports it. "youtube" changes what is on screen and what may be said. */
@@ -224,6 +226,12 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
       ? "Fillbook: mention it only if it is the honest answer to what was asked, or if the segment brief calls for it."
       : "Fillbook: it has come up enough lately. Do NOT mention Fillbook or the site in this line unless a viewer above asked about it directly.",
   );
+
+  if (request.redDue) {
+    lines.push(
+      "RED IS DUE: it has been a few lines since Red, the other candle, interrupted. Give him a redLine this time: his own impulsive urge in the first person, under 90 characters, on the same subject as this line, then let your line shut him down. Skip him only if this is a straight answer to a real question that someone needs.",
+    );
+  }
 
   if (request.platform === "youtube" && !request.duo) {
     lines.push(
