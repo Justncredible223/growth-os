@@ -1015,3 +1015,15 @@ describe("copiesExampleLine", () => {
     expect(result.utterance?.spokenText).toContain("bouncer");
   });
 });
+
+import { pureMoveRequest, moveWord as chatMoveWord } from "../src/liveHost/liveHostMoves.js";
+describe("chat move requests", () => {
+  it("treats a message that is only a move word as a move request", () => {
+    for (const body of ["dance", "Dance!!", "can you moonwalk?", "tilt spin", "please do a flex", "dancing lol"]) expect(pureMoveRequest(body), body).not.toBeNull();
+    expect(pureMoveRequest("dancing lol")).toBe("dance");
+  });
+  it("does not swallow real questions that mention a move word", () => {
+    for (const body of ["why did the market spin out after the news", "how do I wave off a bad trade", "what is a flex account"]) expect(pureMoveRequest(body), body).toBeNull();
+    expect(chatMoveWord("what is a flex account")).toBe("flex");
+  });
+});

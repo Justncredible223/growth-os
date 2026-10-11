@@ -180,6 +180,10 @@
    * read (captions, hook, footer, site card) therefore lives above y=1340. Desktop viewers just see a slightly
    * higher arrangement with some chart background below it.
    */
+  /* The app's fan/crown badge sits over the top-left corner of the video (about x<150, y<170): keep the brand clear of it. */
+  body.safe-youtube .topbar { left: 170px; }
+  body.safe-youtube .segment { top: 196px; }
+  body.safe-youtube .asks { top: 290px; }
   body.safe-youtube #tiltWrap { top: 400px; width: 480px; height: 556px; margin-left: -240px; }
   body.safe-youtube #floor { top: 935px; width: 390px; margin-left: -195px; }
   body.safe-youtube .captions { top: 1105px; min-height: 230px; left: 70px; right: 70px; }
@@ -206,9 +210,10 @@
   body.safe-youtube .zzz.z2 { top: 340px; }
   body.safe-youtube .zzz.z3 { top: 290px; }
   body.safe-youtube .tumbleweed { top: 900px; }
-  body.safe-youtube .red { top: 700px; width: 190px; }
+  /* Red stands bottom-left and his bubble sits under Tilt, never over him (Tilt spans y 400 to 956). */
+  body.safe-youtube .red { top: 760px; width: 190px; }
   body.safe-youtube .red svg { width: 190px; height: 250px; }
-  body.safe-youtube .redsay { top: 560px; font-size: 34px; max-width: 520px; }
+  body.safe-youtube .redsay { left: 215px; top: 975px; font-size: 32px; max-width: 640px; }
 
   /* Red, the foil: peeks in from the left edge, blurts a line in a speech bubble, and ducks back out. */
   .red { position: absolute; left: -260px; top: 760px; width: 230px; transition: left 0.45s cubic-bezier(.2, .9, .2, 1.2); pointer-events: none; }

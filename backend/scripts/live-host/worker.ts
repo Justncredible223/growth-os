@@ -267,6 +267,7 @@ interface TickResult {
   note: string | null;
   joinsWelcomed?: boolean;
   spendTodayUsd?: number;
+  moves?: string[];
 }
 export interface WordCue {
   text: string;
@@ -337,13 +338,8 @@ export class SpamWatch {
   }
 }
 
-/** The move a chat message asks for, if it is one of the move words ("dance", "spin", "jump", "moonwalk", "wave", "flex"). */
-export function moveWord(body: string): string | null {
-  const match = /\b(dance|dancing|spin|jump|moonwalk|wave|flex)\b/i.exec(body);
-  if (!match) return null;
-  const word = match[1]!.toLowerCase();
-  return word === "dancing" ? "dance" : word;
-}
+import { moveWord } from "../../src/liveHost/liveHostMoves.js";
+export { moveWord };
 
 /** What the voice is given: the brand name respelled so it is pronounced correctly, "dot com" left as written. */
 export function prepareSpeechText(spokenText: string): string {
@@ -834,6 +830,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
 
     if (segmentRequest && (result.utterance?.kind === "segment" || Date.now() > segmentRequest.until)) segmentRequest = null;
     if (typeof result.spendTodayUsd === "number") lastSpendUsd = result.spendTodayUsd;
+    // Moves viewers asked for in YouTube chat (read on the server): played at once, nothing spoken.
+    if (result.moves?.length) sendMove(result.moves[0]!);
     if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
