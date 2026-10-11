@@ -32,6 +32,9 @@
       linear-gradient(180deg, var(--bg1) 0%, var(--bg0) 100%);
   }
   #chart { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.5; }
+  .simtag { position: absolute; right: 56px; top: 150px; padding: 6px 14px; border-radius: 999px; font-size: 17px; font-weight: 800; letter-spacing: 1.6px; color: var(--ink3); border: 1px solid var(--line); background: rgba(8, 16, 30, 0.55); }
+  body.safe-youtube .simtag { top: 140px; }
+  body.safe-tiktok .simtag { display: none; }
   .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 42%, transparent 45%, rgba(2, 5, 12, 0.72) 100%); pointer-events: none; }
 
   /* ---- top bar ---- */
@@ -236,6 +239,7 @@
 <div id="viewport">
   <div id="scene">
     <canvas id="chart" width="1080" height="1920"></canvas>
+    <div class="simtag" id="simtag">SIMULATED CHART &middot; NOT MARKET DATA</div>
     <div class="vignette"></div>
 
     <div class="topbar">
@@ -347,10 +351,10 @@
     <div class="redsay" id="redsay"></div>
     <div class="sitecard" id="sitecard" aria-hidden="true"><div class="url">fillbookhq<span>.com</span></div><div class="sub">Free sample dashboard. No signup. fillbookhq.com/sample</div></div>
     <div class="showcase" id="showcase" aria-hidden="true">
-      <img src="/assets/trade-log-revenge.jpg" alt="">
-      <img src="/assets/drawdown-bars.jpg" alt="">
-      <img src="/assets/month-overview-setups.jpg" alt="">
-      <div class="tag"><b>EXAMPLE DATA</b> from the Fillbook app</div>
+      <img src="/assets/trade-log-revenge.jpg" alt="" data-cap="Revenge and oversized trades get flagged">
+      <img src="/assets/drawdown-bars.jpg" alt="" data-cap="Drawdown buffer and today's loss limit">
+      <img src="/assets/month-overview-setups.jpg" alt="" data-cap="Which setups actually pay">
+      <div class="tag" id="showcaseTag"><b>EXAMPLE DATA</b> from the Fillbook app</div>
     </div>
     <div class="notice" id="notice"></div>
     <div class="thought" id="thought"></div>
@@ -411,10 +415,21 @@
   }
   for (let i = 0; i < 46; i++) pushCandle();
   let chartOffset = 0;
+  let lastChartReactAt = 0;
   function drawChart(dt) {
     chartOffset += dt * 0.012;
     const step = 26;
-    if (chartOffset >= step) { chartOffset -= step; pushCandle(); }
+    if (chartOffset >= step) {
+      chartOffset -= step;
+      pushCandle();
+      // The simulated session has a pulse: a big candle makes him react (only when he is not busy and not too often).
+      const last = candles[candles.length - 1];
+      const body = last.close - last.open;
+      if (Math.abs(body) > 2.4 && !move && !current && performance.now() - lastChartReactAt > 14000 && typeof doMove === "function") {
+        lastChartReactAt = performance.now();
+        doMove(body > 0 ? "flex" : "sigh");
+      }
+    }
     ctx.clearRect(0, 0, 1080, 1920);
     ctx.strokeStyle = "rgba(120,160,220,0.07)";
     ctx.lineWidth = 2;
@@ -808,7 +823,13 @@
       const panel = $("showcase");
       const images = Array.from(panel.querySelectorAll("img"));
       if (images.length === 0) return;
-      const swap = () => { images.forEach((img, i) => img.classList.toggle("on", i === showcaseIndex % images.length)); showcaseIndex++; };
+      const swap = () => {
+        const at = showcaseIndex % images.length;
+        images.forEach((img, i) => img.classList.toggle("on", i === at));
+        const tag = $("showcaseTag");
+        if (tag) { tag.textContent = ""; const b = document.createElement("b"); b.textContent = "EXAMPLE DATA"; tag.append(b, " · " + (images[at].dataset.cap || "from the Fillbook app")); }
+        showcaseIndex++;
+      };
       clearInterval(showcaseTimer);
       swap();
       panel.classList.add("show");
@@ -855,10 +876,32 @@
       ensureAnalyser();
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
       voice.src = line.audioUrl;
-      voice.onended = () => finish(line.id);
+      voice.onended = () => (line.more ? afterLead(line) : finish(line.id));
       const noAudio = () => { if (current && current.id === line.id) { current.hasAudio = false; current.startedAt = performance.now(); } };
       voice.onerror = noAudio;
       voice.play().catch(noAudio);
+    }
+  }
+  // A long line arrives in two parts: the first sentence now, the rest ("speak_more") as soon as it is voiced.
+  const moreBuffer = {};
+  let awaitingMore = null;
+  function continueWith(line, more) {
+    if (more.failed || !more.audioUrl) { finish(line.id); return; }
+    speak({ ...line, more: false, sidekick: null, sidekickDone: true, spokenText: more.spokenText, audioUrl: more.audioUrl, words: more.words, durationSeconds: more.durationSeconds });
+  }
+  function afterLead(line) {
+    const more = moreBuffer[line.id];
+    if (more) { delete moreBuffer[line.id]; continueWith(line, more); return; }
+    // Not voiced yet: hold the floor (he looks like he is thinking) and give it a few seconds.
+    awaitingMore = { line, until: performance.now() + 9000 };
+    setTimeout(() => { if (awaitingMore && awaitingMore.line.id === line.id) { awaitingMore = null; finish(line.id); } }, 9000);
+  }
+  function onSpeakMore(more) {
+    if (awaitingMore && awaitingMore.line.id === more.id) {
+      const waiting = awaitingMore.line; awaitingMore = null;
+      continueWith(waiting, more);
+    } else {
+      moreBuffer[more.id] = more;
     }
   }
   /** Cuts the current line off without reporting it as spoken. */
@@ -896,7 +939,7 @@
   let hookIndex = Math.floor(Math.random() * HOOKS.length);
   let hookSince = 0;
   let lastSpokeAt = 0;
-  let lastAutoMove = 0, nextAutoMoveIn = 6000, idleSince = 0, lastBit = "";
+  let lastAutoMove = 0, nextAutoMoveIn = 6000, idleSince = 0, lastBit = "", idleShowcaseOn = false;
   // What goes through his head while he waits. Nothing here asks for or offers advice.
   const THOUGHTS = [
     "Those hands down there? That is my creator. He has hands. Show off.",
@@ -1015,8 +1058,15 @@
     hook.classList.toggle("show", idle);
     document.body.classList.toggle("hooked", idle);
     // Left alone, he gets visibly, comically bored: mostly waiting-around bits, with the odd dance to himself.
-    if (!idle) { idleSince = 0; hideBored(); }
-    else if (!idleSince) idleSince = t;
+    if (!idle) {
+      idleSince = 0; hideBored();
+      if (idleShowcaseOn && !$("sitecard").classList.contains("show")) { idleShowcaseOn = false; hideShowcase(); }
+    } else if (!idleSince) idleSince = t;
+    // Silent and useful while the room is quiet: real example screens from the app, with a caption on each.
+    if (idle && !idleShowcaseOn && !document.body.classList.contains("safe-tiktok") && t - idleSince > 7000 && !$("sitecard").classList.contains("show")) {
+      idleShowcaseOn = true;
+      startShowcase();
+    }
     if (idle && !move && t - lastAutoMove > nextAutoMoveIn) {
       const longWait = t - idleSince > 20000;
       const bits = longWait
@@ -1083,6 +1133,15 @@
       events.onerror = () => { offline.classList.add("show"); };
       events.addEventListener("speak", (event) => { offline.classList.remove("show"); speak(JSON.parse(event.data)); });
       events.addEventListener("move", (event) => { doMove(JSON.parse(event.data).name); });
+      events.addEventListener("speak_more", (event) => { try { onSpeakMore(JSON.parse(event.data)); } catch (err) { /* ignore */ } });
+      // A new comment: shown at once, before his answer exists. Cleared if no answer follows.
+      events.addEventListener("incoming", (event) => {
+        try {
+          const items = JSON.parse(event.data).map((item) => ({ platform: item.platform, authorName: item.authorName, body: item.body }));
+          showAsks(items);
+          setTimeout(() => { if (!current) { clearProps(); } }, 30000);
+        } catch (err) { /* ignore a malformed event */ }
+      });
       events.addEventListener("lonely", () => lonelyBit());
       events.addEventListener("react", (event) => { try { react(JSON.parse(event.data)); } catch (err) { /* ignore a malformed event */ } });
       events.addEventListener("notice", (event) => { const data = JSON.parse(event.data); showNotice(String(data.title || ""), String(data.detail || "")); });

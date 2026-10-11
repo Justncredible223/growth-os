@@ -268,6 +268,7 @@ interface TickResult {
   joinsWelcomed?: boolean;
   spendTodayUsd?: number;
   moves?: string[];
+  incoming?: Array<{ platform: string; authorName: string; body: string }>;
 }
 export interface WordCue {
   text: string;
@@ -340,6 +341,24 @@ export class SpamWatch {
 
 import { moveWord } from "../../src/liveHost/liveHostMoves.js";
 export { moveWord };
+
+/**
+ * Splits a spoken line after its first sentence so the first part can be voiced and played while the rest is still
+ * being voiced. Null when the line is short, or has no sentence end early enough to be worth it.
+ */
+export function splitLead(text: string): { lead: string; rest: string } | null {
+  const trimmed = text.trim();
+  const total = trimmed.split(/\s+/).length;
+  if (total < 18) return null;
+  const match = /^(.{12,}?[.!?])\s+(?=\S)/s.exec(trimmed);
+  if (!match) return null;
+  const lead = match[1]!.trim();
+  const leadWords = lead.split(/\s+/).length;
+  if (leadWords < 4 || leadWords > 26) return null;
+  const rest = trimmed.slice(match[0].length).trim();
+  if (rest.split(/\s+/).length < 5) return null;
+  return { lead, rest };
+}
 
 /** What the voice is given: the brand name respelled so it is pronounced correctly, "dot com" left as written. */
 export function prepareSpeechText(spokenText: string): string {
@@ -457,6 +476,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     for (const extension of ["mp3", "json", "txt"]) {
       rmSync(join(workDir, `${id}.${extension}`), { force: true });
       rmSync(join(workDir, `${id}-red.${extension}`), { force: true });
+      rmSync(join(workDir, `${id}-a.${extension}`), { force: true });
+      rmSync(join(workDir, `${id}-b.${extension}`), { force: true });
     }
     // Stay "speaking" until the server has the confirmation, so the tick in between does not ask for this line again.
     await confirm(id);
@@ -465,7 +486,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   /** Plays one pre-voiced reaction right away, if nothing is being said and the cool-down has passed. */
   function playFiller(): void {
-    if (!config.duo || !live || speaking !== null || fillerPlaying !== null || stageClients.size === 0) return;
+    if (!live || speaking !== null || fillerPlaying !== null || stageClients.size === 0) return;
     const index = pickFiller(fillers.length, lastFillerIndex, lastFillerAt, Date.now());
     if (index === null) return;
     const filler = fillers[index]!;
@@ -494,7 +515,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   /** Voices the fillers once, as soon as the warm voice helper is ready. Failures just mean no fillers. */
   async function prepareFillers(): Promise<void> {
-    if (!config.duo || fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
+    if (fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
     fillersPreparing = true;
     try {
       for (let i = 0; i < DUO_FILLERS.length; i++) {
@@ -750,6 +771,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   tiktok.onReaction = (kind) => sendMove(kind === "gift" ? "dance" : kind === "follow" ? "flex" : kind === "share" ? "spin" : "jump");
 
   let lastNote: string | null = null;
+  /** Set when a tick found new comments: the loop skips its wait so the answer starts being drafted at once. */
+  let tickAgainNow = false;
   let ticksSinceStreamCheck = 0;
   /** Until the server has answered one tick, this process is "fresh": it asks for a new show if the room has been quiet. */
   let freshStart = true;
@@ -806,6 +829,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         platform: config.platform,
         costMode: config.costMode,
         fresh: freshStart,
+        ackFirst: true,
         // Not while the TikTok reader is down: without it nobody would ever count as present.
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
@@ -832,6 +856,14 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     if (typeof result.spendTodayUsd === "number") lastSpendUsd = result.spendTodayUsd;
     // Moves viewers asked for in YouTube chat (read on the server): played at once, nothing spoken.
     if (result.moves?.length) sendMove(result.moves[0]!);
+    // New comments: on screen and acknowledged within a second, before the answer has been written. The next tick
+    // (run straight away) drafts it.
+    if (result.incoming?.length && live) {
+      broadcast("incoming", result.incoming.slice(0, 2));
+      broadcast("react", { mode: "thinking", side: config.cohostSide });
+      playFiller();
+      tickAgainNow = true;
+    }
     if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
@@ -871,8 +903,21 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       const synthStartedAt = Date.now();
       // His voice moves with his mood; the singing segment keeps its own slower pace and a flat pitch.
       const prosody = singing ? { rate: SINGING_RATE, pitch: "+0Hz" } : applyMoodProsody(config.rate, line.mood);
-      const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, prosody.rate, prosody.pitch);
-      log(`voice ready in ${((Date.now() - synthStartedAt) / 1000).toFixed(1)}s${ttsDaemon?.ready ? "" : " (per-line voice)"}${lastSpendUsd !== null ? `; spent today $${lastSpendUsd.toFixed(2)}` : ""}`);
+      // Long lines are voiced in two parts: the first sentence plays as soon as it is ready while the rest is voiced.
+      const split = singing ? null : splitLead(line.spokenText);
+      let words: WordCue[];
+      let durationSeconds: number;
+      let restPromise: Promise<{ words: WordCue[]; durationSeconds: number }> | null = null;
+      if (split) {
+        const leadVoice = await synthesize(config, workDir, `${line.id}-a`, split.lead, config.voice, prosody.rate, prosody.pitch);
+        restPromise = synthesize(config, workDir, `${line.id}-b`, split.rest, config.voice, prosody.rate, prosody.pitch);
+        restPromise.catch(() => {});
+        words = leadVoice.words;
+        durationSeconds = leadVoice.durationSeconds;
+      } else {
+        ({ words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, prosody.rate, prosody.pitch));
+      }
+      log(`voice ready in ${((Date.now() - synthStartedAt) / 1000).toFixed(1)}s${split ? " (first sentence)" : ""}${ttsDaemon?.ready ? "" : " (per-line voice)"}${lastSpendUsd !== null ? `; spent today $${lastSpendUsd.toFixed(2)}` : ""}`);
       // Red's interruption, when there is one, is voiced separately and played first. If his voice fails he is
       // simply left out.
       let sidekick: { text: string; audioUrl: string; durationSeconds: number } | null = null;
@@ -885,9 +930,24 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         }
       }
       voiceFailures = 0;
-      const timer = setTimeout(() => void finishLine(line.id, "spoken"), (durationSeconds + (sidekick?.durationSeconds ?? 0) + 7) * 1000);
+      const timer = setTimeout(() => void finishLine(line.id, "spoken"), (durationSeconds + (sidekick?.durationSeconds ?? 0) + (split ? 25 : 7)) * 1000);
       speaking = { id: line.id, timer };
-      broadcast("speak", { ...line, audioUrl: `/audio/${line.id}.mp3`, words, durationSeconds, sidekick });
+      if (split && restPromise) {
+        broadcast("speak", { ...line, spokenText: split.lead, audioUrl: `/audio/${line.id}-a.mp3`, words, durationSeconds, sidekick, more: true });
+        // The rest follows as soon as it is voiced. If it fails the first sentence simply ends the line.
+        void restPromise
+          .then((rest) => {
+            if (speaking?.id !== line.id) return;
+            clearTimeout(speaking.timer);
+            speaking.timer = setTimeout(() => void finishLine(line.id, "spoken"), (rest.durationSeconds + durationSeconds + 12) * 1000);
+            broadcast("speak_more", { id: line.id, spokenText: split.rest, audioUrl: `/audio/${line.id}-b.mp3`, words: rest.words, durationSeconds: rest.durationSeconds });
+          })
+          .catch(() => {
+            if (speaking?.id === line.id) broadcast("speak_more", { id: line.id, failed: true });
+          });
+      } else {
+        broadcast("speak", { ...line, audioUrl: `/audio/${line.id}.mp3`, words, durationSeconds, sidekick });
+      }
       if (sidekick) log(`   Red: ${sidekick.text}`);
       log(`${line.kind === "segment" ? `[${line.segmentTitle}]` : `-> ${line.replyingTo.map((m) => m.authorName).join(", ") || "chat"}`}: ${line.spokenText}`);
     } catch (err) {
@@ -927,6 +987,10 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   log(`Connected to ${config.baseUrl}. Waiting for the switch in the Growth OS app.`);
   while (!stopping) {
     await tick();
+    if (tickAgainNow) {
+      tickAgainNow = false;
+      continue;
+    }
     await new Promise((resolve) => setTimeout(resolve, TICK_MS));
   }
 }
