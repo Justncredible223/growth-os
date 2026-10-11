@@ -305,3 +305,22 @@ is not in a text box):
 
 Not built: always-on listening and a wake word (they would hear his own voice and the stream audio), and offline
 recognition (Whisper) which would need a heavy install and is slow on the laptop this was built on.
+
+## Length limits
+
+Voicing time grows with length (a 65-word opening took 7.2 seconds to voice), and a long line loses the room, so the
+length is enforced in code (`liveHostLength.ts`) and not just asked for in the prompt:
+
+| Line | Limit |
+|---|---|
+| Join welcome | 40 words |
+| Opening / sign-off | 60 words |
+| Duo reply to the co-host | 55 words |
+| Duo segment | 60 words |
+| Solo segment | 70 words |
+| Solo reply to chat | the 420-character limit only |
+
+A draft over its limit is sent back once with the count. If it is still over, whole sentences are dropped, middle
+first: the first sentence (the hook) and the last (the turn back to the co-host or chat) are kept, and a sentence with
+the "entertainment, not advice" disclaimer is never dropped, so a trimmed line can stay a little over the limit
+rather than lose it. A trimmed line goes through the same checks as any other before it is spoken.

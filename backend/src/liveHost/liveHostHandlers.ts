@@ -9,6 +9,7 @@ import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseReposi
 import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../signals/adapters/youtubeLiveChatAdapter.js";
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
+import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
 import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
@@ -812,6 +813,9 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     isCoHost: m.externalId.startsWith(DUO_HOST_ID_PREFIX),
   }));
 
+  // How long this line may be. A long draft is sent back once; whatever is still too long is trimmed below.
+  const wordLimit = spokenWordLimit({ duo: input.duo === true, show: segment?.show === true, segment: segment !== null, joinWelcome });
+
   const recent = await buildRecentExchanges(client, recentUtterances);
   const grounding = deps.grounding ?? (await loadGroundingContext(client));
   const sessionId = session.id;
@@ -843,7 +847,12 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
         verdicts.set(draft, problem);
         return draft;
       },
-      assess: (draft) => ({ hard: verdicts.get(draft) ?? null, soft: null }),
+      assess: (draft) => {
+        const hard = verdicts.get(draft) ?? null;
+        const words = wordCount(draft.reply);
+        const soft = wordLimit !== null && words > wordLimit ? `is ${words} words and the limit is ${wordLimit}: cut it down, keeping the joke and the question or the turn to your co-host` : null;
+        return { hard, soft };
+      },
     });
     accepted = result.draft;
     hardReason = result.hardReason;
@@ -874,6 +883,17 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       }
     }
     return base;
+  }
+
+  // Still over the limit after the retry: drop whole sentences (middle first) rather than say something that long.
+  if (wordLimit !== null && wordCount(accepted.reply) > wordLimit) {
+    const trimmed = trimToWords(accepted.reply, wordLimit);
+    const trimmedProblem = checkSpokenLine(trimmed, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
+    if (trimmed.length > 0 && !trimmedProblem) {
+      const original = accepted;
+      accepted = { ...accepted, reply: trimmed };
+      verdicts.set(accepted, verdicts.get(original) ?? null);
+    }
   }
 
   // Drafting took seconds. The owner may have switched off, or paused the system, in that time: read the switch,
