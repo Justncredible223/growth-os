@@ -460,7 +460,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     }
     if (req.method === "GET" && url.pathname === "/events") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
-      res.write(`event: state\ndata: ${JSON.stringify({ live })}\n\n`);
+      res.write(`event: state\ndata: ${JSON.stringify({ live, duo: config.duo })}\n\n`);
       stageClients.add(res);
       req.on("close", () => stageClients.delete(res));
       return;
@@ -731,7 +731,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     if (shouldBeLive !== live) {
       live = shouldBeLive;
       log(live ? "Live Host switched ON" : `Live Host is off (${result.reason ?? "switched off"})`);
-      broadcast("state", { live });
+      broadcast("state", { live, duo: config.duo });
       ticksSinceStreamCheck = 0;
       await setStreaming(live);
       if (!live && speaking) {

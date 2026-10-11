@@ -770,11 +770,35 @@
     "This is fine. I'm fine.",
     "Day 400 of waiting for a confession.",
   ];
+  // Duo mode: the creator is on camera next to him, so the bit about the hands at the bottom of the screen is retired
+  // and the thoughts that mention him are about the setup instead. Fixed text; nothing here asks for or offers advice.
+  const THOUGHTS_DUO = [
+    "My co-host has the hands and the face. I have the glow. Fair trade.",
+    "He is sitting right there. I am being supervised, loudly.",
+    "I'm only here because he lost the argument about who has to talk.",
+    "He gets the camera. I get the lighting. We are both fine with it.",
+    "The market is closed. I am a candle with no job today.",
+    "...hello?",
+    "I can hear you scrolling.",
+    "Is this thing on?",
+    "I rehearsed jokes for this.",
+    "Somebody type something. Anything.",
+    "I'm a candle. I have all day.",
+    "*crickets*",
+    "No hands, no account, no audience.",
+    "I'll just stand here. Glowing.",
+    "Type DANCE. I dare you.",
+    "This is fine. I'm fine.",
+    "Day 400 of waiting for a confession.",
+  ];
+  let duoMode = false;
+  const thoughtList = () => (duoMode ? THOUGHTS_DUO : THOUGHTS);
   let thoughtIndex = Math.floor(Math.random() * THOUGHTS.length), thoughtTimer = null;
   function showThought() {
     const el = $("thought");
-    thoughtIndex = (thoughtIndex + 1 + Math.floor(Math.random() * 3)) % THOUGHTS.length;
-    el.textContent = THOUGHTS[thoughtIndex];
+    const list = thoughtList();
+    thoughtIndex = (thoughtIndex + 1 + Math.floor(Math.random() * 3)) % list.length;
+    el.textContent = list[thoughtIndex];
     el.classList.add("show");
     setMood("thinking");
     clearTimeout(thoughtTimer);
@@ -924,6 +948,7 @@
       events.addEventListener("notice", (event) => { const data = JSON.parse(event.data); showNotice(String(data.title || ""), String(data.detail || "")); });
       events.addEventListener("state", (event) => {
         const data = JSON.parse(event.data);
+        duoMode = data.duo === true;
         offline.classList.toggle("show", data.live !== true);
         // Switched off mid-line: stop the voice at once. The line is not reported as said.
         if (data.live !== true) silence();
