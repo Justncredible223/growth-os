@@ -50,7 +50,7 @@ import kotlinx.coroutines.launch
  * fabricated trend lines or invented numbers -- a quiet night shows up as
  * zeros, not a fake highlight.
  *
- * Tap-to-navigate (2026-09-07): opportunities → Radar, inbound card →
+ * Tap-to-navigate (2026-09-07): inbound card →
  * Inbound, pending-approvals tile → Approvals. Shortcut buttons on each
  * relevant section make the intent explicit without requiring a tap on
  * a tile label.
@@ -132,19 +132,13 @@ fun MorningBriefScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit = 
                             item { SectionHeader("New opportunities") }
                             current.topNewOpportunities.forEach { opp ->
                                 item {
-                                    InsetRow(modifier = Modifier.clickable { onNavigate("radar") }) {
+                                    InsetRow {
                                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                             Text(opp.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                                             Text(opp.score.toInt().toString(), style = MaterialTheme.typography.titleMedium)
                                         }
                                     }
                                 }
-                            }
-                            item {
-                                TextButton(
-                                    onClick = { onNavigate("radar") },
-                                    contentPadding = PaddingValues(0.dp),
-                                ) { Text("→ View all in Radar", style = MaterialTheme.typography.labelMedium, color = Accent) }
                             }
                         }
                         if (current.inboundNeedsResponse > 0) {

@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -38,7 +36,6 @@ import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
-import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -47,7 +44,7 @@ import kotlinx.coroutines.launch
  * Recap of the trailing 24h -- real counts only. A quiet day shows real
  * zeros, never a fabricated "great progress today!" gloss.
  *
- * Tap-to-navigate (2026-09-07): top opportunity card → Radar.
+ * Tap-to-navigate (2026-09-07): top opportunity card is informational (Radar was removed).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,11 +115,9 @@ fun EveningReportScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit =
                         }
                         current.topOpportunity?.let { opp ->
                             item {
-                                GrowthCard(onClick = { onNavigate("radar") }) {
+                                GrowthCard {
                                     Text("Top new opportunity", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                                     Text("${opp.title} (score ${opp.score.toInt()})", style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text("→ View in Radar", style = MaterialTheme.typography.labelMedium, color = Accent)
                                 }
                             }
                         }

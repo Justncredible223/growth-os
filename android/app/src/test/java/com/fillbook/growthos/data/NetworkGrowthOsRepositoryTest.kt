@@ -123,51 +123,6 @@ class ParseOpportunitySummaryTest {
  * (401/403) as for a genuine offline failure, leaving the owner no way to
  * tell "reinstall the APK" apart from "check your wifi."
  */
-/**
- * Regression coverage for a real gap found in the 2026-09-07 release
- * audit: unlike draftInboundResponse/draftProspectingReply/
- * generatePartnershipDraft (all routed through postExpectingDraftRejection
- * for the Partnerships/Inbound/Prospecting 404 pattern), draftOpportunityReply
- * used the plain post() helper, so opportunities.ts's OpportunityReplyError
- * (a distinct HTTP 400 response, not 404) fell through as a bare
- * NetworkException, silently replacing the real guardrail reason with
- * RadarScreen's generic "Couldn't draft a reply. Check your connection and
- * try again." message.
- */
-class ExtractOpportunityReplyErrorMessageTest {
-    private fun networkExceptionMessage(httpCode: Int, body: String) = "POST /api/opportunities failed: HTTP $httpCode -- $body"
-
-    @Test
-    fun `extracts the real error message from a 400 OpportunityReplyError response`() {
-        val message = networkExceptionMessage(400, """{"error":"This opportunity no longer has enough verified context to draft a reply confidently."}""")
-        val result = extractOpportunityReplyErrorMessage(400, message)
-        assertEquals("This opportunity no longer has enough verified context to draft a reply confidently.", result)
-    }
-
-    @Test
-    fun `returns null for a non-400 status -- a genuine server or auth failure must still surface as NetworkException`() {
-        val message = networkExceptionMessage(500, """{"error":"internal error"}""")
-        assertNull(extractOpportunityReplyErrorMessage(500, message))
-    }
-
-    @Test
-    fun `returns null for a 404 -- that status belongs to the separate Partnerships-Inbound-Prospecting pattern, not this one`() {
-        val message = networkExceptionMessage(404, """{"error":"something"}""")
-        assertNull(extractOpportunityReplyErrorMessage(404, message))
-    }
-
-    @Test
-    fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
-        assertNull(extractOpportunityReplyErrorMessage(400, "POST /api/opportunities failed: HTTP 400 -- not json at all"))
-    }
-
-    @Test
-    fun `returns null for a 400 with a blank error field`() {
-        val message = networkExceptionMessage(400, """{"error":""}""")
-        assertNull(extractOpportunityReplyErrorMessage(400, message))
-    }
-}
-
 class AuthErrorMessageTest {
     @Test
     fun `returns the auth-expired message for a 401`() {
@@ -255,43 +210,5 @@ class ExtractVideoScriptRequestErrorMessageTest {
     @Test
     fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
         assertNull(extractVideoScriptRequestErrorMessage(400, "POST /api/run-campaign failed: HTTP 400 -- not json at all"))
-    }
-}
-
-/**
- * Regression coverage for the Research Lab feature (2026-09-07):
- * api/run-campaign.ts's `topic`/`assetType: "research"` handling rejects
- * an off-topic topic, a topic that's too short/too long (400), a
- * duplicate topic (409), or a duplicate-opportunity request (409) with a
- * real, actionable error message -- extracted the exact same way
- * extractVideoScriptRequestErrorMessage already does for video.
- */
-class ExtractResearchRequestErrorMessageTest {
-    private fun networkExceptionMessage(httpCode: Int, body: String) = "POST /api/run-campaign failed: HTTP $httpCode -- $body"
-
-    @Test
-    fun `extracts the real error message from a 400 (off-topic or invalid topic) response`() {
-        val message = networkExceptionMessage(400, """{"error":"This topic doesn't read as futures trading, prop-firm trading, or trading discipline."}""")
-        assertEquals(
-            "This topic doesn't read as futures trading, prop-firm trading, or trading discipline.",
-            extractResearchRequestErrorMessage(400, message),
-        )
-    }
-
-    @Test
-    fun `extracts the real error message from a 409 (duplicate topic or duplicate opportunity) response`() {
-        val message = networkExceptionMessage(409, """{"error":"Research already exists for this opportunity."}""")
-        assertEquals("Research already exists for this opportunity.", extractResearchRequestErrorMessage(409, message))
-    }
-
-    @Test
-    fun `returns null for a non-400-non-409 status -- a genuine server or auth failure must still surface as NetworkException`() {
-        val message = networkExceptionMessage(500, """{"error":"internal error"}""")
-        assertNull(extractResearchRequestErrorMessage(500, message))
-    }
-
-    @Test
-    fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
-        assertNull(extractResearchRequestErrorMessage(400, "POST /api/run-campaign failed: HTTP 400 -- not json at all"))
     }
 }

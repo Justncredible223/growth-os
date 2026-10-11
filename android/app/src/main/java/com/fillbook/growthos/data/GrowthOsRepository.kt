@@ -8,21 +8,12 @@ package com.fillbook.growthos.data
 interface GrowthOsRepository {
     suspend fun getHomeSummary(): HomeSummary
     suspend fun getHealth(): List<HealthItem>
-    suspend fun getOpportunities(): List<Opportunity>
-    /**
-     * Manually runs one open opportunity through the same draft -> mechanical
-     * gate -> deep review pipeline the automated (max 1/day) auto-draft
-     * uses. Never publishes anything -- the furthest an asset can reach is
-     * ready_for_owner, i.e. it shows up in Approvals for a human decision.
-     * Costs real LLM tokens (one draft + up to nine review calls).
-     */
-    suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult
     /**
      * "Create Fillbook Video" (2026-09-08): requests a video_script draft
      * for EITHER a custom, owner-typed [topic] OR an existing [opportunityId]
      * -- exactly one of the two must be non-null, enforced server-side, not
      * just by convention here. Reuses the exact same pipeline as
-     * [runCampaignForOpportunity] (review agents, grounding, budget/paused
+     * the campaign pipeline (review agents, grounding, budget/paused
      * gate, idempotency) -- the only difference is the resulting
      * campaign_asset is explicitly asset_type "video_script" and the
      * writer produces a real production package (hook/script/shot list/
@@ -47,38 +38,7 @@ interface GrowthOsRepository {
      * to get real motion -- the backend never infers it from topic text.
      */
     suspend fun getMotionConceptCatalog(): MotionConceptCatalog
-    /**
-     * Research Lab (2026-09-07): requests a private, internal research
-     * report for EITHER a custom, owner-typed [topic] OR an existing
-     * [opportunityId] -- exactly one of the two must be non-null, enforced
-     * server-side, not just by convention here. Reuses the exact same
-     * pipeline as [runCampaignForOpportunity]/[requestVideoScript]
-     * (grounding, budget/paused gate, idempotency) -- the difference is
-     * the resulting campaign_asset is asset_type "research", the writer
-     * produces a ResearchReport instead of public-facing content, and the
-     * nine-agent deep review is deliberately skipped (see
-     * campaignPipeline.ts's own doc comment for why). The backend rejects
-     * an off-topic [topic] with a clear error BEFORE any LLM call, same as
-     * [requestVideoScript] -- an off-topic/duplicate/invalid request
-     * surfaces as a plain [NetworkException] with a real message from the
-     * backend's own 400/409 body.
-     */
-    suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult
-    /**
-     * Every research record the owner has ever requested, most recent
-     * first -- the durable source of truth for research status
-     * (ready_for_review/approved/rejected/failed).
-     */
-    suspend fun listResearch(): List<ResearchRecord>
-    /**
-     * The lightweight path for a single-post engagement opportunity --
-     * one real LLM call, never the multi-agent campaign pipeline. Nothing
-     * is persisted server-side; the draft is only ever returned for the
-     * owner to review before they copy it themselves.
-     */
-    suspend fun draftOpportunityReply(opportunityId: String): String
     suspend fun getApprovals(): List<ApprovalAsset>
-    suspend fun getCreators(): List<Creator>
     suspend fun getCampaigns(): List<Campaign>
     suspend fun getCostSummary(): CostSummary
     /**
@@ -206,11 +166,6 @@ interface GrowthOsRepository {
     suspend fun closePartnership(id: String, reason: String): PartnershipProspect
     suspend fun archivePartnership(id: String, reason: String): PartnershipProspect
     suspend fun markPartnershipDoNotContact(id: String, reason: String): PartnershipProspect
-
-    /** The latest Strategy Evolution report, or null if none has been generated yet. */
-    suspend fun getLatestStrategy(): StrategyVersion?
-    /** Forces a fresh strategy report now, regardless of the normal weekly schedule -- for the Strategy screen's manual "Regenerate" action. */
-    suspend fun regenerateStrategy(): StrategyVersion
 
     suspend fun getExperiments(): List<Experiment>
     suspend fun createExperiment(hypothesis: String, scopePlatform: String?, scopeAssetType: String?, guardrailNote: String?, startDate: String, controlWindowDays: Int): Experiment

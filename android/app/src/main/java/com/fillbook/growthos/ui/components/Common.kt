@@ -48,7 +48,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.HealthStatus
 import com.fillbook.growthos.data.InboundPriority
-import com.fillbook.growthos.data.Urgency
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
 import com.fillbook.growthos.ui.theme.Border
@@ -183,34 +182,7 @@ fun platformDisplayName(platform: String): String = when (platform.lowercase()) 
     else -> platform.replaceFirstChar { it.uppercase() }
 }
 
-/**
- * Builds a real profile URL for the Creators screen's "Open profile"
- * action -- there's no stored profile URL (creators only have a handle +
- * platform), so this constructs one the same way a person would type it
- * manually. Returns null rather than guessing when the platform isn't one
- * of the three this app actually tracks creators on, or the handle has
- * spaces/is otherwise not a real handle (e.g. a plain display name saved
- * for a creator with category "other") -- a broken link is worse than no
- * button at all.
- */
-fun creatorProfileUrl(platform: String, handle: String): String? {
-    val cleanHandle = handle.removePrefix("@").trim()
-    if (cleanHandle.isEmpty() || cleanHandle.any { it.isWhitespace() }) return null
-    return when (platform.lowercase()) {
-        "x" -> "https://x.com/$cleanHandle"
-        "youtube" -> "https://youtube.com/@$cleanHandle"
-        "tiktok" -> "https://www.tiktok.com/@$cleanHandle"
-        else -> null
-    }
-}
-
-fun urgencyColor(urgency: Urgency): Color = when (urgency) {
-    Urgency.HIGH -> Danger
-    Urgency.NORMAL -> Warning
-    Urgency.LOW -> TextTertiary
-}
-
-/** Same visual language as urgencyColor -- P1 is the most urgent, matching Urgency.HIGH's red. */
+/** P1 is the most urgent (red), down to low value (muted). */
 fun inboundPriorityColor(priority: InboundPriority): Color = when (priority) {
     InboundPriority.P1_DIRECT_REPLY -> Danger
     InboundPriority.P2_RELATIONSHIP -> Warning
@@ -272,13 +244,6 @@ fun healthTone(status: HealthStatus): StatusTone = when (status) {
 fun assetStageTone(stage: String): StatusTone = when (stage) {
     "ready_for_owner", "handed_off" -> StatusTone.READY
     "final_draft" -> StatusTone.WAITING
-    else -> StatusTone.NEUTRAL
-}
-
-fun campaignStatusTone(status: String): StatusTone = when (status) {
-    "approved" -> StatusTone.READY
-    "in_review" -> StatusTone.WAITING
-    "retired" -> StatusTone.BLOCKED
     else -> StatusTone.NEUTRAL
 }
 

@@ -52,16 +52,12 @@ import kotlinx.coroutines.launch
 private const val MARK_ALL_BUSY_KEY = "__mark_all_read__"
 
 private fun routeFor(type: String): String? = when (type) {
-    "high_value_opportunity" -> "radar"
-    "strategy_updated" -> "strategy"
     "experiment_significant" -> "experiments"
     "platform_failure" -> "system"
     else -> null
 }
 
 private fun destinationLabel(type: String): String = when (type) {
-    "high_value_opportunity" -> "Radar"
-    "strategy_updated" -> "Strategy"
     "experiment_significant" -> "Experiments"
     "platform_failure" -> "System"
     else -> ""
@@ -80,9 +76,9 @@ private fun destinationLabel(type: String): String = when (type) {
  * with no explanation (or crashing the screen), and the tapped control
  * is disabled while the request is in flight.
  *
- * Tap-to-navigate (2026-09-07): high_value_opportunity → Radar,
- * strategy_updated → Strategy, experiment_significant → Experiments,
- * platform_failure → System. relatedId is already stored server-side
+ * Tap-to-navigate (2026-09-07): experiment_significant → Experiments,
+ * platform_failure → System (high_value_opportunity and strategy_updated
+ * no longer link anywhere -- Radar and Strategy were removed). relatedId is already stored server-side
  * but currently just carried along -- each destination screen loads its
  * own data on entry, so no client-side lookup is needed.
  */

@@ -25,14 +25,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -42,11 +40,8 @@ import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Movie
@@ -92,18 +87,13 @@ import com.fillbook.growthos.ui.screens.FillbookStatsScreen
 import com.fillbook.growthos.ui.screens.ApprovalsScreen
 import com.fillbook.growthos.ui.screens.BiometricGateScreen
 import com.fillbook.growthos.ui.screens.canUseDeviceLock
-import com.fillbook.growthos.ui.screens.CampaignsScreen
 import com.fillbook.growthos.ui.screens.ContentLibraryScreen
-import com.fillbook.growthos.ui.screens.CreatorsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.InboundScreen
 import com.fillbook.growthos.ui.screens.EngagementScreen
 import com.fillbook.growthos.ui.screens.LiveHostScreen
 import com.fillbook.growthos.ui.screens.ProspectingScreen
-import com.fillbook.growthos.ui.screens.RadarScreen
-import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
-import com.fillbook.growthos.ui.screens.StrategyScreen
 import com.fillbook.growthos.ui.screens.ExperimentsScreen
 import com.fillbook.growthos.ui.screens.NotificationsScreen
 import com.fillbook.growthos.ui.screens.MorningBriefScreen
@@ -129,16 +119,11 @@ import com.fillbook.growthos.ui.theme.TextTertiary
 
 private sealed class Destination(val route: String, val label: String, val icon: ImageVector) {
     data object Home : Destination("home", "Home", Icons.Filled.Home)
-    data object Radar : Destination("radar", "Radar", Icons.Filled.Radar)
     data object Prospecting : Destination("prospecting", "Prospecting", Icons.Filled.TrendingUp)
     data object Approvals : Destination("approvals", "Approvals", Icons.Filled.CheckCircle)
     data object Inbound : Destination("inbound", "Inbound", Icons.Filled.Forum)
-    data object Campaigns : Destination("campaigns", "Campaigns", Icons.Filled.Campaign)
     data object Analytics : Destination("analytics", "Analytics", Icons.Filled.Insights)
     data object ContentLibrary : Destination("content_library", "Content Library", Icons.Filled.VideoLibrary)
-    data object Research : Destination("research", "Research", Icons.Filled.Science)
-    data object Creators : Destination("creators", "Creators", Icons.Filled.Groups)
-    data object Strategy : Destination("strategy", "Strategy", Icons.Filled.Timeline)
     data object Experiments : Destination("experiments", "Experiments", Icons.Filled.QueryStats)
     data object Notifications : Destination("notifications", "Notifications", Icons.Filled.NotificationsNone)
     data object MorningBrief : Destination("morning_brief", "Morning Brief", Icons.Filled.WbSunny)
@@ -175,8 +160,8 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * of a trip through More every time.
  *
  * Engage took Radar's slot (2026-10-10, owner request): working through the
- * pre-drafted comment queue is a daily habit; Radar moved to More, still
- * one tap away.
+ * pre-drafted comment queue is a daily habit. Radar itself was removed
+ * from the app the same day (unused).
  */
 private val primaryDestinations =
     listOf(Destination.Home, Destination.Engage, Destination.Prospecting, Destination.Inbound, Destination.Approvals, Destination.VideoStatus)
@@ -184,17 +169,12 @@ private val primaryDestinations =
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
     Destination.Results,
-    Destination.Radar,
     Destination.LiveHost,
     Destination.Partnerships,
     Destination.Analytics,
-    Destination.Campaigns,
     Destination.ContentLibrary,
-    Destination.Creators,
     Destination.System,
     Destination.Settings,
-    Destination.Research,
-    Destination.Strategy,
     Destination.Experiments,
     Destination.Notifications,
     Destination.MorningBrief,
@@ -363,16 +343,11 @@ private fun GrowthOsApp(
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Destination.Home.route) { HomeScreen(repo, onNavigate = ::navigate) }
-            composable(Destination.Radar.route) { RadarScreen(repo) }
             composable(Destination.Prospecting.route) { ProspectingScreen(repo) }
             composable(Destination.Approvals.route) { ApprovalsScreen(repo) }
             composable(Destination.Inbound.route) { InboundScreen(repo) }
-            composable(Destination.Campaigns.route) { CampaignsScreen(repo) }
             composable(Destination.Analytics.route) { AnalyticsScreen(repo) }
             composable(Destination.ContentLibrary.route) { ContentLibraryScreen(repo) }
-            composable(Destination.Research.route) { ResearchScreen(repo, onNavigateToApprovals = { navigate(Destination.Approvals.route) }) }
-            composable(Destination.Creators.route) { CreatorsScreen(repo) }
-            composable(Destination.Strategy.route) { StrategyScreen(repo) }
             composable(Destination.Experiments.route) { ExperimentsScreen(repo) }
             composable(Destination.Notifications.route) { NotificationsScreen(repo, onNavigate = ::navigate) }
             composable(Destination.MorningBrief.route) { MorningBriefScreen(repo, onNavigate = ::navigate) }
@@ -490,8 +465,7 @@ private fun NavItem(icon: ImageVector, label: String, selected: Boolean, modifie
  * Editorial list rather than an icon grid -- a row per destination (icon
  * in a soft circle, label, chevron) reads as a real menu, not a launcher
  * page. Kept as one flat list in the same order the product already
- * settled on (workflow screens first, System/Settings, Research/Strategy
- * last as the not-yet-built modules) rather than inventing new groupings.
+ * settled on (workflow screens first, then System/Settings and the reports) rather than inventing new groupings.
  */
 @Composable
 private fun MoreSheetContent(currentDestination: androidx.navigation.NavDestination?, onSelect: (String) -> Unit) {

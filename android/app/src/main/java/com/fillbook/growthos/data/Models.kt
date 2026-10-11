@@ -1,7 +1,5 @@
 package com.fillbook.growthos.data
 
-enum class Urgency { LOW, NORMAL, HIGH }
-
 /** One entry in the small, fixed catalog of concepts with real verified product-motion footage -- see GrowthOsRepository.getMotionConcepts's own doc comment. */
 data class MotionConcept(
     val id: String,
@@ -27,27 +25,6 @@ data class MotionConceptCatalog(
 )
 
 enum class HealthStatus { HEALTHY, DEGRADED, DOWN, NOT_CONNECTED }
-
-data class Opportunity(
-    val id: String,
-    val title: String,
-    val score: Double,
-    val urgency: Urgency,
-    val rationale: String,
-    val channels: List<String>,
-    /**
-     * Only present when this opportunity traces back to exactly one real
-     * X mention (see SupabaseOpportunityRepository.attachSourceUrls on
-     * the backend) -- its presence, not any title/label heuristic, is
-     * what marks this as an "engagement" opportunity (reply-worthy)
-     * rather than a "campaign/content" opportunity.
-     */
-    val sourceUrl: String? = null,
-    /** The real @handle X resolved for the mention's author, when it did. Never guessed -- null, not a fake handle, when X couldn't resolve one. */
-    val authorHandle: String? = null,
-) {
-    val isEngagementOpportunity: Boolean get() = sourceUrl != null
-}
 
 /** Result of handing a ready campaign asset off to the owner (opened the platform composer) -- never a publish confirmation. */
 data class HandOffResult(val campaignAssetId: String, val stage: String)
@@ -229,22 +206,6 @@ data class XFeedPostHistoryEntry(
     val campaignAssetId: String?,
 )
 
-enum class CreatorCategory { TIER_B, RESEARCH_NEXT, REJECTED }
-
-data class Creator(
-    val id: String,
-    val handle: String,
-    val displayName: String?,
-    val platform: String,
-    val category: CreatorCategory,
-    val readinessScore: Int?,
-    val followerCount: Int?,
-    val creatorProductMoment: String?,
-    val notes: String?,
-    val rejectionReason: String?,
-    val lastInteractionAt: String?,
-)
-
 data class CampaignAsset(
     val id: String,
     val platform: String,
@@ -397,45 +358,6 @@ data class ProspectingCandidate(
     val draftReply: String?,
     val replyMentionsFillbook: Boolean?,
     val replyUsedLink: Boolean?,
-)
-
-/** A topic or format worth acting on, with the plain-English reason the server computed it -- never a bare label with no evidence attached. */
-data class StrategyItem(val label: String, val reason: String)
-
-/** A rising search topic Growth OS hasn't turned into an opportunity yet. */
-data class SeoOpportunity(val topic: String, val velocity: Double, val hasExistingOpportunity: Boolean)
-
-/** A creator relationship that's gone quiet (30+ days) or was never actually contacted, surfaced so it doesn't just decay silently. */
-data class CreatorOpportunity(
-    val id: String,
-    val handle: String,
-    val category: String,
-    val readinessScore: Int?,
-    val daysSinceLastInteraction: Int?,
-)
-
-data class ExperimentSuggestion(val hypothesis: String, val rationale: String)
-
-/**
- * One versioned Strategy Evolution report (see backend/src/strategy/types.ts).
- * Built entirely from Growth OS's own data -- real conversion/attribution
- * data from FillbookHQ itself isn't available to this project by design
- * (see docs/ARCHITECTURE.md), so [lowConfidence] exists specifically to
- * flag a report that doesn't yet have enough completed campaigns behind
- * it to mean much -- never hide that caveat from the owner.
- */
-data class StrategyVersion(
-    val version: Int,
-    val generatedAt: String,
-    val topicsToIncrease: List<StrategyItem>,
-    val topicsToDecrease: List<StrategyItem>,
-    val contentToRetire: List<StrategyItem>,
-    val formatsToTest: List<StrategyItem>,
-    val seoOpportunities: List<SeoOpportunity>,
-    val creatorOpportunities: List<CreatorOpportunity>,
-    val experimentsToRun: List<ExperimentSuggestion>,
-    val summary: String,
-    val lowConfidence: Boolean,
 )
 
 /**
@@ -629,34 +551,6 @@ data class VideoRenderMetadata(
     val youtubeThumbnailConcept: String?,
     /** The comment to post and pin under the video on TikTok and YouTube (links viewers to the free sample). Null from a server that predates this field. */
     val pinnedComment: String? = null,
-)
-
-/**
- * A private, internal research document (Research Lab, 2026-09-07) -- the
- * owner reviews this in full before it informs any public content;
- * nothing here is ever published or shown to anyone else directly. See
- * backend/src/content/researchWriter.ts's ResearchReport, which this
- * mirrors field-for-field.
- *
- * [status] is a raw string kept as-is (same rationale as
- * [VideoRenderStatus.status]) rather than an enum -- the server owns this
- * state machine. "requested"/"researching" are transient CLIENT-SIDE-only
- * states covering the moment between this app's own POST and the next GET
- * reflecting a persisted row -- they are never actually returned by the
- * backend; only ready_for_review/approved/rejected/failed are.
- */
-data class ResearchRecord(
-    val id: String,
-    val title: String,
-    val question: String,
-    val summary: String,
-    val findings: List<String>,
-    val evidenceReferences: List<String>,
-    val caveats: List<String>,
-    val contentAngles: List<String>,
-    val status: String,
-    val costUsd: Double?,
-    val createdAt: String,
 )
 
 /**
