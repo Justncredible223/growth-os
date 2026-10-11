@@ -268,6 +268,49 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.spokenText).toContain("link is in the bio");
   });
 
+  it("a stream the worker says is YouTube may say the website even though the TikTok chat setting is on", async () => {
+    const liveSession = { id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() };
+    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: true })], live_host_sessions: [liveSession], live_host_messages: [pendingMessage] });
+    const llm = scriptedLlm([line("Jo, it is the journal I live in, and it is at fillbookhq dot com.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", workerInfo: { tiktokChat: false } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.utterance?.spokenText).toContain("fillbookhq dot com");
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("This stream is on YouTube and nobody is on camera");
+    expect(sent.messages[0]!.content).not.toContain("This stream is on TikTok");
+    expect(sent.messages[0]!.content).toContain("never mention a giveaway");
+  });
+
+  it("still points to the bio on YouTube if the worker is reading TikTok chat too", async () => {
+    const liveSession = { id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() };
+    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: true })], live_host_sessions: [liveSession], live_host_messages: [pendingMessage] });
+    const llm = scriptedLlm([line("Jo, it is at fillbookhq dot com."), line("Jo, it is the journal I live in. The link is in the bio.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", workerInfo: { tiktokChat: true } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.utterance?.spokenText).toContain("link is in the bio");
+  });
+
+  it("YouTube opens the room for the first minutes even before anyone has chatted, then goes quiet again", async () => {
+    const started = new Date(NOW.getTime() - 60_000).toISOString();
+    const client = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 50_000).toISOString() }],
+    });
+    const llm = scriptedLlm([line("A candle hosting a live stream: bold. Say hi in chat."), line("Another.")]);
+    const early = await runLiveHostTick(asSupabase(client), { platform: "youtube", audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(early.utterance?.kind).toBe("segment");
+
+    // Ten minutes later with nobody having said a word, the owner's rule applies again.
+    const quietClient = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - 10 * 60_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 50_000).toISOString() }],
+    });
+    const late = await runLiveHostTick(asSupabase(quietClient), { platform: "youtube", audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(late.utterance).toBeNull();
+  });
+
   it("says nothing if the owner switches off while the line is being written", async () => {
     const client = buildClient();
     const { client: llmClient, fetchImpl } = scriptedLlm([line("Mike, welcome in.")]);

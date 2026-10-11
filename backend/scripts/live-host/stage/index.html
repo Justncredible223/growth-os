@@ -828,8 +828,16 @@
     "This is fine. I'm fine.",
     "Day 400 of waiting for a confession.",
   ];
+  // YouTube solo: no hands are on screen (the hands are a TikTok-layout thing), so the creator lines are replaced.
+  const THOUGHTS_SOLO = [
+    "Nobody else is in this room. I am the entire crew.",
+    "I run the camera, the lights and the jokes. It shows.",
+    "Lean production: one candle, zero staff, no weekend.",
+    "If anyone is watching, wave. I cannot see you. I am a candle.",
+    ...THOUGHTS.slice(4),
+  ];
   let duoMode = false;
-  const thoughtList = () => (duoMode ? THOUGHTS_DUO : THOUGHTS);
+  const thoughtList = () => (duoMode ? THOUGHTS_DUO : document.body.classList.contains("safe-tiktok") ? THOUGHTS : THOUGHTS_SOLO);
   let thoughtIndex = Math.floor(Math.random() * THOUGHTS.length), thoughtTimer = null;
   function showThought() {
     const el = $("thought");

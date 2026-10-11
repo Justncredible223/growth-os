@@ -798,7 +798,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       await setStreaming(live);
     }
 
-    await tiktok.ensure(live && result.tiktok?.chatEnabled === true, result.tiktok?.username ?? null);
+    // Not on a stream that is explicitly YouTube: the owner's TikTok-chat setting is for TikTok nights.
+    await tiktok.ensure(live && config.platform !== "youtube" && result.tiktok?.chatEnabled === true, result.tiktok?.username ?? null);
 
     const line = result.utterance;
     // The real line waits for the instant reaction to finish; the server keeps handing it out until it is spoken.
