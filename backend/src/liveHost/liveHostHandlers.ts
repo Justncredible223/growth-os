@@ -78,7 +78,7 @@ export function splitRedLine(spokenText: string): { redLine: string | null; tilt
  */
 export const AUDIENCE_PRESENT_FOR_MS = 3 * 60_000;
 /** On YouTube the host opens the room for this long even if nobody has chatted yet. */
-export const YOUTUBE_OPENING_GRACE_MS = 6 * 60_000;
+export const YOUTUBE_OPENING_GRACE_MS = 2 * 60_000;
 const JOIN_WELCOME_TITLE = "New Arrivals";
 /** Most messages taken from the worker in one tick; a flood is trimmed, newest kept. */
 const MAX_INCOMING_PER_TICK = 40;
@@ -842,6 +842,9 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       // YouTube show he opens the room anyway (the welcome and the first segments are what bring chat in); after that
       // the owner's rule applies again and he is quiet until someone says something.
       const openingGrace = input.platform === "youtube" && sessionAgeMs < YOUTUBE_OPENING_GRACE_MS;
+      // On YouTube he only answers: after the opening a chat message earns a reply, not a string of unprompted segments
+      // (a viewer who typed once and then got a lecture every 30 seconds found it random).
+      if (input.platform === "youtube" && !openingGrace) return base;
       if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS && !openingGrace) return base;
     }
     const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS && chatIsLive;
