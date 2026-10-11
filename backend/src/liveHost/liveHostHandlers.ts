@@ -10,7 +10,7 @@ import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../signals/adapters/youtubeLiveChatAdapter.js";
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
 import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
-import { parseCostMode, useFastModel } from "./liveHostModels.js";
+import { FACT_SEGMENTS, parseCostMode, useFastModel } from "./liveHostModels.js";
 import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
@@ -624,6 +624,11 @@ export function copiesExampleLine(text: string, runLength = 6): boolean {
   });
 }
 
+/** True for a message that is asking something, which is owed a straight answer and no interruption. */
+export function looksLikeQuestion(body: string): boolean {
+  return /\?|^\s*(?:what|how|why|when|where|which|who|can|could|does|do|is|are|should|explain|tell me)\b/i.test(body);
+}
+
 /** The owner's typed prompts as chat rows (platform "tiktok"), carrying the reserved id prefixes. */
 export function duoMessages(input: TickInput): IncomingChatMessage[] {
   const hostName = typeof input.hostName === "string" && input.hostName.trim() ? input.hostName : "Host";
@@ -843,6 +848,12 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     duoReply: input.duo === true && batch.length > 0,
     spendFraction: settings.dailyBudgetUsd > 0 ? todaySpend / settings.dailyBudgetUsd : 0,
   });
+  // Red is a recurring character, so he is scheduled: due when none of the last three lines had him. The model still
+  // skips him when the moment needs a straight answer.
+  const lastRedAt = recentUtterances.findIndex((utterance) => utterance.spokenText.startsWith("[RED]"));
+  const batchAsksQuestion = batch.some((message) => looksLikeQuestion(message.body));
+  const redDue =
+    input.duo !== true && !joinWelcome && !batchAsksQuestion && !(segment !== null && (segment.show === true || FACT_SEGMENTS.has(segment.id))) && recentUtterances.length >= 2 && (lastRedAt === -1 || lastRedAt >= 3);
   // Varies the angle of the opening joke from stream to stream (the session id is stable within one stream).
   const openingSeed = [...session.id].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) >>> 0, 7);
 
@@ -864,7 +875,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, seed: openingSeed, retryFeedback }, grounding, fastModel ? MODEL_HAIKU : undefined);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, seed: openingSeed, redDue, retryFeedback }, grounding, fastModel ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0 && copiesExampleLine(draft.reply)) problem = "copies a line from the character examples; write a fresh one";
         if (!problem && draft.reply.length > 0) {
@@ -947,7 +958,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   // Red's line is held to the same checks as Tilt's, plus: he never mentions the product, the website or a
   // company. A Red line that fails is simply left out; Tilt's line does not depend on it.
   const redLine =
-    accepted.redLine && batch.length <= 1 && checkSpokenLine(accepted.redLine, { fillbookMentionAllowed: false, websiteMentionAllowed: false }) === null && (await brandConstitution.checkVocabulary(accepted.redLine)).length === 0
+    accepted.redLine && batch.length <= 1 && !batchAsksQuestion && checkSpokenLine(accepted.redLine, { fillbookMentionAllowed: false, websiteMentionAllowed: false }) === null && (await brandConstitution.checkVocabulary(accepted.redLine)).length === 0
       ? accepted.redLine
       : null;
   const lineMentionsFillbook = mentionsFillbook(accepted.reply);

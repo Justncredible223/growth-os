@@ -150,6 +150,30 @@ export function parseReaction(raw: unknown): Reaction | null {
   return reaction.mode !== undefined || reaction.nod === true ? reaction : null;
 }
 
+/**
+ * How his voice moves with how he feels, so a shocked line is not read at the pace of a smug one. Small shifts: the
+ * voice stays recognisably his. `rate` is added to the base rate in percent, `pitch` is in Hz.
+ */
+export const MOOD_PROSODY: Readonly<Record<string, { rate: number; pitch: number }>> = {
+  neutral: { rate: 0, pitch: 0 },
+  smirk: { rate: -2, pitch: -2 },
+  shocked: { rate: 6, pitch: 5 },
+  tilted: { rate: 8, pitch: 3 },
+  proud: { rate: 0, pitch: 2 },
+  thinking: { rate: -6, pitch: -3 },
+  sad: { rate: -8, pitch: -5 },
+};
+
+/** Applies a mood to a base rate such as "+4%": returns the rate and pitch strings the voice takes. */
+export function applyMoodProsody(baseRate: string, mood: string): { rate: string; pitch: string } {
+  const shift = MOOD_PROSODY[mood] ?? MOOD_PROSODY.neutral!;
+  const base = Number.parseInt(baseRate.replace("%", ""), 10);
+  const rate = (Number.isFinite(base) ? base : 0) + shift.rate;
+  const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
+  const signed = (value: number) => `${value >= 0 ? "+" : "-"}${Math.abs(value)}`;
+  return { rate: `${signed(clamp(rate, 40))}%`, pitch: `${signed(clamp(shift.pitch, 12))}Hz` };
+}
+
 /** How long a pressed "run a segment" waits for its line to come back before it is given up on. */
 export const DUO_SEGMENT_REQUEST_MS = 30_000;
 
@@ -323,7 +347,7 @@ export function captionWords(words: WordCue[]): WordCue[] {
 /** The warm voice helper, started by runWorker. Null (or not ready) means each line launches the script itself. */
 let ttsDaemon: TtsDaemon | null = null;
 
-async function synthesize(config: WorkerConfig, workDir: string, id: string, spokenText: string, voice: string = config.voice, rate: string = config.rate): Promise<{ words: WordCue[]; durationSeconds: number }> {
+async function synthesize(config: WorkerConfig, workDir: string, id: string, spokenText: string, voice: string = config.voice, rate: string = config.rate, pitch: string = "+0Hz"): Promise<{ words: WordCue[]; durationSeconds: number }> {
   const textFile = join(workDir, `${id}.txt`);
   const audioFile = join(workDir, `${id}.mp3`);
   const wordsFile = join(workDir, `${id}.json`);
@@ -331,7 +355,7 @@ async function synthesize(config: WorkerConfig, workDir: string, id: string, spo
   let done = false;
   if (ttsDaemon?.ready) {
     try {
-      await ttsDaemon.synthesize({ voice, rate, textFile, mediaPath: audioFile, wordsPath: wordsFile }, TTS_TIMEOUT_MS);
+      await ttsDaemon.synthesize({ voice, rate, pitch, textFile, mediaPath: audioFile, wordsPath: wordsFile }, TTS_TIMEOUT_MS);
       done = true;
     } catch {
       // Fall through to the one-shot script below; the helper restarts itself.
@@ -340,7 +364,7 @@ async function synthesize(config: WorkerConfig, workDir: string, id: string, spo
   if (!done) await new Promise<void>((resolve, reject) => {
     execFile(
       config.pythonCommand,
-      [WORD_TIMING_SCRIPT, "--voice", voice, "--rate", rate, "--file", textFile, "--out-media", audioFile, "--out-words", wordsFile],
+      [WORD_TIMING_SCRIPT, "--voice", voice, "--rate", rate, "--pitch", pitch, "--file", textFile, "--out-media", audioFile, "--out-words", wordsFile],
       { timeout: TTS_TIMEOUT_MS, windowsHide: true },
       (error, _stdout, stderr) => (error ? reject(new Error(`voice synthesis failed: ${stderr.trim() || error.message}`)) : resolve()),
     );
@@ -821,7 +845,9 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     try {
       const singing = line.kind === "segment" && line.segmentTitle === SINGING_TITLE;
       const synthStartedAt = Date.now();
-      const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, singing ? SINGING_RATE : config.rate);
+      // His voice moves with his mood; the singing segment keeps its own slower pace and a flat pitch.
+      const prosody = singing ? { rate: SINGING_RATE, pitch: "+0Hz" } : applyMoodProsody(config.rate, line.mood);
+      const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, prosody.rate, prosody.pitch);
       log(`voice ready in ${((Date.now() - synthStartedAt) / 1000).toFixed(1)}s${ttsDaemon?.ready ? "" : " (per-line voice)"}${lastSpendUsd !== null ? `; spent today $${lastSpendUsd.toFixed(2)}` : ""}`);
       // Red's interruption, when there is one, is voiced separately and played first. If his voice fails he is
       // simply left out.

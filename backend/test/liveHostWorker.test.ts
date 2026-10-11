@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
+import { MOOD_PROSODY, applyMoodProsody, DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -161,6 +161,22 @@ describe("live host duo mode", () => {
     expect(stage).toContain("attention.until");
   });
 
+  it("moves his pace and pitch with his mood, in small steps, and never leaves the safe range", () => {
+    expect(applyMoodProsody("+4%", "neutral")).toEqual({ rate: "+4%", pitch: "+0Hz" });
+    expect(applyMoodProsody("+4%", "shocked")).toEqual({ rate: "+10%", pitch: "+5Hz" });
+    expect(applyMoodProsody("+4%", "sad")).toEqual({ rate: "-4%", pitch: "-5Hz" });
+    expect(applyMoodProsody("+4%", "no-such-mood")).toEqual({ rate: "+4%", pitch: "+0Hz" });
+    expect(applyMoodProsody("garbage", "tilted").rate).toBe("+8%");
+    for (const mood of Object.keys(MOOD_PROSODY)) {
+      const { rate, pitch } = applyMoodProsody("+30%", mood);
+      expect(Math.abs(Number.parseInt(rate, 10))).toBeLessThanOrEqual(40);
+      expect(rate).toMatch(/^[+-]\d+%$/);
+      expect(pitch).toMatch(/^[+-]\d+Hz$/);
+    }
+    // Every mood the writer can choose has an entry.
+    for (const mood of LIVE_HOST_MOODS) expect(MOOD_PROSODY[mood], mood).toBeDefined();
+  });
+
   it("ships a host page that loads nothing from the internet", () => {
     const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
@@ -196,6 +212,14 @@ describe("live host stage page", () => {
     expect(soloBlock).not.toMatch(/hands down there|my creator|the creator|hostage|management/i);
     expect(soloBlock).toContain("I am the entire crew");
     expect(html).toContain('document.body.classList.contains("safe-tiktok") ? THOUGHTS : THOUGHTS_SOLO');
+  });
+
+  it("glances at the question, the card and Red, and keeps Red's bubble above Tilt's head", () => {
+    expect(html).toContain("function glanceTo(");
+    expect(html).toContain("glanceTo(-17, -12, 1700, 250)");
+    expect(html).toContain("glanceTo(16, 10, 1500, 1500)");
+    expect(html).toContain("looks over at Red while Red talks");
+    expect(html).toMatch(/\.redsay \{ position: absolute; left: 240px; top: 600px;/);
   });
 
   it("has a site card that shows the approved address only on the YouTube layout", () => {

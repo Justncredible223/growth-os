@@ -172,7 +172,7 @@
   .red.show { left: 26px; }
   .red svg { width: 230px; height: 300px; overflow: visible; animation: redBob 0.5s ease-in-out infinite alternate; }
   @keyframes redBob { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-14px) rotate(5deg); } }
-  .redsay { position: absolute; left: 240px; top: 700px; max-width: 560px; padding: 18px 26px; border-radius: 28px 28px 28px 6px; background: #ff5d73; color: #fff; font-size: 40px; font-weight: 900; line-height: 1.15; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.7); transform-origin: 0 100%; transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2, .9, .2, 1.3); pointer-events: none; }
+  .redsay { position: absolute; left: 240px; top: 600px; max-width: 560px; padding: 18px 26px; border-radius: 28px 28px 28px 6px; background: #ff5d73; color: #fff; font-size: 40px; font-weight: 900; line-height: 1.15; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.7); transform-origin: 0 100%; transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2, .9, .2, 1.3); pointer-events: none; }
   .redsay.show { opacity: 1; transform: none; }
   .redsay b { display: block; font-size: 22px; letter-spacing: 3px; opacity: 0.85; margin-bottom: 4px; }
   body.safe-tiktok .red { top: 700px; width: 190px; }
@@ -399,6 +399,12 @@
   // ---- attention: reacting to the co-host (duo mode). He looks toward you and leans in while you talk, nods when you
   // land a point, and goes into a thinking pose between your last word and his first. It only shows while he is not
   // talking himself, and it times out so a missed "idle" can never leave him staring at you.
+  // ---- glances: his eyes go to what he is talking about (the question bubble, the card, Red) and come back. This
+  // is what stops him staring down the lens at everything, which is most of what reads as "a puppet".
+  const glance = { x: 0, y: 0, until: 0, w: 0 };
+  function glanceTo(x, y, ms, delay) {
+    setTimeout(() => { glance.x = x; glance.y = y; glance.until = performance.now() + ms; }, delay || 0);
+  }
   const ATTENTION_SIDES = { left: [-1, 0], right: [1, 0], down: [0, 1] };
   const attention = { mode: "idle", side: "down", until: 0, nodStart: -1e9, w: 0 };
   function react(data) {
@@ -530,7 +536,8 @@
     for (const id of ["lidL", "lidR", "lidLb", "lidRb"]) $(id).setAttribute("fill", lidCol);
 
     // pupils wander a little, look where the mood says
-    const wx = Math.sin(t / 1300) * 5 * (1 - aw * 0.7) + cur.px + gazeX, wy = Math.cos(t / 1700) * 4 * (1 - aw * 0.7) + cur.py + gazeY;
+    glance.w = lerp(glance.w, t < glance.until ? 1 : 0, Math.min(1, dt * 0.012));
+    const wx = Math.sin(t / 1300) * 5 * (1 - aw * 0.7) + cur.px + gazeX + glance.x * glance.w, wy = Math.cos(t / 1700) * 4 * (1 - aw * 0.7) + cur.py + gazeY + glance.y * glance.w;
     $("pupilL").setAttribute("transform", `translate(${wx} ${wy})`);
     $("pupilR").setAttribute("transform", `translate(${wx} ${wy})`);
 
@@ -714,6 +721,7 @@
     const tag = document.createElement("b"); tag.textContent = "RED";
     bubble.append(tag, document.createTextNode(s.text));
     $("red").classList.add("show");
+    glanceTo(-18, 3, ((s.durationSeconds || 2.4) + 0.4) * 1000, 100); // looks over at Red while Red talks
     setTimeout(() => bubble.classList.add("show"), 250);
     setMood("shocked");
     current = { id: line.id, words: [], spans: [], startedAt: performance.now(), duration: 999, hasAudio: true, sidekick: true };
@@ -753,6 +761,9 @@
     clearProps();
     attention.mode = "idle";
     maybeShowSiteCard(line);
+    // Look at the question he is answering (top left) as he starts, then at the card (right) when it lands.
+    if (Array.isArray(line.replyingTo) && line.replyingTo.length > 0) glanceTo(-17, -12, 1700, 250);
+    if (line.card) glanceTo(16, 10, 1500, 1500);
     const hasAudio = !DEMO && line.audioUrl;
     const duration = line.durationSeconds || Math.max(2.5, line.spokenText.length / 15.5);
     const words = (line.words && line.words.length ? line.words.map((w) => ({ text: w.text, start: w.startSeconds, end: w.endSeconds })) : estimateWords(line.spokenText, duration));

@@ -13,6 +13,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 export interface TtsRequest {
   voice: string;
   rate: string;
+  /** Pitch shift such as "+4Hz"; omitted means the voice's own pitch. */
+  pitch?: string;
   textFile: string;
   mediaPath: string;
   wordsPath: string;
