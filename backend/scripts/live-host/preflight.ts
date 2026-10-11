@@ -23,6 +23,11 @@ export interface CheckResult {
 const check = (status: CheckStatus, name: string, detail: string): CheckResult => ({ status, name, detail });
 
 /** The environment the worker needs. Pure, so it can be tested without a network. */
+/** The stage source URL OBS should be using for this platform (the TikTok-safe layout only for non-YouTube). */
+export function expectedStageUrl(port: number, platform: string): string {
+  return `http://127.0.0.1:${port}/${platform.toLowerCase() === "youtube" ? "" : "?safe=tiktok"}`;
+}
+
 export function checkEnvironment(env: NodeJS.ProcessEnv): CheckResult[] {
   const results: CheckResult[] = [];
   const token = env.GROWTH_OS_AUTOMATION_TOKEN ?? "";
@@ -34,18 +39,22 @@ export function checkEnvironment(env: NodeJS.ProcessEnv): CheckResult[] {
   results.push(mode === "duo" ? check("PASS", "Mode", "duo (co-host console, Tilt speaks only when addressed)") : check("WARN", "Mode", "solo: Tilt will run segments by himself; set LIVE_HOST_MODE=duo for TikTok"));
   const platform = (env.LIVE_HOST_PLATFORM ?? "").toLowerCase();
   results.push(platform ? check("PASS", "Platform", platform) : check("WARN", "Platform", "LIVE_HOST_PLATFORM not set; he will point to the bio instead of saying the website"));
+  if (platform === "youtube" && mode === "duo") results.push(check("WARN", "Platform / mode", "YouTube with duo mode: fine for a co-hosted stream; for the unattended solo stream leave LIVE_HOST_MODE unset"));
   return results;
 }
 
 /** Turns the Growth OS status payload into checks. Pure. */
-export function checkGrowthOsStatus(status: {
-  configured?: boolean;
-  systemPaused?: boolean;
-  budgetReached?: boolean;
-  todaySpendUsd?: number;
-  settings?: { desiredState?: string; dailyBudgetUsd?: number };
-  session?: { workerOnline?: boolean } | null;
-}): CheckResult[] {
+export function checkGrowthOsStatus(
+  status: {
+    configured?: boolean;
+    systemPaused?: boolean;
+    budgetReached?: boolean;
+    todaySpendUsd?: number;
+    settings?: { desiredState?: string; dailyBudgetUsd?: number; youtubeVideoId?: string | null; tiktokChatEnabled?: boolean };
+    session?: { workerOnline?: boolean } | null;
+  },
+  platform: string = "",
+): CheckResult[] {
   const results: CheckResult[] = [];
   results.push(status.configured === false ? check("FAIL", "Live Host tables", "not set up: apply migration 0049_live_host.sql") : check("PASS", "Live Host tables", "present"));
   results.push(status.systemPaused ? check("FAIL", "System pause", "Growth OS is paused; Tilt will not speak") : check("PASS", "System pause", "not paused"));
@@ -58,6 +67,14 @@ export function checkGrowthOsStatus(status: {
         ? check("WARN", "Daily budget", `$${spent.toFixed(2)} of $${budget.toFixed(2)} used`)
         : check("PASS", "Daily budget", `$${spent.toFixed(2)} of $${budget.toFixed(2)} used`),
   );
+  if (platform.toLowerCase() === "youtube") {
+    results.push(
+      status.settings?.youtubeVideoId
+        ? check("PASS", "YouTube live link", `set (${status.settings.youtubeVideoId}): chat will be read from that video`)
+        : check("FAIL", "YouTube live link", "no YouTube live link in the app's Live Host tab: without it he cannot read chat. Paste the live's link there once the live is created"),
+    );
+    if (status.settings?.tiktokChatEnabled) results.push(check("PASS", "TikTok chat setting", "on in the app, but ignored on a YouTube stream"));
+  }
   results.push(
     status.settings?.desiredState === "on"
       ? check("WARN", "Owner switch", "ON: the worker will start Tilt (and the OBS stream, unless LIVE_HOST_OBS_STREAM=off) as soon as it runs")
@@ -79,7 +96,7 @@ async function growthOs(env: NodeJS.ProcessEnv): Promise<CheckResult[]> {
     if (res.status === 401) return [check("FAIL", "Growth OS login", "401: the automation token does not match APP_API_TOKEN_AUTOMATION in Vercel")];
     if (!res.ok) return [check("FAIL", "Growth OS login", `HTTP ${res.status}`)];
     const body = (await res.json()) as Parameters<typeof checkGrowthOsStatus>[0];
-    return [check("PASS", "Growth OS login", `ok (${((Date.now() - started) / 1000).toFixed(1)}s round trip)`), ...checkGrowthOsStatus(body)];
+    return [check("PASS", "Growth OS login", `ok (${((Date.now() - started) / 1000).toFixed(1)}s round trip)`), ...checkGrowthOsStatus(body, env.LIVE_HOST_PLATFORM ?? "")];
   } catch (err) {
     return [check("FAIL", "Growth OS login", `could not reach ${base}: ${err instanceof Error ? err.message : String(err)}`)];
   }
@@ -97,8 +114,22 @@ async function obs(env: NodeJS.ProcessEnv): Promise<CheckResult[]> {
     try {
       const items = (await client.request("GetSceneItemList", { sceneName: OBS_SCENE_NAME })).sceneItems as Array<{ sourceName: string; sourceType: string; inputKind?: string }> | undefined;
       results.push(items?.some((item) => item.sourceName === OBS_SOURCE_NAME) ? check("PASS", "Stage source", `"${OBS_SOURCE_NAME}" is in the scene`) : check("FAIL", "Stage source", `"${OBS_SOURCE_NAME}" is missing from the scene`));
+      try {
+        const settings = (await client.request("GetInputSettings", { inputName: OBS_SOURCE_NAME })).inputSettings as { url?: string } | undefined;
+        const port = Number(env.LIVE_HOST_PORT) || 8790;
+        const expected = expectedStageUrl(port, env.LIVE_HOST_PLATFORM ?? "");
+        results.push(
+          settings?.url === expected
+            ? check("PASS", "Stage layout", `${settings.url} (matches ${env.LIVE_HOST_PLATFORM || "unknown"})`)
+            : check("FAIL", "Stage layout", `the OBS stage source points to ${settings?.url ?? "nothing"}, expected ${expected}: run LIVE_HOST_PLATFORM=${env.LIVE_HOST_PLATFORM || "<platform>"} npm run live-host:setup-obs`),
+        );
+      } catch {
+        results.push(check("WARN", "Stage layout", "could not read the stage source's URL"));
+      }
       const camera = items?.some((item) => /dshow_input|v4l2_input|av_capture_input|macos-avcapture|window_capture|monitor_capture|game_capture/.test(item.inputKind ?? ""));
-      results.push(camera ? check("PASS", "Camera / capture", "a capture source is in the scene") : check("WARN", "Camera / capture", "no camera or capture source in the scene yet (duo mode needs you on camera)"));
+      const duoMode = (env.LIVE_HOST_MODE ?? "").toLowerCase() === "duo";
+      if (duoMode) results.push(camera ? check("PASS", "Camera / capture", "a capture source is in the scene") : check("WARN", "Camera / capture", "no camera or capture source in the scene yet (duo mode needs you on camera)"));
+      else results.push(check("PASS", "Camera / capture", "not needed: solo mode runs without anyone on camera"));
     } catch {
       results.push(check("WARN", "Stage source", "could not list the scene items"));
     }

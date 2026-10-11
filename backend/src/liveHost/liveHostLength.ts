@@ -25,7 +25,7 @@ export function spokenWordLimit(context: LengthContext): number | null {
   if (context.joinWelcome) return 40;
   if (context.show) return 60;
   if (context.duo) return context.segment ? 60 : 55;
-  if (context.segment) return 70;
+  if (context.segment) return 60;
   return null;
 }
 

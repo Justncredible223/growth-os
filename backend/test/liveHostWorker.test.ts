@@ -191,6 +191,13 @@ describe("live host stage page", () => {
     expect(workerSource).toContain('broadcast("state", { live, duo: config.duo })');
   });
 
+  it("uses a creator-free thought list on a YouTube solo stage (no hands on screen there)", () => {
+    const soloBlock = html.split("const THOUGHTS_SOLO = [")[1]!.split("];")[0]!;
+    expect(soloBlock).not.toMatch(/hands down there|my creator|the creator|hostage|management/i);
+    expect(soloBlock).toContain("I am the entire crew");
+    expect(html).toContain('document.body.classList.contains("safe-tiktok") ? THOUGHTS : THOUGHTS_SOLO');
+  });
+
   it("loads nothing from the internet while live", () => {
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
   });

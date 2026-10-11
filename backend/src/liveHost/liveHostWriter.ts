@@ -92,6 +92,8 @@ export interface LiveLineRequest {
   /** How many more joined than are named in `joiners`. */
   otherJoiners?: number;
   retryFeedback?: string;
+  /** Where the stream is, as the worker reports it. "youtube" changes what is on screen and what may be said. */
+  platform?: string;
   /** Duo mode: the owner is on camera beside Tilt. Replies are short and conversational, segments are run with him. */
   duo?: boolean;
 }
@@ -205,6 +207,12 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
       ? "Fillbook: mention it only if it is the honest answer to what was asked, or if the segment brief calls for it."
       : "Fillbook: it has come up enough lately. Do NOT mention Fillbook or the site in this line unless a viewer above asked about it directly.",
   );
+
+  if (request.platform === "youtube" && !request.duo) {
+    lines.push(
+      "This stream is on YouTube and nobody is on camera: there are no hands on screen and no creator to tease, so leave the hands and creator bits alone. You are the whole show. The website may be said, as fillbookhq dot com, when it is the honest answer. Nothing is open for entry or sign-up tonight, so never mention a giveaway, a prize or anything to enter.",
+    );
+  }
 
   if (request.linkInBio) {
     lines.push(

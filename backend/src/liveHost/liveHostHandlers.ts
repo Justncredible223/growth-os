@@ -67,6 +67,8 @@ export function splitRedLine(spokenText: string): { redLine: string | null; tilt
  * while someone has joined or chatted within this long; otherwise he stays quiet until the next person arrives.
  */
 export const AUDIENCE_PRESENT_FOR_MS = 3 * 60_000;
+/** On YouTube the host opens the room for this long even if nobody has chatted yet. */
+export const YOUTUBE_OPENING_GRACE_MS = 6 * 60_000;
 const JOIN_WELCOME_TITLE = "New Arrivals";
 /** Most messages taken from the worker in one tick; a flood is trimmed, newest kept. */
 const MAX_INCOMING_PER_TICK = 40;
@@ -785,14 +787,22 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
         lastWelcome ? new Date(lastWelcome.createdAt).getTime() : 0,
         lastMessageAt ? new Date(lastMessageAt).getTime() : 0,
       );
-      if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS) return base;
+      // YouTube does not tell the worker who joins, so presence is only ever a chat message. For the first minutes of a
+      // YouTube show he opens the room anyway (the welcome and the first segments are what bring chat in); after that
+      // the owner's rule applies again and he is quiet until someone says something.
+      const openingGrace = input.platform === "youtube" && sessionAgeMs < YOUTUBE_OPENING_GRACE_MS;
+      if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS && !openingGrace) return base;
     }
     const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS;
     segment = nextSegment(session.lastSegment, spotDue);
   }
   const fillbookMentionAllowed = askedDirectly || segment?.isFillbookSpot === true || recentMentions < PROMO_MAX_MENTIONS;
   // TikTok chat on means the stream is on TikTok, where sending viewers off-platform is a LIVE violation.
-  const linkInBio = settings.tiktokChatEnabled || input.platform !== "youtube";
+  // The worker states where it is streaming. An explicit "youtube" that is not also reading TikTok chat means the
+  // website may be said; anything else (TikTok, both, unknown) points to the link in the bio. The owner's TikTok-chat
+  // setting alone no longer forces the bio on a YouTube stream.
+  const workerReadingTiktokChat = (input.workerInfo as { tiktokChat?: unknown } | undefined)?.tiktokChat === true;
+  const linkInBio = input.platform !== "youtube" || workerReadingTiktokChat;
   const previousLine = recentUtterances[0]?.spokenText ?? null;
 
   // Who has spoken before in this session, to welcome first-timers by name.
@@ -834,7 +844,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, retryFeedback }, grounding, joinWelcome || (input.duo === true && batch.length > 0) ? MODEL_HAIKU : undefined);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, retryFeedback }, grounding, joinWelcome || (input.duo === true && batch.length > 0) ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0 && copiesExampleLine(draft.reply)) problem = "copies a line from the character examples; write a fresh one";
         if (!problem && draft.reply.length > 0) {

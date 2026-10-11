@@ -317,7 +317,7 @@ length is enforced in code (`liveHostLength.ts`) and not just asked for in the p
 | Opening / sign-off | 60 words |
 | Duo reply to the co-host | 55 words |
 | Duo segment | 60 words |
-| Solo segment | 70 words |
+| Solo segment | 60 words |
 | Solo reply to chat | the 420-character limit only |
 
 A draft over its limit is sent back once with the count. If it is still over, whole sentences are dropped, middle
@@ -339,3 +339,47 @@ While you talk, he looks like he is listening:
 Set where you are relative to him with `LIVE_HOST_COHOST_SIDE` = `left`, `right` or `down` (default `down`, the camera
 feed at the bottom of the frame). Reactions are sent from the console to the worker's `/react` route (same local-only
 trust check as `/ask`) and on to the stage.
+
+## First solo YouTube stream: runbook
+
+Solo means nobody is on camera and nobody types prompts: Tilt runs the show by himself, reading YouTube chat.
+
+**What is different from TikTok / duo**
+
+- `LIVE_HOST_PLATFORM=youtube` and `LIVE_HOST_MODE` left unset. An explicit `youtube` is authoritative: he may say
+  "fillbookhq dot com" even if the TikTok chat setting is on in the app, and the TikTok chat reader is never started.
+- The stage must be pointed at the YouTube layout (no TikTok safe zones, no hands bit): re-run setup with the platform
+  set. `npm run live-host:preflight` fails if the OBS stage source is on the wrong layout.
+- No "hands" jokes on screen (there are none on YouTube).
+- Opens the room for the first 6 minutes even before anyone has chatted (YouTube cannot tell him who is watching);
+  after that he follows the owner rule again and is quiet until someone says something. `LIVE_HOST_IDLE_SEGMENTS=on`
+  makes him run segments regardless.
+- He never mentions a giveaway, a prize or anything to enter, and neither confirms nor denies one if asked.
+
+**Before the stream**
+
+1. YouTube Studio: create the live (Go live, Stream), live chat on, not made for kids. Put the stream key in OBS under
+   Settings, Stream (YouTube, RTMPS). Copy the live's link.
+2. Growth OS app, More, Live Host: paste the link into the YouTube live link field. Without it he cannot read chat.
+3. In a terminal in `backend`:
+
+```
+$env:LIVE_HOST_PLATFORM = "youtube"
+Remove-Item Env:LIVE_HOST_MODE -ErrorAction SilentlyContinue
+npm run live-host:setup-obs
+npm run live-host:preflight
+```
+
+   Fix every FAIL it prints. WARNs are for you to read.
+
+**Going live**
+
+1. `npm run live-host:supervised` (restarts the worker if it ever crashes). Leave the switch OFF; he stays idle.
+2. Flip the switch ON in the app. The worker starts OBS streaming and he opens.
+3. In YouTube Studio, press Go Live once the preview shows the picture (chat only exists after that).
+
+**Ending**: flip the switch OFF in the app (stops OBS streaming), then end the stream in YouTube Studio.
+
+**Things to know**: the canvas is vertical (1080 x 1920); YouTube shows that portrait on phones and pillarboxed on a
+desktop. Daily budget is $3 across Growth OS; an hour of solo running is roughly $1 to $2. If something goes wrong:
+switch OFF in the app first, always.

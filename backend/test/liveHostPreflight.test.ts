@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkEnvironment, checkGrowthOsStatus } from "../scripts/live-host/preflight";
+import { checkEnvironment, checkGrowthOsStatus, expectedStageUrl } from "../scripts/live-host/preflight";
 
 const byName = (results: Array<{ name: string; status: string }>, name: string) => results.find((r) => r.name === name)?.status;
 
@@ -22,6 +22,21 @@ describe("preflight environment checks", () => {
     const duo = checkEnvironment({ GROWTH_OS_AUTOMATION_TOKEN: "a".repeat(40), LIVE_HOST_MODE: "duo", LIVE_HOST_PLATFORM: "tiktok" });
     expect(byName(duo, "Mode")).toBe("PASS");
     expect(byName(duo, "Platform")).toBe("PASS");
+  });
+});
+
+describe("preflight for a YouTube solo stream", () => {
+  it("fails without a YouTube live link in the app, and passes with one", () => {
+    expect(byName(checkGrowthOsStatus({ settings: { dailyBudgetUsd: 3 } }, "youtube"), "YouTube live link")).toBe("FAIL");
+    expect(byName(checkGrowthOsStatus({ settings: { dailyBudgetUsd: 3, youtubeVideoId: "abcdefghijk" } }, "youtube"), "YouTube live link")).toBe("PASS");
+    expect(byName(checkGrowthOsStatus({ settings: { dailyBudgetUsd: 3 } }, "tiktok"), "YouTube live link")).toBeUndefined();
+  });
+
+  it("expects the TikTok-safe stage layout only off YouTube", () => {
+    expect(expectedStageUrl(8790, "youtube")).toBe("http://127.0.0.1:8790/");
+    expect(expectedStageUrl(8790, "YouTube")).toBe("http://127.0.0.1:8790/");
+    expect(expectedStageUrl(8790, "tiktok")).toBe("http://127.0.0.1:8790/?safe=tiktok");
+    expect(expectedStageUrl(8790, "")).toBe("http://127.0.0.1:8790/?safe=tiktok");
   });
 });
 

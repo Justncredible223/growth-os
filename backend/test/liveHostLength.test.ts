@@ -15,7 +15,7 @@ describe("spokenWordLimit", () => {
     expect(spokenWordLimit({ duo: false, show: false, segment: false, joinWelcome: true })).toBe(40);
     expect(spokenWordLimit({ duo: true, show: true, segment: true, joinWelcome: false })).toBe(60);
     expect(spokenWordLimit({ duo: true, show: false, segment: false, joinWelcome: false })).toBe(55);
-    expect(spokenWordLimit({ duo: false, show: false, segment: true, joinWelcome: false })).toBe(70);
+    expect(spokenWordLimit({ duo: false, show: false, segment: true, joinWelcome: false })).toBe(60);
     expect(spokenWordLimit({ duo: false, show: false, segment: false, joinWelcome: false })).toBeNull();
   });
 });
