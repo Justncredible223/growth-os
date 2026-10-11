@@ -36,6 +36,41 @@ import { screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js"
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
 const HOST_PAGE_FILE = join(HERE, "stage", "host.html");
+const CONTROL_PAGE_FILE = join(HERE, "stage", "control.html");
+
+/** The operator switches the control panel can flip. Pure data so it can be tested. */
+export interface OperatorControls {
+  paused: boolean;
+  muted: boolean;
+  chat: boolean;
+  promos: boolean;
+  emergency: boolean;
+}
+
+export const CONTROL_ACTIONS = ["pause", "resume", "mute", "unmute", "interrupt", "skip", "chat_on", "chat_off", "promos_on", "promos_off", "emergency_stop", "topic"] as const;
+export type ControlAction = (typeof CONTROL_ACTIONS)[number];
+
+/** Applies a switch action to the control state. Interrupt, skip and topic do not change switches. */
+export function applyControl(state: OperatorControls, action: ControlAction): OperatorControls {
+  switch (action) {
+    case "pause": return { ...state, paused: true };
+    case "resume": return { ...state, paused: false, emergency: false };
+    case "mute": return { ...state, muted: true };
+    case "unmute": return { ...state, muted: false };
+    case "chat_on": return { ...state, chat: true };
+    case "chat_off": return { ...state, chat: false };
+    case "promos_on": return { ...state, promos: true };
+    case "promos_off": return { ...state, promos: false };
+    case "emergency_stop": return { ...state, paused: true, emergency: true };
+    default: return state;
+  }
+}
+
+/** Seconds to wait before the next tick: the normal beat, doubling per consecutive failure up to a ceiling. */
+export function tickDelayMs(consecutiveFailures: number, baseMs = 1_500, ceilingMs = 30_000): number {
+  if (consecutiveFailures <= 0) return baseMs;
+  return Math.min(ceilingMs, baseMs * 2 ** Math.min(consecutiveFailures, 6));
+}
 const WORD_TIMING_SCRIPT = join(HERE, "..", "video-factory", "edge_tts_words.py");
 const TTS_SERVER_SCRIPT = join(HERE, "tts_server.py");
 const STAGE_ASSETS_DIR = join(HERE, "stage", "assets");
@@ -685,6 +720,108 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       createReadStream(file).pipe(res);
       return;
     }
+    // ---- operator control panel (solo or duo): local only, trusted-host header, optional shared token ----
+    const controlToken = process.env.LIVE_HOST_CONTROL_TOKEN ?? "";
+    const controlAllowed = (withHeader: boolean): boolean => {
+      if (!isTrustedHostRequest({ ...req.headers, ...(withHeader ? {} : { "x-live-host": "1" }) }, config.port)) return false;
+      return controlToken === "" || req.headers["x-live-host-token"] === controlToken;
+    };
+    if (req.method === "GET" && url.pathname === "/control") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      createReadStream(CONTROL_PAGE_FILE).pipe(res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/health") {
+      if (!controlAllowed(false)) {
+        res.writeHead(403).end();
+        return;
+      }
+      const sinceTick = lastTickOkAt === 0 ? null : Math.round((Date.now() - lastTickOkAt) / 1000);
+      const health = {
+        status: !live ? "off" : controls.emergency ? "emergency-stopped" : consecutiveTickFailures >= 3 ? "degraded" : stageClients.size === 0 ? "no-stage" : "ok",
+        live,
+        platform: config.platform,
+        controls,
+        speaking: speaking?.id ?? null,
+        waitingLine: waitingLineId,
+        stageClients: stageClients.size,
+        obsConnected: obs?.connected ?? false,
+        recording: recordingOn,
+        secondsSinceLastGoodTick: sinceTick,
+        consecutiveTickFailures,
+        lastNote,
+        spendTodayUsd: lastSpendUsd,
+        segmentRequest: segmentRequest?.id ?? (segmentRequest ? "next" : null),
+        uptimeSeconds: Math.round((Date.now() - startedAtMs) / 1000),
+        segments: duoSegmentChoices(),
+      };
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(health));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/control") {
+      if (!controlAllowed(true)) {
+        res.writeHead(403).end();
+        return;
+      }
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+        if (raw.length > 1_000) req.destroy();
+      });
+      req.on("end", () => {
+        let body: { action?: unknown; id?: unknown } = {};
+        try {
+          body = raw.trim() ? (JSON.parse(raw) as typeof body) : {};
+        } catch {
+          res.writeHead(400).end();
+          return;
+        }
+        const action = body.action as ControlAction;
+        if (!CONTROL_ACTIONS.includes(action)) {
+          res.writeHead(400).end();
+          return;
+        }
+        void (async () => {
+          controls = applyControl(controls, action);
+          if (action === "mute" || action === "unmute") broadcast("mute", { on: controls.muted });
+          if (action === "interrupt" || action === "skip" || action === "emergency_stop") {
+            broadcast("silence", {});
+            if (speaking) await finishLine(speaking.id, "dropped");
+            else if (waitingLineId && action !== "interrupt") {
+              finished.set(waitingLineId, "dropped");
+              await confirm(waitingLineId);
+            }
+            if (fillerPlaying) {
+              clearTimeout(fillerPlaying);
+              fillerPlaying = null;
+            }
+          }
+          if (action === "emergency_stop") {
+            live = false;
+            broadcast("state", { live: false, duo: config.duo });
+            try {
+              if (obs) {
+                await obs.connect();
+                await obs.stopStream();
+              }
+            } catch (err) {
+              log(`emergency stop: OBS did not confirm (${err instanceof Error ? err.message : String(err)}). Stop the stream in OBS by hand.`);
+            }
+            log("EMERGENCY STOP: speech silenced, stream stopped, paused until resumed");
+          }
+          if (action === "topic") {
+            const request = parseSegmentRequest({ id: typeof body.id === "string" ? body.id : undefined });
+            if (request && !segmentRequest) {
+              segmentRequest = { id: request.id, until: Date.now() + DUO_SEGMENT_REQUEST_MS };
+              controls = { ...controls, paused: false };
+            }
+          }
+          log(`operator: ${action}`);
+          res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, controls }));
+        })();
+      });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/done") {
       let raw = "";
       req.on("data", (chunk) => (raw += chunk));
@@ -713,10 +850,16 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   let obsWarned = false;
   async function setStreaming(on: boolean): Promise<void> {
     if (!obs || !config.obsControlsStream) return;
+    // After an emergency stop nothing restarts the broadcast until the operator resumes.
+    if (on && controls.emergency) return;
     try {
       await obs.connect();
       if (on) await obs.startStream();
       else await obs.stopStream();
+      if (recordingOn) {
+        if (on) await obs.startRecording();
+        else await obs.stopRecording();
+      }
       obsWarned = false;
     } catch (err) {
       if (!obsWarned) log(`OBS control unavailable (${err instanceof Error ? err.message : String(err)}). Start and stop the stream in OBS by hand, or fix the connection.`);
@@ -773,6 +916,11 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   let lastNote: string | null = null;
   /** Set when a tick found new comments: the loop skips its wait so the answer starts being drafted at once. */
   let tickAgainNow = false;
+  const startedAtMs = Date.now();
+  let controls: OperatorControls = { paused: false, muted: false, chat: true, promos: true, emergency: false };
+  let lastTickOkAt = 0;
+  let waitingLineId: string | null = null;
+  const recordingOn = process.env.LIVE_HOST_RECORD === "on";
   let ticksSinceStreamCheck = 0;
   /** Until the server has answered one tick, this process is "fresh": it asks for a new show if the room has been quiet. */
   let freshStart = true;
@@ -825,7 +973,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         action: "tick",
         // Busy also covers "nothing can be said right now": no stage page to say it on, or the voice is being
         // retried. The server then takes chat in but does not spend a model call on a line nobody would hear.
-        busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt || emptyRoom,
+        busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt || emptyRoom || controls.paused,
+        controls: { chat: controls.chat, promos: controls.promos },
         platform: config.platform,
         costMode: config.costMode,
         fresh: freshStart,
@@ -834,7 +983,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
         joins,
-        ...(config.duo ? { duo: true, hostName: config.hostName, hostMessages, ...(segmentRequest ? { runSegment: { id: segmentRequest.id } } : {}) } : {}),
+        ...(config.duo ? { duo: true, hostName: config.hostName, hostMessages } : {}),
+        ...(segmentRequest ? { runSegment: { id: segmentRequest.id } } : {}),
         workerInfo: { stageClients: stageClients.size, voice: config.voice, obs: obs?.connected ?? false, tiktokChat: tiktok.connected },
       })) as TickResult;
     } catch (err) {
@@ -850,6 +1000,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       return;
     }
     consecutiveTickFailures = 0;
+    lastTickOkAt = Date.now();
     freshStart = false;
 
     if (segmentRequest && (result.utterance?.kind === "segment" || Date.now() > segmentRequest.until)) segmentRequest = null;
@@ -891,7 +1042,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
 
     const line = result.utterance;
     // The real line waits for the instant reaction to finish; the server keeps handing it out until it is spoken.
-    if (!live || !line || speaking || fillerPlaying) return;
+    waitingLineId = line?.id ?? null;
+    if (!live || !line || speaking || fillerPlaying || controls.paused) return;
     if (finished.has(line.id)) {
       // Already said (or dropped) and the confirmation did not land: confirm again, do not say it again.
       await confirm(line.id);
@@ -991,7 +1143,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       tickAgainNow = false;
       continue;
     }
-    await new Promise((resolve) => setTimeout(resolve, TICK_MS));
+    await new Promise((resolve) => setTimeout(resolve, tickDelayMs(consecutiveTickFailures, TICK_MS)));
   }
 }
 

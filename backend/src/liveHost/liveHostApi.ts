@@ -4,6 +4,7 @@ import { getServiceClient } from "../lib/supabaseClient.js";
 import {
   LiveHostActionError,
   getLiveHostReport,
+  getLiveHostTranscript,
   getLiveHostStatus,
   isMissingLiveHostTables,
   markUtteranceSpoken,
@@ -15,7 +16,7 @@ import {
 } from "./liveHostHandlers.js";
 
 /** The Live Host actions the PC worker performs with the automation token. Everything else on the resource is owner-only. */
-const LIVE_HOST_WORKER_ACTIONS = new Set(["tick", "spoken", "report"]);
+const LIVE_HOST_WORKER_ACTIONS = new Set(["tick", "spoken", "report", "transcript"]);
 
 /** True for the Live Host calls the automation token may make: reading status, and the worker's own tick/spoken. */
 /**
@@ -113,6 +114,7 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
       ackFirst?: boolean;
       controls?: unknown;
       limit?: number;
+      sessionId?: string;
       hostMessages?: TickInput["hostMessages"];
       hostName?: unknown;
       runSegment?: TickInput["runSegment"];
@@ -140,6 +142,13 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
         res.status(200).json(
           await runLiveHostTick(client, tickInputFromBody(body)),
         );
+        return;
+      case "transcript":
+        if (typeof body.sessionId !== "string" || body.sessionId.length === 0) {
+          res.status(400).json({ error: "Body must include { sessionId: string }" });
+          return;
+        }
+        res.status(200).json(await getLiveHostTranscript(client, body.sessionId));
         return;
       case "report":
         res.status(200).json(await getLiveHostReport(client, typeof body.limit === "number" ? body.limit : 8));

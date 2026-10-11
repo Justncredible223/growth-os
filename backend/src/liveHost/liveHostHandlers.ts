@@ -860,7 +860,8 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   let segment = null;
   // The co-host's "run a segment" button, honoured only in duo mode. A typed prompt waiting comes first: the
   // button is ignored on that tick and the worker keeps asking until a segment line comes back.
-  const forceSegment = input.duo === true && input.runSegment != null && batch.length === 0;
+  // An operator-pressed segment (duo console or the solo control panel) runs now, whatever the audience rules say.
+  const forceSegment = input.runSegment != null && batch.length === 0;
   // Duo mode: Tilt speaks when he is spoken to. Nothing typed, nothing said.
   if (input.duo && batch.length === 0 && !forceSegment) return base;
   if (forceSegment) {
@@ -1256,4 +1257,45 @@ export async function getLiveHostReport(client: SupabaseClient, limit = 8, now: 
   }
   if (episodes.length === 0) changeNotes.push("No sessions recorded yet.");
   return { generatedAt: now.toISOString(), episodes, changeNotes };
+}
+
+export interface LiveHostTranscriptLine {
+  id: string;
+  kind: string;
+  segment: string | null;
+  text: string;
+  spokenAt: string | null;
+  repliedTo: string[];
+  question: string | null;
+}
+
+/** The spoken lines of one session, in order, with the viewer question each reply answered. For clip selection. */
+export async function getLiveHostTranscript(client: SupabaseClient, sessionId: string): Promise<{ sessionId: string; startedAt: string | null; lines: LiveHostTranscriptLine[] }> {
+  const { data: session } = await client.from("live_host_sessions").select("id, started_at").eq("id", sessionId).limit(1);
+  const startedAt = ((session ?? []) as Array<{ started_at: string }>)[0]?.started_at ?? null;
+  const { data: utterances } = await client.from("live_host_utterances").select("id, kind, segment, spoken_text, spoken_at, status, created_at").eq("session_id", sessionId).order("created_at", { ascending: true }).limit(2000);
+  const rows = ((utterances ?? []) as Array<{ id: string; kind: string; segment: string | null; spoken_text: string; spoken_at: string | null; status: string }>).filter((u) => u.status === "spoken");
+  const { data: messages } = await client.from("live_host_messages").select("author_name, body, utterance_id").eq("session_id", sessionId).not("utterance_id", "is", null).limit(5000);
+  const byUtterance = new Map<string, Array<{ author_name: string; body: string }>>();
+  for (const m of (messages ?? []) as Array<{ author_name: string; body: string; utterance_id: string }>) {
+    const list = byUtterance.get(m.utterance_id) ?? [];
+    list.push(m);
+    byUtterance.set(m.utterance_id, list);
+  }
+  return {
+    sessionId,
+    startedAt,
+    lines: rows.map((u) => {
+      const replies = byUtterance.get(u.id) ?? [];
+      return {
+        id: u.id,
+        kind: u.kind,
+        segment: u.segment,
+        text: u.spoken_text,
+        spokenAt: u.spoken_at,
+        repliedTo: replies.map((r) => r.author_name),
+        question: replies[0]?.body ?? null,
+      };
+    }),
+  };
 }

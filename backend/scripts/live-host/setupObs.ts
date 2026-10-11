@@ -15,12 +15,17 @@ import { ObsClient } from "./obsClient.js";
 
 export const OBS_SCENE_NAME = "Tilt Live";
 export const OBS_SOURCE_NAME = "Tilt Stage";
-export const STAGE_WIDTH = 1080;
-export const STAGE_HEIGHT = 1920;
+/** Vertical 1080x1920 by default; LIVE_HOST_LAYOUT=wide gives the horizontal 1920x1080 layout (YouTube only). */
+export function isWideLayout(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.LIVE_HOST_LAYOUT ?? "").toLowerCase() === "wide" && (env.LIVE_HOST_PLATFORM ?? "").toLowerCase() === "youtube";
+}
+export const STAGE_WIDTH = isWideLayout() ? 1920 : 1080;
+export const STAGE_HEIGHT = isWideLayout() ? 1080 : 1920;
 
 /** The stage address. Anything but a YouTube-only stream uses the TikTok-safe layout, which is fine on YouTube too. */
 export function stageUrl(port: number, platform: string = process.env.LIVE_HOST_PLATFORM ?? ""): string {
-  return `http://127.0.0.1:${port}/${platform.toLowerCase() === "youtube" ? "" : "?safe=tiktok"}`;
+  if (platform.toLowerCase() === "youtube") return `http://127.0.0.1:${port}/${isWideLayout() ? "?layout=wide" : ""}`;
+  return `http://127.0.0.1:${port}/?safe=tiktok`;
 }
 
 export function stageSourceSettings(port: number, platform?: string): Record<string, unknown> {

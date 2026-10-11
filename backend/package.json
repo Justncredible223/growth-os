@@ -12,6 +12,8 @@
     "live-host:setup-obs": "tsx --env-file-if-exists=.env.local scripts/live-host/setupObs.ts",
     "live-host:supervised": "tsx scripts/live-host/supervise.ts",
     "live-host:preflight": "tsx --env-file-if-exists=.env.local scripts/live-host/preflight.ts",
+    "live-host:clips": "tsx --env-file-if-exists=.env.local scripts/live-host/clipQueue.ts",
+    "live-host:report": "tsx --env-file-if-exists=.env.local scripts/live-host/episodeReport.ts",
     "live-host:install-tiktok-reader": "npm install --no-save --no-audit --no-fund tiktok-live-connector"
   },
   "dependencies": {

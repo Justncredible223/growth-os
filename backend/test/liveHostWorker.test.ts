@@ -484,3 +484,43 @@ describe("signal-seller bots", () => {
   });
 });
 
+
+import { applyControl, tickDelayMs, type OperatorControls } from "../scripts/live-host/worker.js";
+import { isWideLayout } from "../scripts/live-host/setupObs.js";
+
+describe("operator controls and recovery", () => {
+  const start: OperatorControls = { paused: false, muted: false, chat: true, promos: true, emergency: false };
+
+  it("flips only the switch that was pressed", () => {
+    expect(applyControl(start, "pause")).toEqual({ ...start, paused: true });
+    expect(applyControl({ ...start, paused: true }, "resume").paused).toBe(false);
+    expect(applyControl(start, "mute").muted).toBe(true);
+    expect(applyControl(start, "chat_off").chat).toBe(false);
+    expect(applyControl(start, "promos_off").promos).toBe(false);
+    expect(applyControl(start, "interrupt")).toEqual(start);
+  });
+
+  it("an emergency stop pauses and only resume clears it", () => {
+    const stopped = applyControl(start, "emergency_stop");
+    expect(stopped.emergency).toBe(true);
+    expect(stopped.paused).toBe(true);
+    expect(applyControl(stopped, "unmute").emergency).toBe(true);
+    const back = applyControl(stopped, "resume");
+    expect(back.emergency).toBe(false);
+    expect(back.paused).toBe(false);
+  });
+
+  it("backs off exponentially on failures, bounded, and returns to the normal beat", () => {
+    expect(tickDelayMs(0)).toBe(1_500);
+    expect(tickDelayMs(1)).toBe(3_000);
+    expect(tickDelayMs(2)).toBe(6_000);
+    expect(tickDelayMs(10)).toBe(30_000);
+    expect(tickDelayMs(100)).toBe(30_000);
+  });
+
+  it("uses the wide layout only for YouTube", () => {
+    expect(isWideLayout({ LIVE_HOST_LAYOUT: "wide", LIVE_HOST_PLATFORM: "youtube" } as NodeJS.ProcessEnv)).toBe(true);
+    expect(isWideLayout({ LIVE_HOST_LAYOUT: "wide", LIVE_HOST_PLATFORM: "tiktok" } as NodeJS.ProcessEnv)).toBe(false);
+    expect(isWideLayout({} as NodeJS.ProcessEnv)).toBe(false);
+  });
+});
