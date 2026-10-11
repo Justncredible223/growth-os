@@ -256,3 +256,15 @@ What changed after the first real duo runs, and why:
   one is rejected and rewritten. Keep examples few and varied: whatever topic an example covers becomes an attractor.
 - **Not naming the company when asked if he is a bot.** He says he is an AI character built by the people who run the
   stream; naming Fillbook there tripped the promotion rationing check.
+
+## Before you go live: preflight, instant reactions, failure sign
+
+- **`npm run live-host:preflight`** checks the whole chain and prints PASS / WARN / FAIL: the token and secrets
+  (never printed), Growth OS login and round trip, tables, pause flag and today's budget, the owner switch, OBS
+  connection, the "Tilt Live" scene and "Tilt Stage" source, a camera or capture source, the 1080 x 1920 canvas, the
+  stream key, and Python with edge-tts. It changes nothing and does not speak. Run it before every stream.
+- **Instant reactions (duo mode).** When you send a prompt, press a quick prompt or run a segment, Tilt says a short
+  fixed reaction right away ("Hold on. I have thoughts.") while the real line is being written, then answers. They are
+  voiced once at worker start, at most one every 20 seconds, and are fixed text: nothing a model wrote.
+- **Failure sign.** If the connection to Growth OS fails three times in a row, the stage shows "Hang on, Tilt lost his
+  connection and is finding it again" instead of freezing in silence.

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { DUO_MAX_PROMPT_CHARS, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, prepareSpeechText } from "../scripts/live-host/worker";
+import { DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -74,6 +74,29 @@ describe("live host duo mode", () => {
     // Quick prompts are plain text: nothing in them may name a trade, a firm or a link.
     for (const match of html.matchAll(/data-text="([^"]+)"/g)) {
       expect(match[1]).not.toMatch(/https?:|www\.|\.com|buy|sell|signal/i);
+    }
+  });
+
+  it("picks a filler only outside the cool-down, and never the one just used", () => {
+    const now = 1_000_000;
+    expect(pickFiller(0, -1, 0, now)).toBeNull();
+    expect(pickFiller(DUO_FILLERS.length, -1, now - DUO_FILLER_EVERY_MS + 1, now)).toBeNull();
+    for (let last = 0; last < DUO_FILLERS.length; last++) {
+      for (const roll of [0, 0.2, 0.5, 0.99]) {
+        const picked = pickFiller(DUO_FILLERS.length, last, 0, now, () => roll);
+        expect(picked).not.toBeNull();
+        expect(picked).not.toBe(last);
+        expect(picked!).toBeLessThan(DUO_FILLERS.length);
+      }
+    }
+    expect(pickFiller(1, 0, 0, now)).toBe(0);
+  });
+
+  it("keeps the fixed fillers and the reconnect sign clear of advice, links and the product", () => {
+    const fixed = [...DUO_FILLERS.map((filler) => filler.text), RECONNECT_NOTICE.title, RECONNECT_NOTICE.detail];
+    for (const text of fixed) {
+      expect(text, text).not.toMatch(/fill-?book|https?:|\.com|buy|sell|signal|guarantee/i);
+      expect(text.split(/\s+/).length, text).toBeLessThanOrEqual(10);
     }
   });
 
