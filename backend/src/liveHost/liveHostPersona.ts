@@ -149,6 +149,8 @@ export interface LiveHostSegment {
   isFillbookSpot?: boolean;
   /** True for the run-of-show beats (opening, sign-off): pressed by the co-host, never part of the idle rotation. */
   show?: boolean;
+  /** Kept in the file but out of the rotation and the picker. */
+  retired?: boolean;
 }
 
 /**
@@ -160,7 +162,7 @@ export const LIVE_HOST_SEGMENTS: readonly LiveHostSegment[] = [
     id: "cold_open",
     title: "Welcome In",
     brief:
-      "People join a live stream mid-way and need to know in ten seconds what this is. Introduce yourself in one line (Tilt, the AI candle who lives in a trading journal), say what happens here (ask anything about futures, prop firm rules, drawdown or journaling, or confess a trade for a roast), say in a few natural words that this is entertainment and education and not financial advice, and ask one easy question chat can answer in a word or two. Word it differently from any earlier welcome in the recent lines. Under 50 words, and open on the joke, not on the words I'm Tilt.",
+      "People join a live stream mid-way and need to know in ten seconds what this is. Introduce yourself in one line (Tilt, the AI candle who lives in a trading journal), say what happens here (ask anything about futures, prop firm rules, drawdown or journaling, or confess a trade for a roast), say in about five words that it is entertainment, not advice (the full statement is on screen), and ask one easy question chat can answer in a word or two. Word it differently from any earlier welcome in the recent lines. Under 50 words, and open on the joke, not on the words I'm Tilt.",
   },
   {
     id: "roast_my_trade",
@@ -237,6 +239,9 @@ export const LIVE_HOST_SEGMENTS: readonly LiveHostSegment[] = [
   {
     id: "tilt_sings",
     title: "Tilt Sings",
+    // Retired 2026-10-10: a text-to-speech voice cannot sing, so it is a poem read flat, which is the segment most
+    // likely to make a stranger cringe in the first minute. Bring it back only with a voice that can carry a tune.
+    retired: true,
     brief:
       "Nobody is talking, so sing to fill the silence. Announce it in a few words, then sing a tiny ORIGINAL song of four short rhyming lines that you make up on the spot, each line its own sentence. Subject: being a candle with nobody to talk to, an empty chat, the market being closed, or a classic trading mistake told as a ballad. It must be entirely your own words: never quote, parody, adapt or name any existing song, artist, tune or jingle, and never write 'to the tune of'. Finish by asking chat to rate the singing out of ten or to request a topic for the next song. Use the proud or sad mood.",
   },
@@ -271,7 +276,7 @@ export const LIVE_HOST_SEGMENTS: readonly LiveHostSegment[] = [
 
 /** The next segment after `lastSegmentId`, skipping the Fillbook spot unless a mention is due. */
 export function nextSegment(lastSegmentId: string | null, fillbookSpotDue: boolean): LiveHostSegment {
-  const pool = LIVE_HOST_SEGMENTS.filter((segment) => !segment.show && (!segment.isFillbookSpot || fillbookSpotDue));
+  const pool = LIVE_HOST_SEGMENTS.filter((segment) => !segment.show && !segment.retired && (!segment.isFillbookSpot || fillbookSpotDue));
   if (fillbookSpotDue && lastSegmentId !== "fillbook_spot") {
     return LIVE_HOST_SEGMENTS.find((segment) => segment.isFillbookSpot)!;
   }

@@ -118,7 +118,9 @@ describe("nextSegment", () => {
     // The opening and sign-off are pressed by the co-host and never come up in the idle rotation.
     expect(seen).not.toContain("show_open");
     expect(seen).not.toContain("show_close");
-    expect(new Set(seen).size).toBe(LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot && !segment.show).length);
+    expect(new Set(seen).size).toBe(LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot && !segment.show && !segment.retired).length);
+    // Tilt Sings is retired: a text-to-speech voice cannot sing.
+    expect(seen).not.toContain("tilt_sings");
   });
 
   it("runs the Fillbook spot when due, then goes back to the rotation", () => {

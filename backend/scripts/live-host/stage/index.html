@@ -828,19 +828,12 @@
     "The creator built me so he would not have to talk. Coward.",
     "Blink twice if the hands are holding you hostage.",
     "Management is right there. I am being supervised.",
-    "The market is closed. I am a candle with no job today.",
-    "...hello?",
     "I can hear you scrolling.",
-    "Is this thing on?",
     "I rehearsed jokes for this.",
-    "Somebody type something. Anything.",
     "I'm a candle. I have all day.",
-    "*crickets*",
-    "No hands, no account, no audience.",
     "I'll just stand here. Glowing.",
     "Type DANCE. I dare you.",
     "This is fine. I'm fine.",
-    "Day 400 of waiting for a confession.",
   ];
   // Duo mode: the creator is on camera next to him, so the bit about the hands at the bottom of the screen is retired
   // and the thoughts that mention him are about the setup instead. Fixed text; nothing here asks for or offers advice.
@@ -849,26 +842,17 @@
     "He is sitting right there. I am being supervised, loudly.",
     "I'm only here because he lost the argument about who has to talk.",
     "He gets the camera. I get the lighting. We are both fine with it.",
-    "The market is closed. I am a candle with no job today.",
-    "...hello?",
     "I can hear you scrolling.",
-    "Is this thing on?",
     "I rehearsed jokes for this.",
-    "Somebody type something. Anything.",
     "I'm a candle. I have all day.",
-    "*crickets*",
-    "No hands, no account, no audience.",
     "I'll just stand here. Glowing.",
     "Type DANCE. I dare you.",
     "This is fine. I'm fine.",
-    "Day 400 of waiting for a confession.",
   ];
   // YouTube solo: no hands are on screen (the hands are a TikTok-layout thing), so the creator lines are replaced.
   const THOUGHTS_SOLO = [
-    "Nobody else is in this room. I am the entire crew.",
     "I run the camera, the lights and the jokes. It shows.",
     "Lean production: one candle, zero staff, no weekend.",
-    "If anyone is watching, wave. I cannot see you. I am a candle.",
     ...THOUGHTS.slice(4),
   ];
   let duoMode = false;
@@ -961,8 +945,8 @@
     if (idle && !move && t - lastAutoMove > nextAutoMoveIn) {
       const longWait = t - idleSince > 20000;
       const bits = longWait
-        ? ["lonely", "yawn", "sleep", "peek", "lonely", "watch", "thought", "tumbleweed", "lonely", "dance"]
-        : ["wave", "watch", "thought", "dance", "peek", "spin"];
+        ? ["watch", "thought", "dance", "thought", "yawn", "spin"]
+        : ["wave", "watch", "thought", "dance", "spin"];
       let bit = bits[Math.floor(Math.random() * bits.length)];
       if (bit === lastBit) bit = bits[(bits.indexOf(bit) + 1) % bits.length];
       lastBit = bit;

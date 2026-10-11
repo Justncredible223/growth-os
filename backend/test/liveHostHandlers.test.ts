@@ -448,6 +448,25 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.spokenText).toContain("moves his stop three times");
   });
 
+  it("the Fillbook pitch waits for chat that is alive, and for 15 minutes", async () => {
+    const lastSegment = "eval_graveyard";
+    const run = async (ageMinutes: number, chatSecondsAgo: number | null) => {
+      const messages = chatSecondsAgo === null ? [] : [{ id: "m0", session_id: "s1", platform: "youtube", external_id: "e0", author_name: "Jo", body: "hi", received_at: new Date(NOW.getTime() - chatSecondsAgo * 1000).toISOString(), status: "answered", status_reason: null, utterance_id: null }];
+      const client = buildClient({
+        live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+        live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - ageMinutes * 60_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: lastSegment }],
+        live_host_messages: messages,
+      });
+      const llm = scriptedLlm([line("A line for the room.")]);
+      const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+      return result.utterance?.segmentTitle;
+    };
+    expect(await run(8, 30)).not.toBe("Where Tilt Lives"); // too early
+    expect(await run(20, null)).not.toBe("Where Tilt Lives"); // nobody chatting
+    expect(await run(20, 600)).not.toBe("Where Tilt Lives"); // chat went cold
+    expect(await run(20, 30)).toBe("Where Tilt Lives");
+  });
+
   it("variety: with nobody chatting, a segment is told not to end by asking chat to type", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() }] });
     const llm = scriptedLlm([line("A trader moved his stop and then wrote a poem about it.")]);
@@ -546,9 +565,11 @@ describe("runLiveHostTick", () => {
   });
 
   it("the Fillbook spot does not send the segment rotation back to the start", async () => {
-    const started = new Date(NOW.getTime() - 10 * 60_000).toISOString();
+    // The pitch waits for 15 minutes AND for chat that is alive (someone typed in the last 3 minutes).
+    const started = new Date(NOW.getTime() - 20 * 60_000).toISOString();
     const quiet = new Date(NOW.getTime() - 60_000).toISOString();
-    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: quiet, last_segment: "eval_graveyard" }] });
+    const chatted = { id: "m0", session_id: "s1", platform: "youtube", external_id: "e0", author_name: "Jo", body: "hi", received_at: new Date(NOW.getTime() - 90_000).toISOString(), status: "answered", status_reason: null, utterance_id: null };
+    const client = buildClient({ live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: quiet, last_segment: "eval_graveyard" }], live_host_messages: [chatted] });
     const llm = scriptedLlm([line("Fillbook is the trading journal I live in. The link is in the bio. What do you journal first?"), line("Quick one: what does a trailing drawdown trail?")]);
     const spot = await runLiveHostTick(asSupabase(client), {}, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(spot.utterance?.segmentTitle).toBe("Where Tilt Lives");
