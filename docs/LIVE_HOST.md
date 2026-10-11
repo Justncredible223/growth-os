@@ -383,3 +383,14 @@ npm run live-host:preflight
 **Things to know**: the canvas is vertical (1080 x 1920); YouTube shows that portrait on phones and pillarboxed on a
 desktop. Daily budget is $3 across Growth OS; an hour of solo running is roughly $1 to $2. If something goes wrong:
 switch OFF in the app first, always.
+
+## The site card (YouTube)
+
+When a line says the website ("fillbookhq dot com"), the stage shows a card with the address and "Free sample
+dashboard. No signup. fillbookhq.com/sample" for the length of the line plus a few seconds, so viewers can read where
+to go. Tilt is told the card appears, so he can say "it's up there".
+
+- **YouTube layout only.** It never shows on the TikTok layout (`?safe=tiktok`): an address on screen there is the same
+  off-platform problem as saying it, which is why the TikTok rule is "link in the bio".
+- Fixed text and only the approved domain; a cut-off line takes the card with it.
+- Not built: a scannable QR code. It needs a QR library on this machine and a way to check it scans.

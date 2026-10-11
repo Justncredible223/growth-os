@@ -210,7 +210,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
 
   if (request.platform === "youtube" && !request.duo) {
     lines.push(
-      "This stream is on YouTube and nobody is on camera: there are no hands on screen and no creator to tease, so leave the hands and creator bits alone. You are the whole show. The website may be said, as fillbookhq dot com, when it is the honest answer. Nothing is open for entry or sign-up tonight, so never mention a giveaway, a prize or anything to enter.",
+      "This stream is on YouTube and nobody is on camera: there are no hands on screen and no creator to tease, so leave the hands and creator bits alone. You are the whole show. The website may be said, as fillbookhq dot com, when it is the honest answer; when you say it, a card with the address (and the no-signup sample dashboard) appears on screen, so you can say it is up there. Nothing is open for entry or sign-up tonight, so never mention a giveaway, a prize or anything to enter.",
     );
   }
 

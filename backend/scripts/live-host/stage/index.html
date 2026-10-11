@@ -78,6 +78,13 @@
   .card h3 { margin: 0 0 14px; font-size: 26px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
   .card li { list-style: none; font-size: 27px; line-height: 1.25; font-weight: 700; padding: 10px 0; border-top: 1px solid var(--line); }
   .card ul { margin: 0; padding: 0; }
+  /* The site card: the address on screen while he says it. YouTube layout only (a link on screen on TikTok is the same
+     off-platform problem as saying it). Fixed text, always the approved domain. */
+  .sitecard { position: absolute; left: 56px; right: 56px; top: 1362px; padding: 12px 24px 14px; border-radius: 26px; background: var(--card); border: 2px solid rgba(34, 211, 238, 0.55); box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5); text-align: center; transform: translateY(40px) scale(0.96); opacity: 0; transition: transform 0.5s cubic-bezier(.2, .9, .2, 1.1), opacity 0.3s; pointer-events: none; }
+  .sitecard.show { transform: translateY(0) scale(1); opacity: 1; }
+  .sitecard .url { font-size: 56px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; }
+  .sitecard .url span { color: var(--accent); }
+  .sitecard .sub { margin-top: 2px; font-size: 24px; font-weight: 700; color: var(--ink2); }
   .meter { position: absolute; left: 40px; top: 1090px; width: 300px; padding: 18px; border-radius: 26px; background: var(--card); border: 2px solid var(--line); box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5); transform: translateX(-140%); transition: transform 0.6s cubic-bezier(.2, .9, .2, 1.1); text-align: center; }
   .meter.show { transform: translateX(0); }
   .meter h3 { margin: 0 0 6px; font-size: 24px; letter-spacing: 3px; color: var(--ink2); }
@@ -290,6 +297,7 @@
       </svg>
     </div>
     <div class="redsay" id="redsay"></div>
+    <div class="sitecard" id="sitecard" aria-hidden="true"><div class="url">fillbookhq<span>.com</span></div><div class="sub">Free sample dashboard. No signup. fillbookhq.com/sample</div></div>
     <div class="notice" id="notice"></div>
     <div class="thought" id="thought"></div>
     <div class="zzz" id="n1">&#9834;</div><div class="zzz z2" id="n2">&#9835;</div><div class="zzz z3" id="n3">&#9834;</div>
@@ -720,6 +728,20 @@
     setTimeout(finishRed, ((s.durationSeconds || 3) + 2) * 1000);
   }
 
+  // The site card: shown while a line says the website, and for a few seconds after, so a viewer can read it.
+  // Never on the TikTok layout, and only for the approved domain as it is spoken ("fillbookhq dot com").
+  const SITE_SPOKEN = /fill-?book ?hq(?: dot |\.)com/i;
+  let siteCardTimer = null;
+  function hideSiteCard() { clearTimeout(siteCardTimer); $("sitecard").classList.remove("show"); }
+  function maybeShowSiteCard(line) {
+    if (document.body.classList.contains("safe-tiktok")) return;
+    if (!SITE_SPOKEN.test(String(line.spokenText || ""))) return;
+    const seconds = Math.max(8, (line.durationSeconds || 6) + 4);
+    clearTimeout(siteCardTimer);
+    setTimeout(() => $("sitecard").classList.add("show"), 600);
+    siteCardTimer = setTimeout(hideSiteCard, seconds * 1000);
+  }
+
   function speak(line) {
     $("hook").classList.remove("show"); document.body.classList.remove("hooked");
     if (line.sidekick && !line.sidekickDone) {
@@ -730,6 +752,7 @@
     clearTimeout(finishTimer);
     clearProps();
     attention.mode = "idle";
+    maybeShowSiteCard(line);
     const hasAudio = !DEMO && line.audioUrl;
     const duration = line.durationSeconds || Math.max(2.5, line.spokenText.length / 15.5);
     const words = (line.words && line.words.length ? line.words.map((w) => ({ text: w.text, start: w.startSeconds, end: w.endSeconds })) : estimateWords(line.spokenText, duration));
@@ -756,6 +779,7 @@
   function silence() {
     try { voice.pause(); voice.removeAttribute("src"); voice.load(); redVoice.pause(); } catch (err) { /* nothing was playing */ }
     hideRed();
+    hideSiteCard();
     current = null;
     state.talking = false; state.targetOpen = 0;
     setMood("neutral");
