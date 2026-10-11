@@ -938,7 +938,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     .from("live_host_sessions")
     // The Fillbook spot is an interruption, not a step in the rotation. Recording it as the last segment sent the
     // rotation back to "Welcome In" every time it ran (seen on the first real stream), so it is not recorded.
-    .update({ last_utterance_at: now.toISOString(), ...(segment && !segment.isFillbookSpot ? { last_segment: segment.id } : {}) })
+    .update({ last_utterance_at: now.toISOString(), ...(segment && !segment.isFillbookSpot && !segment.show ? { last_segment: segment.id } : {}) })
     .eq("id", session.id);
 
   return {

@@ -134,8 +134,11 @@ export const DUO_SEGMENT_REQUEST_MS = 30_000;
 
 /** The segments the host page offers: everything except the Fillbook spot, which the server rations itself. */
 export function duoSegmentChoices(): Array<{ id: string; title: string }> {
-  return LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot).map((segment) => ({ id: segment.id, title: segment.title }));
+  return LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot && !segment.show).map((segment) => ({ id: segment.id, title: segment.title }));
 }
+
+/** The run-of-show beats the host page has dedicated buttons for. */
+export const DUO_SHOW_BEATS: readonly string[] = LIVE_HOST_SEGMENTS.filter((segment) => segment.show).map((segment) => segment.id);
 
 /** Reads the body of a "run a segment" press: a known segment id, or null for the next one in the rotation. */
 export function parseSegmentRequest(raw: unknown): { id: string | null } | null {
@@ -143,7 +146,7 @@ export function parseSegmentRequest(raw: unknown): { id: string | null } | null 
   const id = (raw as { id?: unknown }).id;
   if (id === undefined || id === null || id === "") return { id: null };
   if (typeof id !== "string") return null;
-  return duoSegmentChoices().some((choice) => choice.id === id) ? { id } : null;
+  return duoSegmentChoices().some((choice) => choice.id === id) || DUO_SHOW_BEATS.includes(id) ? { id } : null;
 }
 
 /**
