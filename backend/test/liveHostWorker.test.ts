@@ -120,6 +120,16 @@ describe("live host stage page", () => {
     expect(html).toContain("not financial advice");
   });
 
+  it("retires the creator-hands thoughts in duo mode and learns the mode from the state event", () => {
+    const duoBlock = html.split("const THOUGHTS_DUO = [")[1]!.split("];")[0]!;
+    expect(duoBlock).not.toMatch(/hands down there|my creator|the creator|hostage|blink twice|show off/i);
+    expect(duoBlock).toContain("My co-host has the hands and the face");
+    expect(html).toContain("duoMode = data.duo === true");
+    const workerSource = readFileSync(join(__dirname, "..", "scripts", "live-host", "worker.ts"), "utf-8");
+    expect(workerSource).toContain("JSON.stringify({ live, duo: config.duo })");
+    expect(workerSource).toContain('broadcast("state", { live, duo: config.duo })');
+  });
+
   it("loads nothing from the internet while live", () => {
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
   });
