@@ -110,6 +110,22 @@ export class ObsClient {
     return (await this.request("GetStreamStatus")).outputActive === true;
   }
 
+  async isRecording(): Promise<boolean> {
+    return (await this.request("GetRecordStatus")).outputActive === true;
+  }
+
+  async startRecording(): Promise<void> {
+    if (await this.isRecording()) return;
+    await this.request("StartRecord");
+    this.log("OBS: recording started");
+  }
+
+  async stopRecording(): Promise<void> {
+    if (!(await this.isRecording())) return;
+    await this.request("StopRecord");
+    this.log("OBS: recording stopped");
+  }
+
   async startStream(): Promise<void> {
     if (await this.isStreaming()) return;
     await this.request("StartStream");

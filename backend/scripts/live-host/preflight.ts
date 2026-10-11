@@ -8,6 +8,7 @@
  * desk and not in front of an audience. It changes nothing: it does not flip the switch, start the stream or
  * speak. Secrets are never printed.
  */
+import { stageUrl } from "./setupObs.js";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ObsClient } from "./obsClient.js";
@@ -25,7 +26,7 @@ const check = (status: CheckStatus, name: string, detail: string): CheckResult =
 /** The environment the worker needs. Pure, so it can be tested without a network. */
 /** The stage source URL OBS should be using for this platform (the TikTok-safe layout only for non-YouTube). */
 export function expectedStageUrl(port: number, platform: string): string {
-  return `http://127.0.0.1:${port}/${platform.toLowerCase() === "youtube" ? "" : "?safe=tiktok"}`;
+  return stageUrl(port, platform);
 }
 
 export function checkEnvironment(env: NodeJS.ProcessEnv): CheckResult[] {

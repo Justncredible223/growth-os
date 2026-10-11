@@ -35,6 +35,14 @@
   .simtag { position: absolute; right: 56px; top: 150px; padding: 6px 14px; border-radius: 999px; font-size: 17px; font-weight: 800; letter-spacing: 1.6px; color: var(--ink3); border: 1px solid var(--line); background: rgba(8, 16, 30, 0.55); }
   body.safe-youtube .simtag { top: 140px; }
   body.safe-tiktok .simtag { display: none; }
+  .scenetag { position: absolute; left: 56px; bottom: 24px; padding: 4px 12px; border-radius: 8px; font-size: 16px; font-weight: 900; letter-spacing: 2px; color: #04121c; background: var(--accent); opacity: 0.85; }
+  body.safe-tiktok .scenetag, body.safe-youtube .scenetag { display: none; }
+  body[data-scene="risk_lesson"] { --accent: #ffb547; }
+  body[data-scene="viewer_question"] { --accent: #7fdcff; }
+  body[data-scene="product_walkthrough"] { --accent: #2dd4a7; }
+  body[data-scene="challenge"] { --accent: #ff7ab8; }
+  body[data-scene="poll"] { --accent: #c4a1ff; }
+  body[data-scene="recap_cta"] { --accent: #ffe08a; }
   .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 42%, transparent 45%, rgba(2, 5, 12, 0.72) 100%); pointer-events: none; }
 
   /* ---- top bar ---- */
@@ -178,6 +186,38 @@
   body.safe-tiktok .notice { top: 410px; left: 110px; right: 110px; font-size: 36px; }
 
   /*
+   * Horizontal 16:9 (?layout=wide, OBS canvas 1920x1080): Tilt centre, the questions and the product panel on the
+   * right, Red and the meter on the left, captions along the bottom.
+   */
+  body.layout-wide #scene { width: 1920px; height: 1080px; margin: -540px 0 0 -960px; }
+  body.layout-wide .topbar { top: 40px; left: 60px; right: 60px; }
+  body.layout-wide .segment { top: 120px; left: 60px; }
+  body.layout-wide #tiltWrap { top: 230px; width: 500px; height: 579px; margin-left: -250px; }
+  body.layout-wide #floor { top: 790px; width: 400px; margin-left: -200px; }
+  body.layout-wide .asks { top: 140px; left: 1260px; right: 60px; }
+  body.layout-wide .captions { top: 880px; left: 120px; right: 120px; min-height: 140px; }
+  body.layout-wide .captions p { font-size: 44px; line-height: 1.2; }
+  body.layout-wide .hook { top: 880px; left: 160px; right: 160px; }
+  body.layout-wide .hook .text { font-size: 42px; }
+  body.layout-wide .footer { bottom: auto; top: 1028px; font-size: 22px; }
+  body.layout-wide .footer .fine { font-size: 18px; margin-top: 2px; }
+  body.layout-wide.hooked .footer { opacity: 0; }
+  body.layout-wide .showcase { right: auto; left: 1260px; top: 410px; width: 300px; height: 340px; }
+  body.layout-wide .card { right: auto; left: 1580px; top: 410px; width: 280px; }
+  body.layout-wide .card.show { transform: translateX(0) rotate(1deg); }
+  body.layout-wide .sitecard { left: 1260px; right: 60px; top: 770px; }
+  body.layout-wide .sitecard .url { font-size: 44px; }
+  body.layout-wide .meter { left: 60px; top: 560px; width: 240px; }
+  body.layout-wide .red { top: 560px; width: 190px; }
+  body.layout-wide .red svg { width: 190px; height: 250px; }
+  body.layout-wide .redsay { left: 215px; top: 400px; max-width: 460px; font-size: 32px; }
+  body.layout-wide .thought { top: 200px; }
+  body.layout-wide .notice { top: 300px; left: 400px; right: 400px; }
+  body.layout-wide .tumbleweed { top: 760px; }
+  body.layout-wide .simtag { top: 100px; right: 60px; }
+  body.layout-wide .scenetag { display: block; }
+
+  /*
    * YouTube on a phone, upright: the app lays its live chat (welcome banner, "say hi" prompt, newest messages and the
    * input box) over the bottom of the video, from about y=1370 of this 1080x1920 scene down. Everything that has to be
    * read (captions, hook, footer, site card) therefore lives above y=1340. Desktop viewers just see a slightly
@@ -240,6 +280,7 @@
   <div id="scene">
     <canvas id="chart" width="1080" height="1920"></canvas>
     <div class="simtag" id="simtag">SIMULATED CHART &middot; NOT MARKET DATA</div>
+    <div class="scenetag" id="sceneTag"></div>
     <div class="vignette"></div>
 
     <div class="topbar">
@@ -385,13 +426,16 @@
   const DEMO = params.has("demo");
   const DEMO_SILENT = params.has("nohook");
   // ?safe=tiktok keeps everything clear of the TikTok app's own overlays (see the stylesheet).
+  const WIDE = params.get("layout") === "wide";
   if (params.get("safe") === "tiktok") document.body.classList.add("safe-tiktok");
-  else document.body.classList.add("safe-youtube");
+  else document.body.classList.add(WIDE ? "layout-wide" : "safe-youtube");
+  // Scenes: each segment is shown in one of eleven named treatments (see sceneFor), set as body[data-scene].
+  document.body.dataset.scene = "opening";
 
   // ---- fit the 1080x1920 scene to the window ----
   const scene = $("scene");
   function fit() {
-    const scale = Math.min(innerWidth / 1080, innerHeight / 1920);
+    const scale = Math.min(innerWidth / (WIDE ? 1920 : 1080), innerHeight / (WIDE ? 1080 : 1920));
     scene.style.transform = `scale(${scale})`;
   }
   addEventListener("resize", fit);
@@ -768,6 +812,27 @@
     const el = $("segment");
     if (title) { el.textContent = title; el.classList.add("show"); } else { el.classList.remove("show"); }
   }
+  // The eleven scenes. Chosen from what the line is, so the treatment (accent colour, label, product panel) follows
+  // the show rather than needing a separate cue.
+  const SCENE_BY_TITLE = {
+    "Welcome In": "opening", "Opening": "opening",
+    "Desk Lesson": "education", "Trader Translator": "education", "Trader in the Wild": "education",
+    "Tilt-o-Meter": "risk_lesson", "Eval Graveyard": "risk_lesson", "Famous Last Words": "risk_lesson", "Rate My Excuse": "risk_lesson",
+    "Myth or Fact": "poll",
+    "Roast My Trade": "challenge", "One Honest Question": "challenge",
+    "Where Tilt Lives": "product_walkthrough",
+    "The Tilties": "recap_cta", "Sign-off": "recap_cta",
+  };
+  function sceneFor(line) {
+    if (Array.isArray(line.replyingTo) && line.replyingTo.length > 0) return "viewer_question";
+    return SCENE_BY_TITLE[line.segmentTitle] || "market_overview";
+  }
+  const SCENE_LABEL = { opening: "ON AIR", market_overview: "SIMULATED DESK", chart_analysis: "CHART", education: "LESSON", risk_lesson: "RISK", viewer_question: "VIEWER QUESTION", poll: "POLL: TYPE IT IN CHAT", product_walkthrough: "FILLBOOK WALKTHROUGH", challenge: "CHALLENGE", recap_cta: "RECAP", fallback: "BACK IN A MOMENT" };
+  function setScene(scene) {
+    document.body.dataset.scene = scene;
+    const tag = $("sceneTag");
+    if (tag) tag.textContent = SCENE_LABEL[scene] || "";
+  }
 
   let finishTimer = null;
   function finish(id) {
@@ -866,6 +931,9 @@
     current = { id: line.id, words, spans: showCaption(words), startedAt: performance.now(), duration, hasAudio };
     setMood(line.mood);
     setSegment(line.kind === "segment" ? line.segmentTitle : null);
+    setScene(sceneFor(line));
+    // The product scene shows the real example screens while the line runs (never on the TikTok layout).
+    if (document.body.dataset.scene === "product_walkthrough" && !document.body.classList.contains("safe-tiktok")) { idleShowcaseOn = true; startShowcase(); }
     if (line.kind === "segment" && line.segmentTitle === "Tilt Sings") sing(duration);
     showAsks(line.replyingTo);
     showCard(line.card);
@@ -1129,10 +1197,21 @@
     const offline = $("offline");
     function connect() {
       const events = new EventSource("/events");
-      events.onopen = () => offline.classList.remove("show");
-      events.onerror = () => { offline.classList.add("show"); };
+      events.onopen = () => {
+        offline.classList.remove("show");
+        const text = offline.firstElementChild;
+        if (text) text.innerHTML = "Tilt is off air<small>Waiting for the Live Host worker</small>";
+      };
+      events.onerror = () => {
+        offline.classList.add("show");
+        setScene("fallback");
+        const text = offline.firstElementChild;
+        if (text) text.innerHTML = "Technical interruption<small>Tilt will be right back</small>";
+      };
       events.addEventListener("speak", (event) => { offline.classList.remove("show"); speak(JSON.parse(event.data)); });
       events.addEventListener("move", (event) => { doMove(JSON.parse(event.data).name); });
+      events.addEventListener("mute", (event) => { try { const on = JSON.parse(event.data).on === true; voice.muted = on; redVoice.muted = on; } catch (err) { /* ignore */ } });
+      events.addEventListener("silence", () => { try { silence(); } catch (err) { /* ignore */ } });
       events.addEventListener("speak_more", (event) => { try { onSpeakMore(JSON.parse(event.data)); } catch (err) { /* ignore */ } });
       // A new comment: shown at once, before his answer exists. Cleared if no answer follows.
       events.addEventListener("incoming", (event) => {
