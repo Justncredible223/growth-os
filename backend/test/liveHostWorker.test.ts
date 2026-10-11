@@ -198,6 +198,22 @@ describe("live host stage page", () => {
     expect(html).toContain('document.body.classList.contains("safe-tiktok") ? THOUGHTS : THOUGHTS_SOLO');
   });
 
+  it("has a site card that shows the approved address only on the YouTube layout", () => {
+    expect(html).toContain('id="sitecard"');
+    expect(html).toContain("fillbookhq<span>.com</span>");
+    expect(html).toContain('if (document.body.classList.contains("safe-tiktok")) return;');
+    // Only the one approved domain, and no other address appears in the card markup.
+    const card = html.split('id="sitecard"')[1]!.split("</div></div>")[0]!;
+    expect(card.match(/[a-z0-9-]+\.(?:com|net|org|io|co)\b/gi)?.map((host) => host.toLowerCase())).toEqual(["fillbookhq.com"]);
+    expect(html).toContain("hideSiteCard();");
+    // The regex that triggers it matches the spoken form of the approved domain.
+    const source = html.split("const SITE_SPOKEN = ")[1]!.split(";")[0]!;
+    const pattern = new RegExp(source.slice(1, source.lastIndexOf("/")), "i");
+    expect(pattern.test("it is at fillbookhq dot com, there is a free tier")).toBe(true);
+    expect(pattern.test("see fillbookhq.com")).toBe(true);
+    expect(pattern.test("check example dot com")).toBe(false);
+  });
+
   it("loads nothing from the internet while live", () => {
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
   });

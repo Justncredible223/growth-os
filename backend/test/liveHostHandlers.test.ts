@@ -280,6 +280,7 @@ describe("runLiveHostTick", () => {
     expect(sent.messages[0]!.content).toContain("This stream is on YouTube and nobody is on camera");
     expect(sent.messages[0]!.content).not.toContain("This stream is on TikTok");
     expect(sent.messages[0]!.content).toContain("never mention a giveaway");
+    expect(sent.messages[0]!.content).toContain("a card with the address");
   });
 
   it("still points to the bio on YouTube if the worker is reading TikTok chat too", async () => {
