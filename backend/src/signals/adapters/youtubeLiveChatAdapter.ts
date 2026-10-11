@@ -7,9 +7,9 @@ const API_BASE = "https://www.googleapis.com/youtube/v3";
  * decides how long a stream can run: at 10 seconds that is 1,800 units an hour, about five and a half hours of
  * chat reading a day. YouTube's own pollingIntervalMillis is honoured when it asks for longer.
  */
-export const MIN_LIVE_CHAT_POLL_MS = 8_000;
+export const MIN_LIVE_CHAT_POLL_MS = 6_000;
 /** While people are typing, poll faster so a conversation does not feel like waiting on a satellite link. */
-export const ACTIVE_LIVE_CHAT_POLL_MS = 5_000;
+export const ACTIVE_LIVE_CHAT_POLL_MS = 4_000;
 const MAX_RESULTS = 200;
 
 export interface YoutubeLiveChatMessage {

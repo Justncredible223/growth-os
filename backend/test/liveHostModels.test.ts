@@ -20,12 +20,13 @@ describe("useFastModel", () => {
     expect(useFastModel({ ...base, mode: "quality", duoReply: true })).toBe(true);
   });
 
-  it("balanced: routine segments fast, chat answers and fact segments on the stronger model", () => {
+  it("balanced: routine segments and chat answers fast, fact segments on the stronger model", () => {
     expect(useFastModel({ ...base, segmentId: "roast_my_trade" })).toBe(true);
     expect(useFastModel({ ...base, segmentId: "tilt_o_meter" })).toBe(true);
     expect(useFastModel({ ...base, segmentId: "desk_lesson" })).toBe(false);
     expect(useFastModel({ ...base, segmentId: "fillbook_spot" })).toBe(false);
-    expect(useFastModel({ ...base, segmentId: null })).toBe(false);
+    // A viewer waiting on an answer is where seconds matter most.
+    expect(useFastModel({ ...base, segmentId: null })).toBe(true);
   });
 
   it("quality keeps everything but welcomes and duo replies on the stronger model; low sends chat answers fast too", () => {
