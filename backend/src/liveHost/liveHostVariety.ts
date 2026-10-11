@@ -6,7 +6,9 @@
  */
 
 /** Jokes and phrases that come up again and again. A family counts as overused when it shows up in two of the last six lines. */
-export const BIT_FAMILIES: ReadonlyArray<{ label: string; pattern: RegExp }> = [
+export const BIT_FAMILIES: ReadonlyArray<{ label: string; pattern: RegExp; /** Uses in the window that make it overused (default 2). */ threshold?: number; /** How many recent lines to look back over (default the last six). */ window?: number }> = [
+  // The character's origin line: lovely once, a stock phrase by the third opening. Once per stream.
+  { label: "having read more blown account stories than anyone alive", pattern: /\bmore (?:blown|failed|dead)[- ]account stor(?:y|ies)\b|\bread every blown\b|\bread more (?:blown|failed)\b/i, threshold: 1, window: 12 },
   { label: "the market being closed", pattern: /\b(?:market(?:'s| is| was)? (?:closed|shut)|closed (?:market|for the weekend)|nothing (?:is )?open|market (?:has )?nothing)\b/i },
   { label: "having no hands", pattern: /\bno hands\b|\bwithout hands\b|\bhave no hands\b/i },
   { label: "it being a weekend or late at night", pattern: /\b(?:saturday|sunday|weekend|midnight|two in the morning|2 ?am|three in the morning|this hour|late at night)\b/i },
@@ -21,8 +23,10 @@ export const OVERUSED_THRESHOLD = 2;
 
 /** The labels of the families used at least twice in the last few lines (newest first). */
 export function overusedBits(recentTiltLines: string[]): string[] {
-  const window = recentTiltLines.slice(0, OVERUSED_WINDOW);
-  return BIT_FAMILIES.filter((family) => window.filter((line) => family.pattern.test(line)).length >= OVERUSED_THRESHOLD).map((family) => family.label);
+  return BIT_FAMILIES.filter((family) => {
+    const window = recentTiltLines.slice(0, family.window ?? OVERUSED_WINDOW);
+    return window.filter((line) => family.pattern.test(line)).length >= (family.threshold ?? OVERUSED_THRESHOLD);
+  }).map((family) => family.label);
 }
 
 /** Which of the given overused families this draft uses again. */

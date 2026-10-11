@@ -179,7 +179,7 @@ export const DUO_SEGMENT_REQUEST_MS = 30_000;
 
 /** The segments the host page offers: everything except the Fillbook spot, which the server rations itself. */
 export function duoSegmentChoices(): Array<{ id: string; title: string }> {
-  return LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot && !segment.show).map((segment) => ({ id: segment.id, title: segment.title }));
+  return LIVE_HOST_SEGMENTS.filter((segment) => !segment.isFillbookSpot && !segment.show && !segment.retired).map((segment) => ({ id: segment.id, title: segment.title }));
 }
 
 /** The run-of-show beats the host page has dedicated buttons for. */

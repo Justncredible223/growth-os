@@ -251,7 +251,14 @@ describe("live host stage page", () => {
   it("uses a creator-free thought list on a YouTube solo stage (no hands on screen there)", () => {
     const soloBlock = html.split("const THOUGHTS_SOLO = [")[1]!.split("];")[0]!;
     expect(soloBlock).not.toMatch(/hands down there|my creator|the creator|hostage|management/i);
-    expect(soloBlock).toContain("I am the entire crew");
+    expect(soloBlock).toContain("I run the camera, the lights and the jokes");
+    // The lines that announce an empty room are gone from every thought list.
+    const lists = ["const THOUGHTS = [", "const THOUGHTS_DUO = [", "const THOUGHTS_SOLO = ["].map((start) => html.split(start)[1]!.split("];")[0]!).join(" ");
+    for (const phrase of ["crickets", "...hello?", "Is this thing on?", "Somebody type something", "Day 400", "no audience", "If anyone is watching"]) {
+      expect(lists, phrase).not.toContain(phrase);
+    }
+    // The "someone just left" lines only fire on a real viewer drop (TikTok), no longer from the idle rotation.
+    expect(html).not.toContain('"lonely", "yawn", "sleep"');
     expect(html).toContain('document.body.classList.contains("safe-tiktok") ? THOUGHTS : THOUGHTS_SOLO');
   });
 

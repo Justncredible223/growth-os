@@ -42,7 +42,8 @@ export const PROMO_MAX_MENTIONS = 1;
 export const PROMO_WINDOW = 6;
 /** The explicit "what Fillbook is" segment runs at most this often, and never in a session's first minutes. */
 export const FILLBOOK_SPOT_EVERY_MS = 12 * 60_000;
-export const FILLBOOK_SPOT_NOT_BEFORE_MS = 4 * 60_000;
+/** A product pitch before anyone has warmed up is a bad first impression: not before 15 minutes, and only with chat active. */
+export const FILLBOOK_SPOT_NOT_BEFORE_MS = 15 * 60_000;
 /** Welcomes for viewers who just joined are spaced at least this far apart, so arrivals never crowd out the show. */
 export const JOIN_WELCOME_EVERY_MS = 12_000;
 /**
@@ -780,6 +781,11 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   // on every tick.
   if (joinWelcome) base.joinsWelcomed = true;
 
+  // Has anyone chatted lately? Used for the Fillbook pitch (only with a live room) and for the variety guidance below.
+  const { data: lastChatRows } = await client.from("live_host_messages").select("received_at").eq("session_id", session.id).order("received_at", { ascending: false }).limit(1);
+  const lastChatAt = ((lastChatRows ?? []) as Array<{ received_at: string }>)[0]?.received_at;
+  const chatIsLive = lastChatAt !== undefined && now.getTime() - new Date(lastChatAt).getTime() < AUDIENCE_PRESENT_FOR_MS;
+
   let segment = null;
   // The co-host's "run a segment" button, honoured only in duo mode. A typed prompt waiting comes first: the
   // button is ignored on that tick and the worker keeps asking until a segment line comes back.
@@ -788,7 +794,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   if (input.duo && batch.length === 0 && !forceSegment) return base;
   if (forceSegment) {
     const requestedId = input.runSegment?.id;
-    const requested = typeof requestedId === "string" ? LIVE_HOST_SEGMENTS.find((candidate) => candidate.id === requestedId && !candidate.isFillbookSpot) : undefined;
+    const requested = typeof requestedId === "string" ? LIVE_HOST_SEGMENTS.find((candidate) => candidate.id === requestedId && !candidate.isFillbookSpot && !candidate.retired) : undefined;
     segment = requested ?? nextSegment(session.lastSegment, false);
   } else if (batch.length === 0 && !joinWelcome) {
     const quietSince = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : 0;
@@ -809,7 +815,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       const openingGrace = input.platform === "youtube" && sessionAgeMs < YOUTUBE_OPENING_GRACE_MS;
       if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS && !openingGrace) return base;
     }
-    const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS;
+    const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS && chatIsLive;
     segment = nextSegment(session.lastSegment, spotDue);
   }
   const fillbookMentionAllowed = askedDirectly || segment?.isFillbookSpot === true || recentMentions < PROMO_MAX_MENTIONS;
@@ -851,9 +857,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   });
   // What he has already said, so this line does not repeat a bit, an opening, a chat ask or the disclaimer.
   const recentTiltLines = recentUtterances.map((utterance) => splitRedLine(utterance.spokenText).tiltLine);
-  const { data: lastChatRows } = await client.from("live_host_messages").select("received_at").eq("session_id", session.id).order("received_at", { ascending: false }).limit(1);
-  const lastChatAt = ((lastChatRows ?? []) as Array<{ received_at: string }>)[0]?.received_at;
-  const roomEngaged = input.duo === true || batch.length > 0 || (lastChatAt !== undefined && now.getTime() - new Date(lastChatAt).getTime() < AUDIENCE_PRESENT_FOR_MS);
+  const roomEngaged = input.duo === true || batch.length > 0 || chatIsLive;
   const variety = varietyGuidance(recentTiltLines, roomEngaged);
   // An opening starts the stream: it must not default to the closed market or the hour, whatever was said before.
   if (segment?.id === "cold_open" || segment?.show === true) {

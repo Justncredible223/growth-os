@@ -481,3 +481,15 @@ Hold-to-talk stays the default. **Open mic** is a toggle on the console for when
 - Same service as hold-to-talk: Chrome or Edge, the browser's speech recognition processes the audio.
 
 It is a convenience, not the recommended mode for a first TikTok run: rehearse it before relying on it live.
+
+## Cut list (2026-10-10, after reading real runs)
+
+- **Tilt Sings is retired** (`retired: true`): a text-to-speech voice cannot sing, so it is a poem read flat. Kept in the
+  file; out of the rotation and the segment picker.
+- **No empty-room bits.** The idle thoughts and animations that announce nobody is here (crickets, hello?, is this on,
+  somebody type something, day 400, the sleeping, lonely and tumbleweed bits) are gone from the idle rotation. The
+  "someone just left" lines still fire, but only on a real viewer drop on TikTok.
+- **The origin line** ("more blown account stories than anyone alive") is allowed once per stream, not in every opening.
+- **Shorter spoken disclaimer** in the opening (about five words); the footer carries the full statement on screen.
+- **The Fillbook pitch** waits for 15 minutes into the show and for chat that is alive (someone typed in the last
+  3 minutes), instead of firing at minute 4 into an empty room. The site card still shows whenever the address is said.
