@@ -393,7 +393,7 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.redLine).toBeNull();
   });
 
-  it("variety: leaves overused bits, a repeated greeting and a stale disclaimer out, and sends a draft that repeats them back once", async () => {
+  it("variety: leaves overused bits, a repeated greeting and a stale disclaimer out of the prompt, and does not spend a second model call on a reply for style", async () => {
     const started = new Date(NOW.getTime() - 180_000).toISOString();
     const spoken = (id: string, text: string, offsetSeconds: number) => ({ id, session_id: "s1", kind: "reply", segment: null, spoken_text: text, mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - offsetSeconds * 1000).toISOString(), spoken_at: null });
     const client = buildClient({
@@ -416,8 +416,9 @@ describe("runLiveHostTick", () => {
     expect(first.messages[0]!.content).toContain("the market being closed");
     expect(first.messages[0]!.content).toContain("having no hands");
     expect(first.messages[0]!.content).toContain("not-financial-advice line a little while ago");
-    expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
-    expect(result.utterance?.spokenText).toContain("Which rule got you");
+    // A reply to a waiting viewer is not sent back for style: that second call is the lag they notice.
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.utterance).not.toBeNull();
   });
 
   it("variety: an opening never defaults to the closed market, and a Tilt-o-Meter without a rating is sent back", async () => {

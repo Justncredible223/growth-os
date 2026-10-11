@@ -304,6 +304,7 @@ interface TickResult {
   spendTodayUsd?: number;
   moves?: string[];
   incoming?: Array<{ platform: string; authorName: string; body: string }>;
+  timingsMs?: { draft: number };
 }
 export interface WordCue {
   text: string;
@@ -1015,6 +1016,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       playFiller();
       tickAgainNow = true;
     }
+    if (result.timingsMs) log(`line drafted in ${(result.timingsMs.draft / 1000).toFixed(1)}s`);
     if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;

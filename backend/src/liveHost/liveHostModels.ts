@@ -45,7 +45,7 @@ export function useFastModel(input: ModelChoiceInput): boolean {
   if (input.spendFraction >= ECONOMY_ALL_FROM_SPEND_FRACTION) return true;
   if (input.spendFraction >= ECONOMY_FROM_SPEND_FRACTION && !fact) return true;
   if (input.mode === "quality") return false;
-  if (input.mode === "low") return !fact;
-  // balanced: the routine segments, not chat answers and not fact segments
-  return input.segmentId !== null && !fact;
+  // balanced and low: everything that is not a fact segment, chat answers included. A viewer waiting on an answer
+  // is the one place a few seconds matter most, and the stronger model's extra seconds are the visible lag.
+  return !fact;
 }

@@ -545,6 +545,8 @@ export interface TickResult {
   joinsWelcomed?: boolean;
   /** Today's recorded Live Host spend in dollars, when this tick looked it up. */
   spendTodayUsd?: number;
+  /** Where the time went on a tick that drafted a line, in milliseconds. */
+  timingsMs?: { draft: number };
   /** Moves viewers asked for in new chat this tick ("dance", "spin"...). The worker plays them on the stage at once. */
   moves?: string[];
   /** Comments that arrived this tick, so the stage can show and react to them before any answer exists. */
@@ -984,6 +986,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   // The brand-rule check needs the database, so each candidate's verdict is worked out as it is generated and
   // read back by the (synchronous) assess step.
   const verdicts = new Map<LiveLineDraft, string | null>();
+  const draftStartedAt = Date.now();
   let accepted: LiveLineDraft | null;
   let hardReason: string | null;
   try {
@@ -1015,11 +1018,14 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
           segmentId: segment?.id ?? null,
           tiltLevel: draft.tiltLevel,
         });
-        return { hard, soft: soft ?? sameOldTricks };
+        // A reply to a waiting viewer is not sent back for style: a second model call is the lag they notice. The
+        // trim and the invented-reaction strip below still run on whatever is accepted.
+        return { hard, soft: batch.length > 0 ? null : (soft ?? sameOldTricks) };
       },
     });
     accepted = result.draft;
     hardReason = result.hardReason;
+    base.timingsMs = { draft: Date.now() - draftStartedAt };
   } catch (err) {
     // A model outage or timeout must not take the stream down: say nothing this tick. A failed segment waits out
     // the quiet time before the next try; a failed reply is retried on the next tick while the viewer is waiting.
