@@ -102,6 +102,33 @@ export function parseDuoPrompt(raw: unknown, id: string): DuoPrompt | null {
   return from ? { id, text: clean, relayedFrom: from } : { id, text: clean };
 }
 
+/**
+ * Short reactions played the instant the co-host sends a prompt, while the real line is still being written.
+ * Fixed text (nothing here comes from a model), no advice, no Fillbook, no names. They hide the few seconds it
+ * takes to draft and voice a reply, which is most of the gap that makes a back and forth feel slow.
+ */
+export const DUO_FILLERS: ReadonlyArray<{ text: string; mood: string }> = [
+  { text: "Oh, we are doing this.", mood: "smirk" },
+  { text: "Hold on. I have thoughts.", mood: "thinking" },
+  { text: "Interesting. Very interesting.", mood: "thinking" },
+  { text: "Okay, okay, okay.", mood: "neutral" },
+  { text: "Bold move.", mood: "smirk" },
+  { text: "Give me a second, I am composing.", mood: "thinking" },
+  { text: "Hmm. Let me cook.", mood: "smirk" },
+  { text: "Oh, you want my opinion?", mood: "smirk" },
+];
+/** A filler plays at most this often, so a run of quick prompts does not turn into a run of fillers. */
+export const DUO_FILLER_EVERY_MS = 20_000;
+
+/** Picks the next filler: never the one just used, and none at all inside the cool-down. */
+export function pickFiller(count: number, lastIndex: number, lastAt: number, now: number, random: () => number = Math.random): number | null {
+  if (count === 0 || now - lastAt < DUO_FILLER_EVERY_MS) return null;
+  if (count === 1) return 0;
+  let index = Math.floor(random() * count);
+  if (index === lastIndex) index = (index + 1) % count;
+  return index;
+}
+
 /** How long a pressed "run a segment" waits for its line to come back before it is given up on. */
 export const DUO_SEGMENT_REQUEST_MS = 30_000;
 
@@ -203,6 +230,9 @@ export const SIGNAL_SPAM_NOTICES: ReadonlyArray<{ title: string; detail: string 
   { title: "Ignore the signal sellers", detail: "They are not with us. Tilt never gives or sells signals." },
   { title: "That is a spam bot", detail: "Nobody on this stream sells signals. Do not message them." },
 ];
+
+/** Shown on the stage when the connection to Growth OS keeps failing. Fixed text. */
+export const RECONNECT_NOTICE = { title: "Hang on", detail: "Tilt lost his connection and is finding it again." };
 
 /** True for the signal-seller and off-platform promotion messages the server would block anyway. */
 export function isPromoSpam(body: string): boolean {
@@ -306,6 +336,14 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   /** Prompts typed on the host page, waiting for the next tick (duo mode). */
   let hostQueue: DuoPrompt[] = [];
   let promptCounter = 0;
+  /** Pre-voiced fillers (duo mode), filled in once the warm voice helper is ready. */
+  const fillers: Array<{ id: string; text: string; mood: string; words: WordCue[]; durationSeconds: number }> = [];
+  let fillersPreparing = false;
+  let fillerPlaying: NodeJS.Timeout | null = null;
+  let lastFillerAt = 0;
+  let lastFillerIndex = -1;
+  let consecutiveTickFailures = 0;
+  let lastReconnectNoticeAt = 0;
   /** A pressed "run a segment", repeated every tick until a segment line comes back or it times out. */
   let segmentRequest: { id: string | null; until: number } | null = null;
   let live = false;
@@ -363,6 +401,54 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
     // Stay "speaking" until the server has the confirmation, so the tick in between does not ask for this line again.
     await confirm(id);
     if (speaking?.id === id) speaking = null;
+  }
+
+  /** Plays one pre-voiced reaction right away, if nothing is being said and the cool-down has passed. */
+  function playFiller(): void {
+    if (!config.duo || !live || speaking !== null || fillerPlaying !== null || stageClients.size === 0) return;
+    const index = pickFiller(fillers.length, lastFillerIndex, lastFillerAt, Date.now());
+    if (index === null) return;
+    const filler = fillers[index]!;
+    lastFillerIndex = index;
+    lastFillerAt = Date.now();
+    fillerPlaying = setTimeout(() => {
+      fillerPlaying = null;
+    }, (filler.durationSeconds + 3) * 1000);
+    broadcast("speak", {
+      id: filler.id,
+      kind: "reply",
+      segmentTitle: null,
+      spokenText: filler.text,
+      redLine: null,
+      mood: filler.mood,
+      tiltLevel: null,
+      card: null,
+      replyingTo: [],
+      audioUrl: `/audio/${filler.id}.mp3`,
+      words: filler.words,
+      durationSeconds: filler.durationSeconds,
+      sidekick: null,
+    });
+    log(`filler: ${filler.text}`);
+  }
+
+  /** Voices the fillers once, as soon as the warm voice helper is ready. Failures just mean no fillers. */
+  async function prepareFillers(): Promise<void> {
+    if (!config.duo || fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
+    fillersPreparing = true;
+    try {
+      for (let i = 0; i < DUO_FILLERS.length; i++) {
+        const id = `filler-${i + 1}`;
+        const { words, durationSeconds } = await synthesize(config, workDir, id, DUO_FILLERS[i]!.text);
+        fillers.push({ id, text: DUO_FILLERS[i]!.text, mood: DUO_FILLERS[i]!.mood, words, durationSeconds });
+      }
+      log(`${fillers.length} instant reactions ready`);
+    } catch (err) {
+      log(`could not prepare instant reactions (${err instanceof Error ? err.message : String(err)}); continuing without them`);
+      fillers.length = 0;
+    } finally {
+      fillersPreparing = false;
+    }
   }
 
   const server = createServer((req, res) => {
@@ -430,6 +516,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
           res.writeHead(429).end();
         } else {
           segmentRequest = { id: request.id, until: Date.now() + DUO_SEGMENT_REQUEST_MS };
+          playFiller();
           res.writeHead(202, { "content-type": "application/json" }).end("{}");
         }
       });
@@ -459,6 +546,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
           res.writeHead(429).end();
         } else {
           hostQueue.push(prompt);
+          playFiller();
           res.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ queued: hostQueue.length }));
         }
       });
@@ -481,7 +569,11 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       req.on("end", () => {
         try {
           const id = (JSON.parse(raw) as { id?: string }).id;
-          if (typeof id === "string") void finishLine(id, "spoken");
+          if (typeof id === "string" && id.startsWith("filler-")) {
+            // A filler has no server record: there is nothing to confirm.
+            if (fillerPlaying) clearTimeout(fillerPlaying);
+            fillerPlaying = null;
+          } else if (typeof id === "string") void finishLine(id, "spoken");
         } catch {
           // Ignore a malformed report; the timer covers it.
         }
@@ -566,6 +658,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
 
   async function tick(): Promise<void> {
     ttsDaemon?.start();
+    void prepareFillers();
     await reviveStage();
     const messages = tiktok.drain().filter((message) => {
       if (isPromoSpam(message.body)) {
@@ -620,8 +713,14 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       tiktok.restore(messages);
       hostQueue = [...hostMessages, ...hostQueue].slice(0, DUO_MAX_QUEUED);
       log(`tick failed: ${err instanceof Error ? err.message : String(err)}`);
+      // Several failures in a row means the room is looking at a silent, frozen host: say so on screen.
+      if (++consecutiveTickFailures >= 3 && Date.now() - lastReconnectNoticeAt > 60_000) {
+        lastReconnectNoticeAt = Date.now();
+        broadcast("notice", RECONNECT_NOTICE);
+      }
       return;
     }
+    consecutiveTickFailures = 0;
 
     if (segmentRequest && (result.utterance?.kind === "segment" || Date.now() > segmentRequest.until)) segmentRequest = null;
     if (result.joinsWelcomed) tiktok.clearJoins();
@@ -649,7 +748,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     await tiktok.ensure(live && result.tiktok?.chatEnabled === true, result.tiktok?.username ?? null);
 
     const line = result.utterance;
-    if (!live || !line || speaking) return;
+    // The real line waits for the instant reaction to finish; the server keeps handing it out until it is spoken.
+    if (!live || !line || speaking || fillerPlaying) return;
     if (finished.has(line.id)) {
       // Already said (or dropped) and the confirmation did not land: confirm again, do not say it again.
       await confirm(line.id);
