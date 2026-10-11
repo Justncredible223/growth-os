@@ -181,9 +181,21 @@
       hearing.classList.toggle("live", on);
     }
 
+    // Tells the stage what he should be doing with his eyes: fire and forget, never blocks the microphone.
+    var lastNodAt = 0;
+    function react(mode, nod) {
+      var body = nod ? { mode: mode, nod: true } : { mode: mode };
+      fetch("/react", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-live-host": "1" },
+        body: JSON.stringify(body)
+      }).catch(function () { /* the stage is optional */ });
+    }
+
     function start() {
       if (holding) return;
       holding = true;
+      react("listening");
       cancelled = false;
       finalText = "";
       interimText = "";
@@ -203,6 +215,8 @@
         }
         finalText = finals;
         interimText = interims;
+        // A nod every second or so while words are coming in, so he looks like he is following you.
+        if (Date.now() - lastNodAt > 1300) { lastNodAt = Date.now(); react("listening", true); }
         hearing.textContent = (finals + interims).trim() || "Listening...";
       };
       recognition.onerror = function (event) {
@@ -221,8 +235,8 @@
         holding = false;
         setLive(false);
         recognition = null;
-        if (cancelled) { hearing.textContent = "Cancelled."; return; }
-        if (text.length < 3) { if (hearing.textContent === "Listening...") hearing.textContent = idleText; return; }
+        if (cancelled) { react("idle"); hearing.textContent = "Cancelled."; return; }
+        if (text.length < 3) { react("idle"); if (hearing.textContent === "Listening...") hearing.textContent = idleText; return; }
         hearing.textContent = "Sent: " + text;
         sendPrompt(text.slice(0, 400), "You (voice): " + text.slice(0, 400));
       };

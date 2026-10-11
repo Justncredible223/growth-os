@@ -324,3 +324,18 @@ A draft over its limit is sent back once with the count. If it is still over, wh
 first: the first sentence (the hook) and the last (the turn back to the co-host or chat) are kept, and a sentence with
 the "entertainment, not advice" disclaimer is never dropped, so a trimmed line can stay a little over the limit
 rather than lose it. A trimmed line goes through the same checks as any other before it is spoken.
+
+## Tilt reacts to the co-host (duo mode)
+
+While you talk, he looks like he is listening:
+
+- **Listening** (you hold the talk button): his eyes widen and go to where you are, he leans toward you and tilts
+  his head a little, and he nods about once a second while words are coming in.
+- **Thinking** (the moment you release, or press a quick prompt, a segment or the show buttons): his eyes go up and
+  away, one brow drops and his head tilts, until his line starts.
+- It only shows while he is not talking himself, it eases in and out, and a missed "idle" times out (25 seconds for
+  thinking, 70 for listening) so he can never be left staring at you.
+
+Set where you are relative to him with `LIVE_HOST_COHOST_SIDE` = `left`, `right` or `down` (default `down`, the camera
+feed at the bottom of the frame). Reactions are sent from the console to the worker's `/react` route (same local-only
+trust check as `/ask`) and on to the stage.

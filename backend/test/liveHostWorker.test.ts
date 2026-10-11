@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { obsAuthResponse } from "../scripts/live-host/obsClient";
-import { DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
+import { DUO_FILLERS, DUO_FILLER_EVERY_MS, DUO_MAX_PROMPT_CHARS, RECONNECT_NOTICE, parseReaction, captionWords, duoSegmentChoices, isTrustedHostRequest, loadWorkerConfig, parseDuoPrompt, parseSegmentRequest, pickFiller, prepareSpeechText } from "../scripts/live-host/worker";
 import { LIVE_HOST_MOODS } from "../src/liveHost/types";
 
 describe("live host worker", () => {
@@ -125,6 +125,40 @@ describe("live host duo mode", () => {
     expect(html).toContain("sendPrompt(text.slice(0, 400)");
     // Nothing is sent to anywhere but the local worker.
     expect(html).not.toMatch(/fetch\(\s*["']https?:/i);
+  });
+
+  it("reads a reaction from the host page and rejects anything else", () => {
+    expect(parseReaction({ mode: "listening" })).toEqual({ mode: "listening" });
+    expect(parseReaction({ mode: "listening", nod: true })).toEqual({ mode: "listening", nod: true });
+    expect(parseReaction({ mode: "thinking" })).toEqual({ mode: "thinking" });
+    expect(parseReaction({ mode: "idle" })).toEqual({ mode: "idle" });
+    expect(parseReaction({ nod: true })).toEqual({ nod: true });
+    expect(parseReaction({ mode: "dance" })).toBeNull();
+    expect(parseReaction({ mode: 3 })).toBeNull();
+    expect(parseReaction({ nod: "yes" })).toBeNull();
+    expect(parseReaction({})).toBeNull();
+    expect(parseReaction(null)).toBeNull();
+  });
+
+  it("takes the co-host's side from the environment and defaults to looking down", () => {
+    const base = { GROWTH_OS_AUTOMATION_TOKEN: "a".repeat(40) };
+    expect(loadWorkerConfig(base).cohostSide).toBe("down");
+    expect(loadWorkerConfig({ ...base, LIVE_HOST_COHOST_SIDE: "Left" }).cohostSide).toBe("left");
+    expect(loadWorkerConfig({ ...base, LIVE_HOST_COHOST_SIDE: "right" }).cohostSide).toBe("right");
+    expect(loadWorkerConfig({ ...base, LIVE_HOST_COHOST_SIDE: "up" }).cohostSide).toBe("down");
+  });
+
+  it("wires reactions from the host page to the stage, and keeps them off while he is speaking", () => {
+    const host = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
+    expect(host).toContain('react("listening")');
+    expect(host).toContain('react("listening", true)');
+    expect(host).toContain('react("idle")');
+    const stage = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "index.html"), "utf-8");
+    expect(stage).toContain('events.addEventListener("react"');
+    expect(stage).toContain("state.talking || attention.mode === \"idle\" ? 0 : 1");
+    // Starting a line ends any attention pose, and a missed "idle" times out instead of leaving him staring.
+    expect(stage).toContain('attention.mode = "idle";');
+    expect(stage).toContain("attention.until");
   });
 
   it("ships a host page that loads nothing from the internet", () => {
