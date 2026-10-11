@@ -485,7 +485,7 @@ describe("signal-seller bots", () => {
 });
 
 
-import { applyControl, tickDelayMs, type OperatorControls } from "../scripts/live-host/worker.js";
+import { applyControl, streamLimitAction, tickDelayMs, type OperatorControls } from "../scripts/live-host/worker.js";
 import { isWideLayout } from "../scripts/live-host/setupObs.js";
 
 describe("operator controls and recovery", () => {
@@ -516,6 +516,18 @@ describe("operator controls and recovery", () => {
     expect(tickDelayMs(2)).toBe(6_000);
     expect(tickDelayMs(10)).toBe(30_000);
     expect(tickDelayMs(100)).toBe(30_000);
+  });
+
+  it("warns five minutes out, ends at the limit, and does nothing without a limit", () => {
+    const min = 60_000;
+    expect(streamLimitAction(10 * min, 0, false)).toBe("none");
+    expect(streamLimitAction(60 * min, 120, false)).toBe("none");
+    expect(streamLimitAction(115 * min, 120, false)).toBe("warn");
+    expect(streamLimitAction(116 * min, 120, true)).toBe("none");
+    expect(streamLimitAction(120 * min, 120, true)).toBe("end");
+    expect(streamLimitAction(200 * min, 120, false)).toBe("end");
+    // a very short limit still warns before it ends
+    expect(streamLimitAction(1 * min, 2, false)).toBe("warn");
   });
 
   it("uses the wide layout only for YouTube", () => {

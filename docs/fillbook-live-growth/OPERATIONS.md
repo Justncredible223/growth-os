@@ -5,6 +5,9 @@
 2. `npm run live-host:setup-obs`, then `npm run live-host:preflight`, then `npm run live-host:supervised`.
 3. Flip the Live Host switch ON in the app. The worker starts the OBS stream.
 
+## Run-time limit
+`LIVE_HOST_MAX_MINUTES=120` stops the stream after 120 minutes live: a heads-up on screen 5 minutes before, a goodbye card at the limit, then 25 seconds later the speech is silenced, the OBS stream (and recording) stopped, and the worker stays paused until it is restarted. It counts from the first time the worker went live, so restarting the worker restarts the clock. The app switch is not changed (only the owner can), so switch it OFF afterwards. `/health` shows `minutesLeft`.
+
 ## Operator control panel: http://127.0.0.1:8790/control
 Local only (bound to 127.0.0.1, host and origin checked, custom header required, optional shared token).
 
