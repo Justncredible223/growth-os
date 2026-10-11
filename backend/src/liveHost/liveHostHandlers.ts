@@ -10,6 +10,7 @@ import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../signals/adapters/youtubeLiveChatAdapter.js";
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
 import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
+import { parseCostMode, useFastModel } from "./liveHostModels.js";
 import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
@@ -47,7 +48,7 @@ export const JOIN_WELCOME_EVERY_MS = 12_000;
  * On the first real stream viewers arrived and left within seconds. While someone is in the room the host
  * does not leave long silences: the gap between his lines is capped at this, whatever the quiet-time setting.
  */
-export const ENGAGED_GAP_MS = 18_000;
+export const ENGAGED_GAP_MS = 30_000;
 /** Names said in one welcome; anyone beyond that is welcomed as "and N more". */
 export const JOIN_WELCOME_MAX_NAMES = 3;
 export const JOIN_WELCOME_SEGMENT = "join_welcome";
@@ -485,6 +486,8 @@ export interface TickInput {
   hostMessages?: Array<{ id?: unknown; text?: unknown; relayedFrom?: unknown }>;
   /** The name the co-host goes by on stream. Cleaned like any name. */
   hostName?: unknown;
+  /** "quality" (default: the stronger model for every line), "balanced" (fast model for routine segments) or "low". */
+  costMode?: unknown;
   /**
    * Duo mode only: the co-host pressed "run a segment". Runs one segment now, skipping the quiet-time wait, as
    * long as nobody is waiting on an answer. `id` picks a segment; without it the rotation continues.
@@ -517,6 +520,8 @@ export interface TickResult {
   note: string | null;
   /** True when the joins sent with this tick were used or deliberately dropped: the worker clears its list. */
   joinsWelcomed?: boolean;
+  /** Today's recorded Live Host spend in dollars, when this tick looked it up. */
+  spendTodayUsd?: number;
 }
 
 export interface TickDeps {
@@ -706,6 +711,10 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   }
   const youtube = deps.youtube === undefined ? createYoutubeLiveChatAdapter() : deps.youtube;
   if (youtube) base.note = await pollYoutubeChat(client, session, settings, youtube, now);
+  // A YouTube stream with no live link in the app runs fine and silently reads no chat: say so in the worker's log.
+  if (input.platform === "youtube" && !settings.youtubeVideoId) {
+    base.note = "No YouTube live link is set in the app (More, Live Host): chat is not being read, so nobody can be answered by name.";
+  }
 
   if (input.busy) return base;
 
@@ -719,6 +728,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   }
 
   const todaySpend = await getLiveHostSpendTodayUsd(client, now);
+  base.spendTodayUsd = todaySpend;
   if (todaySpend >= settings.dailyBudgetUsd) {
     return { ...base, note: `Daily budget reached ($${todaySpend.toFixed(2)} of $${settings.dailyBudgetUsd.toFixed(2)}). The host is staying quiet.` };
   }
@@ -826,6 +836,16 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   // How long this line may be. A long draft is sent back once; whatever is still too long is trimmed below.
   const wordLimit = spokenWordLimit({ duo: input.duo === true, show: segment?.show === true, segment: segment !== null, joinWelcome });
 
+  const fastModel = useFastModel({
+    mode: parseCostMode(input.costMode),
+    segmentId: segment?.id ?? null,
+    joinWelcome,
+    duoReply: input.duo === true && batch.length > 0,
+    spendFraction: settings.dailyBudgetUsd > 0 ? todaySpend / settings.dailyBudgetUsd : 0,
+  });
+  // Varies the angle of the opening joke from stream to stream (the session id is stable within one stream).
+  const openingSeed = [...session.id].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) >>> 0, 7);
+
   const recent = await buildRecentExchanges(client, recentUtterances);
   const grounding = deps.grounding ?? (await loadGroundingContext(client));
   const sessionId = session.id;
@@ -844,7 +864,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, retryFeedback }, grounding, joinWelcome || (input.duo === true && batch.length > 0) ? MODEL_HAIKU : undefined);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, seed: openingSeed, retryFeedback }, grounding, fastModel ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0 && copiesExampleLine(draft.reply)) problem = "copies a line from the character examples; write a fresh one";
         if (!problem && draft.reply.length > 0) {
@@ -860,7 +880,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       assess: (draft) => {
         const hard = verdicts.get(draft) ?? null;
         const words = wordCount(draft.reply);
-        const soft = wordLimit !== null && words > wordLimit ? `is ${words} words and the limit is ${wordLimit}: cut it down, keeping the joke and the question or the turn to your co-host` : null;
+        const soft = wordLimit !== null && words > Math.ceil(wordLimit * 1.25) ? `is ${words} words and the limit is ${wordLimit}: cut it down, keeping the joke and the question or the turn to your co-host` : null;
         return { hard, soft };
       },
     });

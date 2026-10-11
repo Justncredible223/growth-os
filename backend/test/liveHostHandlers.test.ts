@@ -312,6 +312,59 @@ describe("runLiveHostTick", () => {
     expect(late.utterance).toBeNull();
   });
 
+  it("cost: routine segments go to the fast model and fact segments stay on the stronger one", async () => {
+    // A young session, so the Fillbook spot is not yet due and the rotation decides the segment.
+    const session = { id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() };
+    const modelFor = async (lastSegment: string) => {
+      const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [{ ...session, last_segment: lastSegment }] });
+      const llm = scriptedLlm([line("Quick one for chat: type a number.")]);
+      await runLiveHostTick(asSupabase(client), { platform: "youtube", costMode: "balanced" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+      return (JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { model?: string }).model ?? "default";
+    };
+    // After tilt_o_meter the rotation reaches eval_graveyard (routine); after rule_trivia it reaches trivia_answer (fact).
+    expect(await modelFor("tilt_o_meter")).toContain("haiku");
+    expect(await modelFor("rule_trivia")).not.toContain("haiku");
+  });
+
+  it("cost: a small overage is trimmed without paying for a second draft, a large one is sent back once", async () => {
+    const make = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ") + ".";
+    // Segment limit on solo is 60: 70 words is within 25 percent, so one call and a trim.
+    const small = buildClient();
+    const llmSmall = scriptedLlm([line(make(70)), line("A shorter one.")]);
+    await runLiveHostTick(asSupabase(small), { platform: "youtube", audienceOnly: false }, { now: NOW, llmClient: llmSmall.client, youtube: null, grounding: GROUNDING });
+    expect(llmSmall.fetchImpl).toHaveBeenCalledTimes(1);
+    // 90 words is over 25 percent, so it is sent back once.
+    const big = buildClient();
+    const llmBig = scriptedLlm([line(make(90)), line("A shorter one, thank you.")]);
+    await runLiveHostTick(asSupabase(big), { platform: "youtube", audienceOnly: false }, { now: NOW, llmClient: llmBig.client, youtube: null, grounding: GROUNDING });
+    expect(llmBig.fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("warns, in the tick note, when a YouTube stream has no live link set", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, youtube_video_id: null })] });
+    const llm = scriptedLlm([line("Hello there.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.note).toContain("No YouTube live link is set");
+    const withLink = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, youtube_video_id: "abcdefghijk" })] });
+    const quiet = await runLiveHostTick(asSupabase(withLink), { platform: "youtube" }, { now: NOW, llmClient: scriptedLlm([line("Hello there.")]).client, youtube: null, grounding: GROUNDING });
+    expect(quiet.note ?? "").not.toContain("No YouTube live link");
+  });
+
+  it("the opening gets an angle so it is not the same joke every stream", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })] });
+    const llm = scriptedLlm([line("Somebody connected a candle to a microphone. Say hi in chat.")]);
+    await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("Angle for the opening joke");
+  });
+
+  it("reports today's spend with the tick", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([line("Hello there.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(typeof result.spendTodayUsd).toBe("number");
+  });
+
   it("says nothing if the owner switches off while the line is being written", async () => {
     const client = buildClient();
     const { client: llmClient, fetchImpl } = scriptedLlm([line("Mike, welcome in.")]);

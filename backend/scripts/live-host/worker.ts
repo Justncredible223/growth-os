@@ -76,6 +76,8 @@ export interface WorkerConfig {
   duo: boolean;
   /** What Tilt calls the co-host on stream. */
   hostName: string;
+  /** quality (default), balanced or low: see liveHostModels.ts. */
+  costMode: string;
   /** Where the co-host is relative to Tilt on screen, so his eyes and lean go the right way. */
   cohostSide: "left" | "right" | "down";
 }
@@ -202,6 +204,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
     duo: (env.LIVE_HOST_MODE || "").toLowerCase() === "duo",
     hostName: env.LIVE_HOST_COHOST_NAME || "Host",
+    costMode: ["quality", "balanced", "low"].includes((env.LIVE_HOST_COST || "").toLowerCase()) ? (env.LIVE_HOST_COST as string).toLowerCase() : "quality",
     cohostSide: (["left", "right", "down"] as const).find((side) => side === (env.LIVE_HOST_COHOST_SIDE || "").toLowerCase()) ?? "down",
   };
 }
@@ -217,6 +220,8 @@ interface TickUtterance {
   card: { title: string; lines: string[] } | null;
   replyingTo: Array<{ platform: string; authorName: string; body: string }>;
 }
+let lastSpendUsd: number | null = null;
+
 interface TickResult {
   desired: "on" | "off";
   reason: string | null;
@@ -226,6 +231,7 @@ interface TickResult {
   utterance: TickUtterance | null;
   note: string | null;
   joinsWelcomed?: boolean;
+  spendTodayUsd?: number;
 }
 export interface WordCue {
   text: string;
@@ -754,6 +760,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         // retried. The server then takes chat in but does not spend a model call on a line nobody would hear.
         busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt || emptyRoom,
         platform: config.platform,
+        costMode: config.costMode,
         // Not while the TikTok reader is down: without it nobody would ever count as present.
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
@@ -776,6 +783,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     consecutiveTickFailures = 0;
 
     if (segmentRequest && (result.utterance?.kind === "segment" || Date.now() > segmentRequest.until)) segmentRequest = null;
+    if (typeof result.spendTodayUsd === "number") lastSpendUsd = result.spendTodayUsd;
     if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
@@ -814,7 +822,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       const singing = line.kind === "segment" && line.segmentTitle === SINGING_TITLE;
       const synthStartedAt = Date.now();
       const { words, durationSeconds } = await synthesize(config, workDir, line.id, line.spokenText, config.voice, singing ? SINGING_RATE : config.rate);
-      log(`voice ready in ${((Date.now() - synthStartedAt) / 1000).toFixed(1)}s${ttsDaemon?.ready ? "" : " (per-line voice)"}`);
+      log(`voice ready in ${((Date.now() - synthStartedAt) / 1000).toFixed(1)}s${ttsDaemon?.ready ? "" : " (per-line voice)"}${lastSpendUsd !== null ? `; spent today $${lastSpendUsd.toFixed(2)}` : ""}`);
       // Red's interruption, when there is one, is voiced separately and played first. If his voice fails he is
       // simply left out.
       let sidekick: { text: string; audioUrl: string; durationSeconds: number } | null = null;
