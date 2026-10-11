@@ -465,3 +465,19 @@ calculation with round numbers, and the answer states it once as X times Y perce
 - **Tilt-o-Meter** without a rating is redone once. The rating drives the needle on screen as well as the line.
 - **Openings** are told to leave out the closed market (the opening angle list exists for that); the hour and the
   weekend are allowed there because several angles legitimately use them.
+
+## Open mic (duo mode)
+
+Hold-to-talk stays the default. **Open mic** is a toggle on the console for when your hands are busy:
+
+- It listens between your words and sends a turn after a 1.3 second pause. It is **off every time the page loads**.
+- **"Only when I say Tilt"** (on by default): a turn is sent only if "Tilt" is in its first few words ("Tilt, what do you
+  think?"). Chatter, a phone call, something said to chat: shown on screen as "Heard, not sent", never sent. Untick it
+  and any turn of three words or more goes, at most one every 6 seconds.
+- **It is deaf while Tilt is talking** (and for 1.5 seconds after), so he cannot answer himself. Holding the talk button
+  pauses it too; it resumes when you let go. **Esc** drops the turn you are in the middle of.
+- He looks up and nods while a turn meant for him is coming in, same as hold-to-talk.
+- **Wear headphones.** Without them his voice from the speakers can still leak into a turn right at the edges.
+- Same service as hold-to-talk: Chrome or Edge, the browser's speech recognition processes the audio.
+
+It is a convenience, not the recommended mode for a first TikTok run: rehearse it before relying on it live.

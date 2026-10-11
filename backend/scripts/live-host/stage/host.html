@@ -21,6 +21,10 @@
   .showbar { margin:10px 0 14px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
   .clock { display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; font-size:13px; color:var(--mute); }
   .clock .hint { color:var(--accent); text-align:right; }
+  .openmic { display:flex; align-items:center; gap:12px; margin:-4px 0 4px; }
+  .openmic button.on { background:#b42318; color:#fff; border-color:#b42318; }
+  .needtilt { font-size:13px; color:var(--mute); display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .mictip { font-size:12px; color:var(--mute); margin:0 0 10px; }
   .talkbar { display:flex; gap:10px; align-items:center; margin:0 0 12px; }
   .talk { min-width:140px; padding:14px 18px; font-size:15px; background:var(--card); color:var(--text); border:1px solid var(--line); user-select:none; touch-action:none; }
   .talk.live { background:#b42318; color:#fff; border-color:#b42318; }
@@ -53,6 +57,12 @@
     <button id="talk" type="button" class="talk" aria-pressed="false">Hold to talk</button>
     <div class="hearing" id="hearing" aria-live="polite">Hold the button, or hold Space, and talk to Tilt. Release to send. Esc cancels.</div>
   </div>
+
+  <div class="openmic">
+    <button id="openMic" type="button" class="secondary" aria-pressed="false">Open mic: off</button>
+    <label class="needtilt"><input type="checkbox" id="needTilt" checked> only when I say "Tilt"</label>
+  </div>
+  <div class="mictip" id="micTip">Open mic listens between your words and sends a turn after a pause. Wear headphones, or he may hear himself.</div>
 
   <form id="form">
     <textarea id="text" maxlength="400" placeholder="Say something to Tilt, or paste a viewer's question below" autofocus></textarea>
@@ -195,6 +205,8 @@
     function start() {
       if (holding) return;
       holding = true;
+      window.pttActive = true;
+      document.dispatchEvent(new Event("ptt"));
       react("listening");
       cancelled = false;
       finalText = "";
@@ -233,6 +245,8 @@
       recognition.onend = function () {
         var text = (finalText + " " + interimText).replace(/\s+/g, " ").trim();
         holding = false;
+        window.pttActive = false;
+        document.dispatchEvent(new Event("ptt"));
         setLive(false);
         recognition = null;
         if (cancelled) { react("idle"); hearing.textContent = "Cancelled."; return; }
@@ -266,6 +280,130 @@
     });
     document.addEventListener("keyup", function (event) {
       if (event.code === "Space" && holding) { event.preventDefault(); stop(false); }
+    });
+  })();
+
+  // ---- open mic: listens between your words and sends a turn after a pause ----
+  // It is off every time the page loads. It steps aside while you hold the talk button and while Tilt is talking (so he
+  // never answers himself), and by default only acts on a turn where you said "Tilt", so chatter, phone calls and
+  // things said to chat are never sent.
+  // <pure-open-mic>
+  var OPEN_MIC_PAUSE_MS = 1300;
+  var OPEN_MIC_MIN_WORDS = 3;
+  var OPEN_MIC_MIN_GAP_MS = 6000;
+  function micWords(text) { return String(text || "").trim().split(/\s+/).filter(Boolean); }
+  /** "Tilt" within the first few words, which is how you would address him: "Tilt, what do you think?" */
+  function isAddressedToTilt(text) { return /\btilt\b/i.test(micWords(text).slice(0, 8).join(" ")); }
+  /** Whether a finished turn should be sent, and if not, why. */
+  function openMicDecision(text, requireTilt, lastSendAt, now) {
+    var words = micWords(text);
+    if (words.length < OPEN_MIC_MIN_WORDS) return { send: false, why: "too short" };
+    if (requireTilt && !isAddressedToTilt(text)) return { send: false, why: "not for Tilt" };
+    if (now - lastSendAt < OPEN_MIC_MIN_GAP_MS) return { send: false, why: "too soon after the last one" };
+    return { send: true, why: "" };
+  }
+  // </pure-open-mic>
+  (function setupOpenMic() {
+    var button = document.getElementById("openMic");
+    var needTilt = document.getElementById("needTilt");
+    var hearingEl = document.getElementById("hearing");
+    var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      button.disabled = true;
+      button.textContent = "Open mic: needs Chrome or Edge";
+      return;
+    }
+    var on = false;
+    var rec = null;
+    var buffer = "";
+    var pauseTimer = null;
+    var restartTimer = null;
+    var speakingUntil = 0;
+    var lastSendAt = 0;
+    var nodAt = 0;
+
+    function react(mode, nod) {
+      fetch("/react", { method: "POST", headers: { "content-type": "application/json", "x-live-host": "1" }, body: JSON.stringify(nod ? { mode: mode, nod: true } : { mode: mode }) }).catch(function () {});
+    }
+    function say(text) { hearingEl.textContent = text; }
+    function stopRec() {
+      clearTimeout(pauseTimer);
+      if (rec) { var r = rec; rec = null; r.onend = null; try { r.stop(); } catch (err) { /* already stopped */ } }
+    }
+    function blocked() { return window.pttActive === true || Date.now() < speakingUntil; }
+    function schedule(ms) { clearTimeout(restartTimer); if (on) restartTimer = setTimeout(startRec, ms); }
+
+    function endTurn() {
+      var text = buffer.replace(/\s+/g, " ").trim();
+      buffer = "";
+      stopRec();
+      if (!text) { schedule(250); return; }
+      var d = openMicDecision(text, needTilt.checked, lastSendAt, Date.now());
+      if (d.send) {
+        lastSendAt = Date.now();
+        say("Sent: " + text);
+        sendPrompt(text.slice(0, 400), "You (open mic): " + text.slice(0, 400));
+      } else {
+        say("Heard, not sent (" + d.why + "): " + text);
+        react("idle");
+      }
+      schedule(400);
+    }
+
+    function startRec() {
+      if (!on || rec) return;
+      if (blocked()) { schedule(400); return; }
+      buffer = "";
+      rec = new Recognition();
+      rec.lang = "en-US";
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.onresult = function (event) {
+        var all = "";
+        for (var i = 0; i < event.results.length; i++) all += event.results[i][0].transcript + " ";
+        buffer = all;
+        say("Hearing: " + all.trim());
+        // He looks up and nods only when the turn is meant for him.
+        if (isAddressedToTilt(all) || !needTilt.checked) {
+          if (Date.now() - nodAt > 1300) { nodAt = Date.now(); react("listening", true); }
+        }
+        clearTimeout(pauseTimer);
+        pauseTimer = setTimeout(endTurn, OPEN_MIC_PAUSE_MS);
+      };
+      rec.onerror = function (event) {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          on = false; button.classList.remove("on"); button.setAttribute("aria-pressed", "false"); button.textContent = "Open mic: off";
+          say("The browser blocked the microphone. Allow it for this page, then switch open mic on again.");
+        }
+      };
+      rec.onend = function () { rec = null; schedule(300); };
+      try { rec.start(); say(needTilt.checked ? 'Open mic is on. Say "Tilt, ..." and pause.' : "Open mic is on. Talk and pause."); }
+      catch (err) { rec = null; schedule(800); }
+    }
+
+    function setOn(next) {
+      on = next;
+      button.classList.toggle("on", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+      button.textContent = on ? "Open mic: ON" : "Open mic: off";
+      if (on) startRec();
+      else { clearTimeout(restartTimer); stopRec(); buffer = ""; react("idle"); say("Open mic is off."); }
+    }
+    button.addEventListener("click", function () { setOn(!on); });
+
+    // While Tilt talks the mic is deaf, and a little after, so the tail of his line is not taken for you.
+    window.openMicOnSpeak = function (data) {
+      var seconds = (data && data.durationSeconds ? data.durationSeconds : 5) + (data && data.sidekick && data.sidekick.durationSeconds ? data.sidekick.durationSeconds : 0) + 1.5;
+      speakingUntil = Date.now() + seconds * 1000;
+      if (on) { buffer = ""; stopRec(); say("Tilt is talking..."); schedule(seconds * 1000 + 200); }
+    };
+    document.addEventListener("ptt", function () {
+      if (!on) return;
+      if (window.pttActive) { buffer = ""; stopRec(); }
+      else schedule(500);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && on) { buffer = ""; clearTimeout(pauseTimer); stopRec(); say("Dropped that turn."); schedule(400); }
     });
   })();
 
@@ -342,6 +480,7 @@
   });
   source.addEventListener("speak", function (event) {
     var data = JSON.parse(event.data);
+    if (window.openMicOnSpeak) window.openMicOnSpeak(data);
     addItem("tilt", "Tilt", data.spokenText);
   });
   source.onerror = function () { statusEl.textContent = "reconnecting"; statusEl.className = "status"; };
