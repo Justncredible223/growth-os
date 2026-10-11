@@ -66,6 +66,19 @@ export function applyControl(state: OperatorControls, action: ControlAction): Op
   }
 }
 
+/**
+ * A run-time limit for one stream. Returns what should happen now given how long the stream has been live:
+ * nothing, a heads-up on screen, or the end. Pure so it can be tested. maxMinutes of 0 means no limit.
+ */
+export function streamLimitAction(elapsedMs: number, maxMinutes: number, warned: boolean): "none" | "warn" | "end" {
+  if (!(maxMinutes > 0)) return "none";
+  const limitMs = maxMinutes * 60_000;
+  if (elapsedMs >= limitMs) return "end";
+  const warnMs = Math.max(0, limitMs - Math.min(5 * 60_000, limitMs / 2));
+  if (!warned && elapsedMs >= warnMs) return "warn";
+  return "none";
+}
+
 /** Seconds to wait before the next tick: the normal beat, doubling per consecutive failure up to a ceiling. */
 export function tickDelayMs(consecutiveFailures: number, baseMs = 1_500, ceilingMs = 30_000): number {
   if (consecutiveFailures <= 0) return baseMs;
@@ -752,6 +765,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         lastNote,
         spendTodayUsd: lastSpendUsd,
         segmentRequest: segmentRequest?.id ?? (segmentRequest ? "next" : null),
+        minutesLeft: maxMinutes > 0 && liveSinceMs > 0 ? Math.max(0, Math.round(maxMinutes - (Date.now() - liveSinceMs) / 60_000)) : null,
+        limitMinutes: maxMinutes > 0 ? maxMinutes : null,
         uptimeSeconds: Math.round((Date.now() - startedAtMs) / 1000),
         segments: duoSegmentChoices(),
       };
@@ -919,6 +934,11 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   const startedAtMs = Date.now();
   let controls: OperatorControls = { paused: false, muted: false, chat: true, promos: true, emergency: false };
   let lastTickOkAt = 0;
+  /** A hard stop for the stream: LIVE_HOST_MAX_MINUTES (0 or unset means none). Counted from when it first went live. */
+  const maxMinutes = Number(process.env.LIVE_HOST_MAX_MINUTES ?? 0) || 0;
+  let liveSinceMs = 0;
+  let limitWarned = false;
+  let limitEnded = false;
   let waitingLineId: string | null = null;
   const recordingOn = process.env.LIVE_HOST_RECORD === "on";
   let ticksSinceStreamCheck = 0;
@@ -1019,9 +1039,10 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
 
-    const shouldBeLive = result.desired === "on";
+    const shouldBeLive = result.desired === "on" && !limitEnded;
     if (shouldBeLive !== live) {
       live = shouldBeLive;
+      if (live && liveSinceMs === 0) liveSinceMs = Date.now();
       log(live ? "Live Host switched ON" : `Live Host is off (${result.reason ?? "switched off"})`);
       broadcast("state", { live, duo: config.duo });
       ticksSinceStreamCheck = 0;
@@ -1035,6 +1056,39 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       // must not leave the broadcast running after the owner switched off.
       ticksSinceStreamCheck = 0;
       await setStreaming(live);
+    }
+
+    // The run-time limit: a heads-up five minutes out, then a goodbye, then the stream is stopped and stays stopped.
+    if (live && liveSinceMs > 0) {
+      const action = streamLimitAction(Date.now() - liveSinceMs, maxMinutes, limitWarned);
+      if (action === "warn") {
+        limitWarned = true;
+        broadcast("notice", { title: "Stream ends soon", detail: "Last questions, the show closes in a few minutes" });
+        log(`time limit: ${maxMinutes} minutes, warning shown`);
+      } else if (action === "end" && !limitEnded) {
+        limitEnded = true;
+        broadcast("notice", { title: "That is the show", detail: "Thanks for watching. Fillbook Live is over for today." });
+        log(`time limit reached (${maxMinutes} minutes): closing the stream in 25 seconds`);
+        setTimeout(() => {
+          void (async () => {
+            controls = { ...controls, paused: true, emergency: true };
+            broadcast("silence", {});
+            if (speaking) await finishLine(speaking.id, "dropped");
+            live = false;
+            broadcast("state", { live: false, duo: config.duo });
+            try {
+              if (obs) {
+                await obs.connect();
+                if (recordingOn) await obs.stopRecording();
+                await obs.stopStream();
+              }
+            } catch (err) {
+              log(`time limit: OBS did not confirm the stop (${err instanceof Error ? err.message : String(err)}). Stop the stream in OBS by hand.`);
+            }
+            log("time limit: stream stopped. Restart the worker to stream again.");
+          })();
+        }, 25_000);
+      }
     }
 
     // Not on a stream that is explicitly YouTube: the owner's TikTok-chat setting is for TikTok nights.
