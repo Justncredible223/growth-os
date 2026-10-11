@@ -99,9 +99,9 @@
   /* The showcase: real screens from the app (seeded demo account), shown beside him while he says the site. */
   .showcase { position: absolute; right: 36px; top: 520px; width: 270px; height: 500px; border-radius: 34px; overflow: hidden; background: #0b1424; border: 3px solid rgba(34, 211, 238, 0.55); box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55); transform: translateX(130%) rotate(3deg); opacity: 0; transition: transform 0.6s cubic-bezier(.2, .9, .2, 1.1), opacity 0.3s; pointer-events: none; }
   .showcase.show { transform: translateX(0) rotate(2deg); opacity: 1; }
-  .showcase img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; opacity: 0; transition: opacity 0.6s ease; }
+  .showcase img { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% - 64px); object-fit: contain; object-position: center; opacity: 0; transition: opacity 0.6s ease; }
   .showcase img.on { opacity: 1; }
-  .showcase .tag { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 10px; text-align: center; background: linear-gradient(0deg, rgba(4, 12, 24, 0.95) 55%, rgba(4, 12, 24, 0)); font-size: 15px; font-weight: 800; letter-spacing: 1px; line-height: 1.25; color: var(--ink); }
+  .showcase .tag { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: block; overflow: hidden; padding: 10px 14px 0; text-align: center; line-height: 1.25; background: #070d18; border-top: 1px solid var(--line); font-size: 19px; font-weight: 800; letter-spacing: 0.5px; color: var(--ink); }
   .showcase .tag b { color: var(--accent); }
   .meter { position: absolute; left: 40px; top: 1090px; width: 300px; padding: 18px; border-radius: 26px; background: var(--card); border: 2px solid var(--line); box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5); transform: translateX(-140%); transition: transform 0.6s cubic-bezier(.2, .9, .2, 1.1); text-align: center; }
   .meter.show { transform: translateX(0); }
@@ -202,7 +202,7 @@
   body.layout-wide .footer { bottom: auto; top: 1028px; font-size: 22px; }
   body.layout-wide .footer .fine { font-size: 18px; margin-top: 2px; }
   body.layout-wide.hooked .footer { opacity: 0; }
-  body.layout-wide .showcase { right: auto; left: 1260px; top: 410px; width: 300px; height: 340px; }
+  body.layout-wide .showcase { right: auto; left: 1260px; top: 370px; width: 600px; height: 400px; background: #05090f; }
   body.layout-wide .card { right: auto; left: 1580px; top: 410px; width: 280px; }
   body.layout-wide .card.show { transform: translateX(0) rotate(1deg); }
   body.layout-wide .sitecard { left: 1260px; right: 60px; top: 770px; }
@@ -239,7 +239,12 @@
   body.safe-youtube .footer .fine { font-size: 19px; margin-top: 4px; }
   body.safe-youtube.hooked .footer { opacity: 0; }
   body.safe-youtube .sitecard { top: 960px; }
-  body.safe-youtube .showcase { top: 430px; height: 460px; width: 250px; right: 30px; }
+  body.safe-youtube .showcase { top: 340px; height: 420px; width: 540px; right: 24px; background: #05090f; transform: translateX(120%); }
+  body.safe-youtube .showcase.show { transform: translateX(0); }
+  body.safe-youtube #tiltWrap, body.safe-youtube #floor { transition: left 0.5s ease, width 0.5s ease, height 0.5s ease, margin-left 0.5s ease, top 0.5s ease; }
+  body.safe-youtube.showcase-on #tiltWrap { left: 23%; width: 380px; height: 440px; margin-left: -190px; top: 470px; }
+  body.safe-youtube.showcase-on #floor { left: 23%; width: 300px; margin-left: -150px; top: 905px; }
+  body.safe-youtube.showcase-on .card, body.safe-youtube.showcase-on .meter { display: none; }
   body.safe-youtube .meter { top: 600px; left: 56px; width: 220px; padding: 12px; }
   body.safe-youtube .meter svg { width: 180px; height: 103px; }
   body.safe-youtube .meter .num { font-size: 48px; }
@@ -392,9 +397,9 @@
     <div class="redsay" id="redsay"></div>
     <div class="sitecard" id="sitecard" aria-hidden="true"><div class="url">fillbookhq<span>.com</span></div><div class="sub">Free sample dashboard. No signup. fillbookhq.com/sample</div></div>
     <div class="showcase" id="showcase" aria-hidden="true">
-      <img src="/assets/trade-log-revenge.jpg" alt="" data-cap="Revenge and oversized trades get flagged">
-      <img src="/assets/drawdown-bars.jpg" alt="" data-cap="Drawdown buffer and today's loss limit">
-      <img src="/assets/month-overview-setups.jpg" alt="" data-cap="Which setups actually pay">
+      <img src="/assets/trade-log-revenge.jpg" alt="" data-crop="40,670,820,525" data-cap="Revenge and oversized trades get flagged">
+      <img src="/assets/drawdown-bars.jpg" alt="" data-crop="40,190,1210,660" data-cap="Drawdown buffer and today's loss limit">
+      <img src="/assets/month-overview-setups.jpg" alt="" data-crop="40,455,960,395" data-cap="Your month in numbers: P&amp;L, win rate, trades">
       <div class="tag" id="showcaseTag"><b>EXAMPLE DATA</b> from the Fillbook app</div>
     </div>
     <div class="notice" id="notice"></div>
@@ -882,14 +887,32 @@
   const SITE_SPOKEN = /fill-?book ?hq(?: dot |\.)com/i;
   let siteCardTimer = null;
   let showcaseTimer = null, showcaseIndex = 0;
-  function hideShowcase() { clearInterval(showcaseTimer); $("showcase").classList.remove("show"); }
+  function hideShowcase() { clearInterval(showcaseTimer); $("showcase").classList.remove("show"); document.body.classList.remove("showcase-on"); }
   function startShowcase() {
     try {
       const panel = $("showcase");
       const images = Array.from(panel.querySelectorAll("img"));
       if (images.length === 0) return;
+      const frame = (img) => {
+        // Frame the chosen region of the screen to the panel width, and size the panel to it.
+        const width = panel.clientWidth || 540;
+        const crop = (img.dataset.crop || "").split(",").map(Number);
+        const nw = img.naturalWidth || 1, nh = img.naturalHeight || 1;
+        let contentHeight;
+        if (crop.length === 4 && crop.every((n) => Number.isFinite(n))) {
+          const [x, y, w, h] = crop;
+          const scale = width / w;
+          img.style.cssText = `width:${nw * scale}px;height:${nh * scale}px;left:${-x * scale}px;top:${-y * scale}px;object-fit:fill;`;
+          contentHeight = h * scale;
+        } else {
+          img.style.cssText = "";
+          contentHeight = (width * nh) / nw;
+        }
+        panel.style.height = `${Math.round(Math.min(700, contentHeight + 64))}px`;
+      };
       const swap = () => {
         const at = showcaseIndex % images.length;
+        frame(images[at]);
         images.forEach((img, i) => img.classList.toggle("on", i === at));
         const tag = $("showcaseTag");
         if (tag) { tag.textContent = ""; const b = document.createElement("b"); b.textContent = "EXAMPLE DATA"; tag.append(b, " · " + (images[at].dataset.cap || "from the Fillbook app")); }
@@ -898,8 +921,9 @@
       clearInterval(showcaseTimer);
       swap();
       panel.classList.add("show");
-      showcaseTimer = setInterval(swap, 4200);
-    } catch (err) { /* the showcase is decoration: never let it break a line */ }
+      document.body.classList.add("showcase-on");
+      showcaseTimer = setInterval(swap, 6000);
+    } catch (err) { console.warn("showcase", err); /* decoration: never let it break a line */ }
   }
   function hideSiteCard() { clearTimeout(siteCardTimer); $("sitecard").classList.remove("show"); hideShowcase(); }
   function maybeShowSiteCard(line) {
@@ -1234,6 +1258,8 @@
     }
     connect();
   }
+  // ?showcase opens the product panel on load (for checking the framing without a worker).
+  if (params.has("showcase")) setTimeout(() => { try { startShowcase(); } catch (err) { /* ignore */ } }, 800);
 })();
 </script>
 </body>
