@@ -177,6 +177,47 @@ describe("live host duo mode", () => {
     for (const mood of LIVE_HOST_MOODS) expect(MOOD_PROSODY[mood], mood).toBeDefined();
   });
 
+  describe("open mic", () => {
+    const page = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
+    const pure = page.split("// <pure-open-mic>")[1]!.split("// </pure-open-mic>")[0]!;
+    const api = new Function(`${pure}; return { isAddressedToTilt, openMicDecision, OPEN_MIC_MIN_GAP_MS, OPEN_MIC_PAUSE_MS };`)() as {
+      isAddressedToTilt: (text: string) => boolean;
+      openMicDecision: (text: string, requireTilt: boolean, lastSendAt: number, now: number) => { send: boolean; why: string };
+      OPEN_MIC_MIN_GAP_MS: number;
+      OPEN_MIC_PAUSE_MS: number;
+    };
+
+    it("knows when he is being addressed", () => {
+      expect(api.isAddressedToTilt("Tilt, what do you think about that?")).toBe(true);
+      expect(api.isAddressedToTilt("okay so tilt tell them what a stop is")).toBe(true);
+      expect(api.isAddressedToTilt("I was telling my friend about the market and then tilt")).toBe(false);
+      expect(api.isAddressedToTilt("I'm going to grab a coffee, one second")).toBe(false);
+    });
+
+    it("sends a turn only when it is long enough, for him, and not right after the last one", () => {
+      const now = 100_000;
+      expect(api.openMicDecision("Tilt, explain trailing drawdown", true, 0, now).send).toBe(true);
+      expect(api.openMicDecision("Tilt hi", true, 0, now)).toEqual({ send: false, why: "too short" });
+      expect(api.openMicDecision("hey what is going on with the stream", true, 0, now)).toEqual({ send: false, why: "not for Tilt" });
+      expect(api.openMicDecision("hey what is going on with the stream", false, 0, now).send).toBe(true);
+      expect(api.openMicDecision("Tilt, one more question for you", true, now - 1000, now)).toEqual({ send: false, why: "too soon after the last one" });
+      expect(api.openMicDecision("Tilt, one more question for you", true, now - api.OPEN_MIC_MIN_GAP_MS - 1, now).send).toBe(true);
+    });
+
+    it("is off on load, steps aside for push-to-talk and for Tilt's own voice, and is escapable", () => {
+      expect(page).toContain('id="openMic"');
+      expect(page).toContain('id="needTilt" checked');
+      expect(page).toContain("var on = false;");
+      expect(page).toContain("window.openMicOnSpeak = function");
+      expect(page).toContain("if (window.openMicOnSpeak) window.openMicOnSpeak(data);");
+      expect(page).toContain('document.addEventListener("ptt"');
+      expect(page).toContain("window.pttActive = true;");
+      expect(page).toContain('event.key === "Escape" && on');
+      // Nothing is sent anywhere but the local worker.
+      expect(page).not.toMatch(/fetch\(\s*["']https?:/i);
+    });
+  });
+
   it("ships a host page that loads nothing from the internet", () => {
     const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);
