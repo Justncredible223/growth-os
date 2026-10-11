@@ -118,7 +118,8 @@ describe("runLiveHostTick", () => {
 
     // The model saw the cleaned name, flagged as a first message.
     const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
-    expect(sent.messages[0]!.content).toContain("Mike (first message, welcome them): how does trailing drawdown work?");
+    expect(sent.messages[0]!.content).toContain("Mike (first message: they have just arrived");
+    expect(sent.messages[0]!.content).toContain(": how does trailing drawdown work?");
   });
 
   it("never passes a blocked message to the model, and records it as blocked", async () => {
@@ -386,6 +387,41 @@ describe("runLiveHostTick", () => {
     const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
     expect(sent.messages[0]!.content).not.toContain("RED IS DUE");
     expect(result.utterance?.redLine).toBeNull();
+  });
+
+  it("variety: leaves overused bits, a repeated greeting and a stale disclaimer out, and sends a draft that repeats them back once", async () => {
+    const started = new Date(NOW.getTime() - 180_000).toISOString();
+    const spoken = (id: string, text: string, offsetSeconds: number) => ({ id, session_id: "s1", kind: "reply", segment: null, spoken_text: text, mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - offsetSeconds * 1000).toISOString(), spoken_at: null });
+    const client = buildClient({
+      live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
+      live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 20_000).toISOString() }],
+      live_host_utterances: [
+        spoken("u1", "Marcus, welcome. The market's closed, I have no hands, and this is not financial advice.", 120),
+        spoken("u2", "Dee, welcome. The market's closed again and I still have no hands.", 60),
+        spoken("u3", "A stop that moves is a suggestion box.", 30),
+      ],
+      live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Sam", body: "I blew my eval today", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }],
+    });
+    const llm = scriptedLlm([
+      line("Sam, welcome. The market's closed and I have no hands, but this is not financial advice."),
+      line("Ouch, an eval is a long way to fall in a day. Which rule got you, the daily limit or the trail?"),
+    ]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const first = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(first.messages[0]!.content).toContain("OVERUSED RIGHT NOW");
+    expect(first.messages[0]!.content).toContain("the market being closed");
+    expect(first.messages[0]!.content).toContain("having no hands");
+    expect(first.messages[0]!.content).toContain("not-financial-advice line a little while ago");
+    expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.utterance?.spokenText).toContain("Which rule got you");
+  });
+
+  it("variety: with nobody chatting, a segment is told not to end by asking chat to type", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() }] });
+    const llm = scriptedLlm([line("A trader moved his stop and then wrote a poem about it.")]);
+    await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
+    expect(sent.messages[0]!.content).toContain("Do not end this line by asking chat to type or answer anything");
   });
 
   it("warns, in the tick note, when a YouTube stream has no live link set", async () => {
