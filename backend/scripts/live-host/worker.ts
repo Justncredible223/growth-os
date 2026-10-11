@@ -755,6 +755,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
 
   let lastNote: string | null = null;
   let ticksSinceStreamCheck = 0;
+  /** Until the server has answered one tick, this process is "fresh": it asks for a new show if the room has been quiet. */
+  let freshStart = true;
   /** When this worker last saw a viewer join or chat. Zero means nobody yet. */
   let lastAudienceAt = 0;
   /** After the voice fails, wait this long before trying the same line again. */
@@ -807,6 +809,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         busy: speaking !== null || stageClients.size === 0 || Date.now() < voiceRetryAt || emptyRoom,
         platform: config.platform,
         costMode: config.costMode,
+        fresh: freshStart,
         // Not while the TikTok reader is down: without it nobody would ever count as present.
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
@@ -827,6 +830,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
       return;
     }
     consecutiveTickFailures = 0;
+    freshStart = false;
 
     if (segmentRequest && (result.utterance?.kind === "segment" || Date.now() > segmentRequest.until)) segmentRequest = null;
     if (typeof result.spendTodayUsd === "number") lastSpendUsd = result.spendTodayUsd;

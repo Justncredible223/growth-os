@@ -32,6 +32,8 @@ export function tickInputFromBody(body: {
   runSegment?: TickInput["runSegment"];
   workerInfo?: Record<string, unknown>;
   platform?: string;
+  costMode?: unknown;
+  fresh?: boolean;
 }): TickInput {
   const duo = body.duo === true;
   return {
@@ -39,6 +41,8 @@ export function tickInputFromBody(body: {
     busy: body.busy === true,
     audienceOnly: body.audienceOnly === true,
     platform: typeof body.platform === "string" ? body.platform : undefined,
+    costMode: body.costMode,
+    fresh: body.fresh === true,
     workerInfo: body.workerInfo && typeof body.workerInfo === "object" ? body.workerInfo : {},
     joins: Array.isArray(body.joins) ? body.joins.slice(0, 50) : [],
     // Duo-only fields are ignored unless the worker says it is in duo mode.
@@ -96,6 +100,8 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
       audienceOnly?: boolean;
       joins?: TickInput["joins"];
       duo?: boolean;
+      costMode?: unknown;
+      fresh?: boolean;
       hostMessages?: TickInput["hostMessages"];
       hostName?: unknown;
       runSegment?: TickInput["runSegment"];
