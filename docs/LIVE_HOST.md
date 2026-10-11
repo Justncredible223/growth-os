@@ -439,3 +439,20 @@ The worker prints `spent today $X` with every line it speaks.
   Tilt's head, and Tilt looks over at him.
 - **Numbers.** Any worked example is one exact, checked step, or no numbers at all (drawdown arithmetic came out
   garbled in several real drafts).
+
+## Variety (so a stream does not sound like a loop)
+
+A simulated ten-minute show showed the tells a viewer notices by minute three: every reply opened "Name, welcome.",
+the market was always closed and he never had hands, every segment ended telling chat to type, and the disclaimer
+kept coming back. `liveHostVariety.ts` works out from his own last lines what to steer away from, puts it in the
+prompt, and checks the draft (one retry, then it is accepted):
+
+- bits used twice in the last six lines are named and left out (closed market, no hands, the weekend or the hour,
+  paid in nothing, no account, candle with a microphone, the suggestion box);
+- a greeting of the "Name, welcome" kind is allowed once, and an opening that matches one of his last five is redone;
+- a segment may end by asking chat to type only if someone chatted in the last 3 minutes and his last line did not;
+- the not-financial-advice line goes in the opening, and again only if a viewer asks for advice;
+- he is told never to claim chat said, guessed, laughed or went quiet when it is not in the lines he was given.
+
+Rule Trivia and Trivia Answer were rewritten after a real draft got the arithmetic wrong: the question uses one simple
+calculation with round numbers, and the answer states it once as X times Y percent is Z.

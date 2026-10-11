@@ -309,3 +309,16 @@ describe("Tilt's character prompt", () => {
     }
   });
 });
+
+describe("Tilt's variety and honesty rules", () => {
+  it("tells him not to repeat greetings, not to repeat the disclaimer, and not to invent what chat did", async () => {
+    const { LIVE_HOST_CHARACTER, LIVE_HOST_SEGMENTS } = await import("../src/liveHost/liveHostPersona");
+    expect(LIVE_HOST_CHARACTER).toContain("must not become his tic");
+    expect(LIVE_HOST_CHARACTER).toContain("never in every line");
+    expect(LIVE_HOST_CHARACTER).toContain("Never claim chat said, guessed, laughed or went quiet");
+    const answer = LIVE_HOST_SEGMENTS.find((segment) => segment.id === "trivia_answer")!;
+    expect(answer.brief).toContain("X times Y percent is Z");
+    const question = LIVE_HOST_SEGMENTS.find((segment) => segment.id === "rule_trivia")!;
+    expect(question.brief).toContain("one simple calculation with round numbers");
+  });
+});

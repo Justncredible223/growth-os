@@ -11,6 +11,7 @@ import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../si
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
 import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
 import { FACT_SEGMENTS, parseCostMode, useFastModel } from "./liveHostModels.js";
+import { varietyGuidance, varietyProblem } from "./liveHostVariety.js";
 import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
 import { DUO_HOST_ID_PREFIX, DUO_RELAY_ID_PREFIX } from "./types.js";
@@ -848,6 +849,14 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     duoReply: input.duo === true && batch.length > 0,
     spendFraction: settings.dailyBudgetUsd > 0 ? todaySpend / settings.dailyBudgetUsd : 0,
   });
+  // What he has already said, so this line does not repeat a bit, an opening, a chat ask or the disclaimer.
+  const recentTiltLines = recentUtterances.map((utterance) => splitRedLine(utterance.spokenText).tiltLine);
+  const { data: lastChatRows } = await client.from("live_host_messages").select("received_at").eq("session_id", session.id).order("received_at", { ascending: false }).limit(1);
+  const lastChatAt = ((lastChatRows ?? []) as Array<{ received_at: string }>)[0]?.received_at;
+  const roomEngaged = input.duo === true || batch.length > 0 || (lastChatAt !== undefined && now.getTime() - new Date(lastChatAt).getTime() < AUDIENCE_PRESENT_FOR_MS);
+  const variety = varietyGuidance(recentTiltLines, roomEngaged);
+  const viewerAskedForAdvice = batch.some((message) => /\badvice\b|\bshould i\b|\bwhat should\b|\btell me (?:what|which|when)\b/i.test(message.body));
+
   // Red is a recurring character, so he is scheduled: due when none of the last three lines had him. The model still
   // skips him when the moment needs a straight answer.
   const lastRedAt = recentUtterances.findIndex((utterance) => utterance.spokenText.startsWith("[RED]"));
@@ -875,7 +884,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   try {
     const result = await draftWithRetries<LiveLineDraft>({
       generate: async (retryFeedback) => {
-        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, seed: openingSeed, redDue, retryFeedback }, grounding, fastModel ? MODEL_HAIKU : undefined);
+        const draft = await draftLiveLine(llmClient, { messages: messagesForDraft, segment, recent, fillbookMentionAllowed, viewersWaiting: pending.length, linkInBio, joiners: joinWelcome ? namedJoiners : undefined, otherJoiners: joinWelcome ? otherJoiners : undefined, duo: input.duo === true, platform: input.platform, seed: openingSeed, redDue, variety, retryFeedback }, grounding, fastModel ? MODEL_HAIKU : undefined);
         let problem = draft.reply.length === 0 && batch.length > 0 ? null : checkSpokenLine(draft.reply, { fillbookMentionAllowed, websiteMentionAllowed: !linkInBio, previousLine });
         if (!problem && draft.reply.length > 0 && copiesExampleLine(draft.reply)) problem = "copies a line from the character examples; write a fresh one";
         if (!problem && draft.reply.length > 0) {
@@ -892,7 +901,9 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
         const hard = verdicts.get(draft) ?? null;
         const words = wordCount(draft.reply);
         const soft = wordLimit !== null && words > Math.ceil(wordLimit * 1.25) ? `is ${words} words and the limit is ${wordLimit}: cut it down, keeping the joke and the question or the turn to your co-host` : null;
-        return { hard, soft };
+        const isOpening = segment?.id === "cold_open" || segment?.show === true;
+        const sameOldTricks = varietyProblem(draft.reply, variety, recentTiltLines, { isSegment: segment !== null, isOpening, viewerAskedForAdvice });
+        return { hard, soft: soft ?? sameOldTricks };
       },
     });
     accepted = result.draft;

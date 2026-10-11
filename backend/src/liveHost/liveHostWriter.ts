@@ -1,4 +1,5 @@
 import type { LlmClient } from "../content/llmClient.js";
+import type { VarietyGuidance } from "./liveHostVariety.js";
 import { LIVE_HOST_CHARACTER, type LiveHostSegment } from "./liveHostPersona.js";
 import { LIVE_HOST_MOODS, type LiveHostCard, type LiveHostMood } from "./types.js";
 
@@ -92,6 +93,8 @@ export interface LiveLineRequest {
   /** How many more joined than are named in `joiners`. */
   otherJoiners?: number;
   retryFeedback?: string;
+  /** What to steer away from, worked out from his own recent lines (see liveHostVariety.ts). */
+  variety?: VarietyGuidance;
   /** Red is due: he has not interrupted in the last few lines, so this one should give him a redLine unless a straight answer is needed. */
   redDue?: boolean;
   /** A number that is stable within one stream, used to vary the angle of the opening joke between streams. */
@@ -176,7 +179,7 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
       lines.push(
         message.isCoHost
           ? `- id=${message.id} | ${message.authorName} (YOUR CO-HOST, a real person on camera next to you): ${message.body}`
-          : `- id=${message.id} | ${message.authorName}${message.isFirstMessage ? " (first message, welcome them)" : ""}: ${message.body}`,
+          : `- id=${message.id} | ${message.authorName}${message.isFirstMessage ? " (first message: they have just arrived, so acknowledge it in a fresh way folded into the answer, never as a stock 'Name, welcome' opening)" : ""}: ${message.body}`,
       );
     }
     lines.push("");
@@ -226,6 +229,16 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
       ? "Fillbook: mention it only if it is the honest answer to what was asked, or if the segment brief calls for it."
       : "Fillbook: it has come up enough lately. Do NOT mention Fillbook or the site in this line unless a viewer above asked about it directly.",
   );
+
+  if (request.variety) {
+    const { avoid, askChat, disclaimerSaid, recentOpenings } = request.variety;
+    if (avoid.length > 0) lines.push(`OVERUSED RIGHT NOW, leave these out of this line entirely: ${avoid.join("; ")}.`);
+    if (!askChat && request.segment) lines.push("Do not end this line by asking chat to type or answer anything. End on the punchline.");
+    if (disclaimerSaid && request.segment?.id !== "cold_open" && request.segment?.show !== true) {
+      lines.push("You already said the not-financial-advice line a little while ago: do not say it again unless a viewer is asking for advice.");
+    }
+    if (recentOpenings.length > 0) lines.push(`Do not start this line like any of these recent openings: ${recentOpenings.map((opening) => `"${opening}..."`).join(", ")}.`);
+  }
 
   if (request.redDue) {
     lines.push(
