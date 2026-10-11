@@ -85,6 +85,13 @@
   .sitecard .url { font-size: 56px; font-weight: 900; letter-spacing: 1px; line-height: 1.1; }
   .sitecard .url span { color: var(--accent); }
   .sitecard .sub { margin-top: 2px; font-size: 24px; font-weight: 700; color: var(--ink2); }
+  /* The showcase: real screens from the app (seeded demo account), shown beside him while he says the site. */
+  .showcase { position: absolute; right: 36px; top: 520px; width: 270px; height: 500px; border-radius: 34px; overflow: hidden; background: #0b1424; border: 3px solid rgba(34, 211, 238, 0.55); box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55); transform: translateX(130%) rotate(3deg); opacity: 0; transition: transform 0.6s cubic-bezier(.2, .9, .2, 1.1), opacity 0.3s; pointer-events: none; }
+  .showcase.show { transform: translateX(0) rotate(2deg); opacity: 1; }
+  .showcase img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; opacity: 0; transition: opacity 0.6s ease; }
+  .showcase img.on { opacity: 1; }
+  .showcase .tag { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 10px; text-align: center; background: linear-gradient(0deg, rgba(4, 12, 24, 0.95) 55%, rgba(4, 12, 24, 0)); font-size: 15px; font-weight: 800; letter-spacing: 1px; line-height: 1.25; color: var(--ink); }
+  .showcase .tag b { color: var(--accent); }
   .meter { position: absolute; left: 40px; top: 1090px; width: 300px; padding: 18px; border-radius: 26px; background: var(--card); border: 2px solid var(--line); box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5); transform: translateX(-140%); transition: transform 0.6s cubic-bezier(.2, .9, .2, 1.1); text-align: center; }
   .meter.show { transform: translateX(0); }
   .meter h3 { margin: 0 0 6px; font-size: 24px; letter-spacing: 3px; color: var(--ink2); }
@@ -298,6 +305,12 @@
     </div>
     <div class="redsay" id="redsay"></div>
     <div class="sitecard" id="sitecard" aria-hidden="true"><div class="url">fillbookhq<span>.com</span></div><div class="sub">Free sample dashboard. No signup. fillbookhq.com/sample</div></div>
+    <div class="showcase" id="showcase" aria-hidden="true">
+      <img src="/assets/trade-log-revenge.jpg" alt="">
+      <img src="/assets/drawdown-bars.jpg" alt="">
+      <img src="/assets/month-overview-setups.jpg" alt="">
+      <div class="tag"><b>EXAMPLE DATA</b> from the Fillbook app</div>
+    </div>
     <div class="notice" id="notice"></div>
     <div class="thought" id="thought"></div>
     <div class="zzz" id="n1">&#9834;</div><div class="zzz z2" id="n2">&#9835;</div><div class="zzz z3" id="n3">&#9834;</div>
@@ -740,13 +753,27 @@
   // Never on the TikTok layout, and only for the approved domain as it is spoken ("fillbookhq dot com").
   const SITE_SPOKEN = /fill-?book ?hq(?: dot |\.)com/i;
   let siteCardTimer = null;
-  function hideSiteCard() { clearTimeout(siteCardTimer); $("sitecard").classList.remove("show"); }
+  let showcaseTimer = null, showcaseIndex = 0;
+  function hideShowcase() { clearInterval(showcaseTimer); $("showcase").classList.remove("show"); }
+  function startShowcase() {
+    try {
+      const panel = $("showcase");
+      const images = Array.from(panel.querySelectorAll("img"));
+      if (images.length === 0) return;
+      const swap = () => { images.forEach((img, i) => img.classList.toggle("on", i === showcaseIndex % images.length)); showcaseIndex++; };
+      clearInterval(showcaseTimer);
+      swap();
+      panel.classList.add("show");
+      showcaseTimer = setInterval(swap, 4200);
+    } catch (err) { /* the showcase is decoration: never let it break a line */ }
+  }
+  function hideSiteCard() { clearTimeout(siteCardTimer); $("sitecard").classList.remove("show"); hideShowcase(); }
   function maybeShowSiteCard(line) {
     if (document.body.classList.contains("safe-tiktok")) return;
     if (!SITE_SPOKEN.test(String(line.spokenText || ""))) return;
     const seconds = Math.max(8, (line.durationSeconds || 6) + 4);
     clearTimeout(siteCardTimer);
-    setTimeout(() => $("sitecard").classList.add("show"), 600);
+    setTimeout(() => { $("sitecard").classList.add("show"); startShowcase(); }, 600);
     siteCardTimer = setTimeout(hideSiteCard, seconds * 1000);
   }
 

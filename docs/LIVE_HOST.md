@@ -504,3 +504,12 @@ It is a convenience, not the recommended mode for a first TikTok run: rehearse i
 - **Rule Trivia and Trivia Answer are retired.** Three real runs produced a wrong or invented answer (an "80 percent"
   rule, garbled arithmetic, "most firms set it at twenty percent" plus an invented five-day minimum). A teaching stream
   cannot afford a confidently wrong fact. They can come back when the numbers are computed in code, not by the model.
+
+### Real screens of the app on the stage (YouTube layout)
+
+While a line says the website, a phone-style panel beside Tilt cycles three real screens of the app: the trade log with
+its revenge-trade and oversized flags, the drawdown bars, and the month overview by setup. They are the owner-verified
+captures from the seeded demo account in `verified-manifest.json` (example data, not a real user), and every one carries
+an "EXAMPLE DATA from the Fillbook app" label. The stage can load nothing else: the worker serves exactly those three
+files by name (`STAGE_ASSET_NAMES`), and a test checks their bytes against the manifest's hashes. It rides on the site
+card, so it never shows on the TikTok layout.
