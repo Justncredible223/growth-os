@@ -92,6 +92,8 @@ export interface LiveLineRequest {
   /** How many more joined than are named in `joiners`. */
   otherJoiners?: number;
   retryFeedback?: string;
+  /** A number that is stable within one stream, used to vary the angle of the opening joke between streams. */
+  seed?: number;
   /** Where the stream is, as the worker reports it. "youtube" changes what is on screen and what may be said. */
   platform?: string;
   /** Duo mode: the owner is on camera beside Tilt. Replies are short and conversational, segments are run with him. */
@@ -107,6 +109,18 @@ export interface LiveHostGrounding {
  * Persona plus grounding. Kept byte-stable across a stream so the prompt cache holds: the knowledge and brand
  * rules change rarely, and everything that changes per line goes in the user message.
  */
+/** Angles for the opening joke, so every stream does not start on "the market is closed and I have no hands". */
+export const OPENING_ANGLES: readonly string[] = [
+  "the hour: it is late and a candle is at work",
+  "the empty chat: he is talking to a room that has not arrived yet",
+  "his job: no hands, no account, no weekend, which makes him the safest person in trading",
+  "being an AI candle who has read more blown accounts than anyone alive, and what that does to a candle",
+  "the audience: they chose a candle over literally anything else they could be doing tonight",
+  "the technology: someone connected a candle to a microphone and nobody stopped them",
+  "the show: promising a terrible and educational time",
+  "the chart behind him: those candles are his coworkers and they never help",
+];
+
 export function buildLiveHostSystemPrompt(grounding: LiveHostGrounding): string {
   return `${LIVE_HOST_CHARACTER}
 
@@ -194,6 +208,9 @@ export function buildLiveLineUserMessage(request: LiveLineRequest, now: Date = n
   } else if (request.segment) {
     lines.push(`CHAT IS QUIET. Run the segment "${request.segment.title}":`);
     lines.push(request.segment.brief);
+    if ((request.segment.id === "cold_open" || request.segment.id === "show_open") && typeof request.seed === "number") {
+      lines.push(`Angle for the opening joke (use this one, and do not default to the market being closed): ${OPENING_ANGLES[request.seed % OPENING_ANGLES.length]}.`);
+    }
     lines.push("Two to four spoken sentences. Open on the funniest version of the idea, not on a setup line, and end on a punchline or a question that is itself a joke. Leave answeredMessageIds and skippedMessages empty.");
     if (request.duo) {
       lines.push("DUO MODE: your co-host is on camera next to you. Run this with him, not at an empty room: talk to him, and end by turning to him with a question or a dare rather than asking chat to type. Keep it under 45 words.");

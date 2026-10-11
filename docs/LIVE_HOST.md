@@ -394,3 +394,34 @@ to go. Tilt is told the card appears, so he can say "it's up there".
   off-platform problem as saying it, which is why the TikTok rule is "link in the bio".
 - Fixed text and only the approved domain; a cut-off line takes the card with it.
 - Not built: a scannable QR code. It needs a QR library on this machine and a way to check it scans.
+
+## What it costs, and how to lower it
+
+Measured 2026-10-10 against the real API with the production knowledge (system prompt about 8.8k tokens, cached):
+
+| | cold cache (first line, or after 5 quiet minutes) | warm line |
+|---|---|---|
+| Sonnet (default for chat answers and segments) | $0.038 | $0.0077 |
+| Haiku (join welcomes, duo replies, and the economy tiers below) | $0.0128 | $0.0025 |
+
+Volume is what adds up. An engaged room is roughly one line every 40 seconds, so about 90 lines an hour, which is
+about $0.90 an hour with retries on the stronger model. A quiet room costs almost nothing (he only speaks when someone
+chats, after the opening minutes). Voice is free.
+
+What is on regardless of mode:
+
+- one line at most every 30 seconds while the room is engaged (was 18);
+- a draft that is only slightly over the length limit is trimmed instead of paid for again (a re-draft happens only if it
+  is more than 25 percent over);
+- as today's spend passes 60 percent of the daily budget, everything but fact segments goes to the cheap model, and at
+  85 percent so do those, so he keeps talking within the budget instead of going silent;
+- the daily budget ($3 by default, set in the app) is a hard stop.
+
+Choose a tier with `LIVE_HOST_COST` in the worker's environment:
+
+- `quality` (default): the stronger model for every line. Tightest and funniest; about $0.90 an hour engaged.
+- `balanced`: the routine joke-and-hook segments on the cheaper model; about 40 percent less. Measured side by side the
+  cheaper model's lines run 55 to 70 words against 48 to 57, and are flatter.
+- `low`: chat answers too, fact segments excepted; about 65 percent less.
+
+The worker prints `spent today $X` with every line it speaks.
