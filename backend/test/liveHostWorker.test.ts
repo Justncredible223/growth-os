@@ -114,6 +114,19 @@ describe("live host duo mode", () => {
     expect(html).toContain('id="showClock"');
   });
 
+  it("gives the host page push-to-talk voice input that only sends what was said, through the same /ask route", () => {
+    const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
+    expect(html).toContain('id="talk"');
+    expect(html).toContain("webkitSpeechRecognition");
+    // Push to talk, never always-on: no auto-restart loop, and Esc throws a recording away.
+    expect(html).toContain("recognition.continuous = true");
+    expect(html).toContain('event.key === "Escape"');
+    expect(html).not.toMatch(/recognition\.onend\s*=[^;]*recognition\.start\(\)/s);
+    expect(html).toContain("sendPrompt(text.slice(0, 400)");
+    // Nothing is sent to anywhere but the local worker.
+    expect(html).not.toMatch(/fetch\(\s*["']https?:/i);
+  });
+
   it("ships a host page that loads nothing from the internet", () => {
     const html = readFileSync(join(__dirname, "..", "scripts", "live-host", "stage", "host.html"), "utf-8");
     expect(html).not.toMatch(/(?:src|href)\s*=\s*["']https?:\/\//i);

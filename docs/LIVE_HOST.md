@@ -288,3 +288,20 @@ Trade and Tilt-o-Meter are the easy ones), a Desk Lesson once, and Close the sho
 
 Known limitation: openings and sign-offs tend to run 55 to 70 words against the 45 asked for, and the "market is
 closed, no hands" joke comes up often. Shorten or vary the briefs in the persona file if that bothers you on air.
+
+## Voice input (duo mode)
+
+You can talk to Tilt instead of typing. The console has a **Hold to talk** button (or hold **Space** while the cursor
+is not in a text box):
+
+- Hold, speak, release: what you said is sent as a prompt, the same as a typed one (same screening, same firewall,
+  the instant reaction plays, the line is drafted). **Esc** while holding throws it away.
+- It uses the browser's own speech recognition, so it is free and there is nothing to install. It works in Chrome and
+  Edge. The browser asks for the microphone once for `127.0.0.1:8790`. Note the browser's speech service processes the
+  audio, so do not say anything you would not want leaving the machine.
+- It is push to talk on purpose: it only listens while you hold, so it never picks up Tilt's own voice from the
+  speakers or the room, and nothing is sent that you did not just say.
+- Tilt is told the words may be a transcript, so a misheard word is taken in its most likely meaning.
+
+Not built: always-on listening and a wake word (they would hear his own voice and the stream audio), and offline
+recognition (Whisper) which would need a heavy install and is slow on the laptop this was built on.

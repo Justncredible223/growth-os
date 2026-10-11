@@ -21,6 +21,11 @@
   .showbar { margin:10px 0 14px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
   .clock { display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; font-size:13px; color:var(--mute); }
   .clock .hint { color:var(--accent); text-align:right; }
+  .talkbar { display:flex; gap:10px; align-items:center; margin:0 0 12px; }
+  .talk { min-width:140px; padding:14px 18px; font-size:15px; background:var(--card); color:var(--text); border:1px solid var(--line); user-select:none; touch-action:none; }
+  .talk.live { background:#b42318; color:#fff; border-color:#b42318; }
+  .hearing { flex:1; font-size:13px; color:var(--mute); min-height:1.3em; }
+  .hearing.live { color:var(--text); }
   .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
   .chip { padding:6px 12px; border-radius:99px; background:var(--card); color:var(--text); border:1px solid var(--line); font-weight:500; font-size:13px; }
   button.secondary { background:var(--card); color:var(--text); border:1px solid var(--line); }
@@ -42,6 +47,11 @@
       <button id="openShow" type="button">Open the show</button>
       <button id="closeShow" type="button" class="secondary">Close the show</button>
     </div>
+  </div>
+
+  <div class="talkbar">
+    <button id="talk" type="button" class="talk" aria-pressed="false">Hold to talk</button>
+    <div class="hearing" id="hearing" aria-live="polite">Hold the button, or hold Space, and talk to Tilt. Release to send. Esc cancels.</div>
   </div>
 
   <form id="form">
@@ -144,6 +154,106 @@
       });
     });
   });
+
+  // ---- voice: push to talk, using the browser's own speech recognition (free, nothing to install) ----
+  // Push to talk on purpose: it only listens while you hold the button or Space, so it never picks up Tilt's own
+  // voice or the room, and nothing is sent that you did not just say. Release sends it; Esc throws it away.
+  (function setupVoice() {
+    var talkBtn = document.getElementById("talk");
+    var hearing = document.getElementById("hearing");
+    var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var idleText = hearing.textContent;
+    if (!Recognition) {
+      talkBtn.disabled = true;
+      hearing.textContent = "Voice input needs Chrome or Edge. You can still type.";
+      return;
+    }
+    var recognition = null;
+    var holding = false;
+    var cancelled = false;
+    var finalText = "";
+    var interimText = "";
+
+    function setLive(on) {
+      talkBtn.classList.toggle("live", on);
+      talkBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      talkBtn.textContent = on ? "Listening..." : "Hold to talk";
+      hearing.classList.toggle("live", on);
+    }
+
+    function start() {
+      if (holding) return;
+      holding = true;
+      cancelled = false;
+      finalText = "";
+      interimText = "";
+      setLive(true);
+      hearing.textContent = "Listening...";
+      recognition = new Recognition();
+      recognition.lang = "en-US";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.onresult = function (event) {
+        var finals = "";
+        var interims = "";
+        for (var i = 0; i < event.results.length; i++) {
+          var piece = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finals += piece + " ";
+          else interims += piece;
+        }
+        finalText = finals;
+        interimText = interims;
+        hearing.textContent = (finals + interims).trim() || "Listening...";
+      };
+      recognition.onerror = function (event) {
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          hearing.textContent = "The browser blocked the microphone. Allow it for this page, then try again.";
+        } else if (event.error === "no-speech") {
+          hearing.textContent = "Did not hear anything.";
+        } else if (event.error === "network") {
+          hearing.textContent = "Speech recognition could not reach its service. You can still type.";
+        } else if (event.error !== "aborted") {
+          hearing.textContent = "Voice input problem (" + event.error + ").";
+        }
+      };
+      recognition.onend = function () {
+        var text = (finalText + " " + interimText).replace(/\s+/g, " ").trim();
+        holding = false;
+        setLive(false);
+        recognition = null;
+        if (cancelled) { hearing.textContent = "Cancelled."; return; }
+        if (text.length < 3) { if (hearing.textContent === "Listening...") hearing.textContent = idleText; return; }
+        hearing.textContent = "Sent: " + text;
+        sendPrompt(text.slice(0, 400), "You (voice): " + text.slice(0, 400));
+      };
+      try {
+        recognition.start();
+      } catch (err) {
+        holding = false;
+        setLive(false);
+        hearing.textContent = "Could not start the microphone.";
+      }
+    }
+
+    function stop(cancel) {
+      if (!holding || !recognition) return;
+      if (cancel) cancelled = true;
+      try { recognition.stop(); } catch (err) { /* already stopped */ }
+    }
+
+    talkBtn.addEventListener("pointerdown", function (event) { event.preventDefault(); start(); });
+    talkBtn.addEventListener("pointerup", function () { stop(false); });
+    talkBtn.addEventListener("pointerleave", function () { stop(false); });
+    document.addEventListener("keydown", function (event) {
+      var tag = (event.target && event.target.tagName) || "";
+      var typing = tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT";
+      if (event.key === "Escape") { stop(true); return; }
+      if (event.code === "Space" && !typing && !event.repeat) { event.preventDefault(); start(); }
+    });
+    document.addEventListener("keyup", function (event) {
+      if (event.code === "Space" && holding) { event.preventDefault(); stop(false); }
+    });
+  })();
 
   // ---- run of show: a clock and the two beats that frame the stream ----
   var showStartedAt = null;
