@@ -497,6 +497,8 @@ export interface TickInput {
   hostName?: unknown;
   /** True on the first tick after the worker process started. */
   fresh?: boolean;
+  /** The worker wants new comments reported on their own tick, before an answer is drafted (it acknowledges them). */
+  ackFirst?: boolean;
   /** "quality" (default: the stronger model for every line), "balanced" (fast model for routine segments) or "low". */
   costMode?: unknown;
   /**
@@ -535,6 +537,8 @@ export interface TickResult {
   spendTodayUsd?: number;
   /** Moves viewers asked for in new chat this tick ("dance", "spin"...). The worker plays them on the stage at once. */
   moves?: string[];
+  /** Comments that arrived this tick, so the stage can show and react to them before any answer exists. */
+  incoming?: Array<{ platform: "youtube" | "tiktok"; authorName: string; body: string }>;
 }
 
 export interface TickDeps {
@@ -556,11 +560,17 @@ function offResult(settings: LiveHostSettings | null, reason: string): TickResul
   };
 }
 
-async function storeIncoming(client: SupabaseClient, sessionId: string, incoming: IncomingChatMessage[], now: Date): Promise<string[]> {
+interface StoredIncoming {
+  moves: string[];
+  asked: Array<{ platform: "youtube" | "tiktok"; authorName: string; body: string }>;
+}
+
+async function storeIncoming(client: SupabaseClient, sessionId: string, incoming: IncomingChatMessage[], now: Date): Promise<StoredIncoming> {
   const batch = incoming
     .filter((m) => (m.platform === "youtube" || m.platform === "tiktok") && typeof m.externalId === "string" && m.externalId.length > 0 && typeof m.body === "string")
     .slice(-MAX_INCOMING_PER_TICK);
-  if (batch.length === 0) return [];
+  const none: StoredIncoming = { moves: [], asked: [] };
+  if (batch.length === 0) return none;
 
   const moves: string[] = [];
   const rows = batch.map((m) => {
@@ -585,14 +595,17 @@ async function storeIncoming(client: SupabaseClient, sessionId: string, incoming
   const { data: existing } = await client.from("live_host_messages").select("platform, external_id").in("external_id", rows.map((r) => r.external_id));
   const seen = new Set(((existing ?? []) as Array<{ platform: string; external_id: string }>).map((r) => `${r.platform}:${r.external_id}`));
   const fresh = rows.filter((r) => !seen.has(`${r.platform}:${r.external_id}`));
-  if (fresh.length === 0) return [];
+  if (fresh.length === 0) return none;
   for (const row of fresh) if (row.move) moves.push(row.move);
+  const asked = fresh
+    .filter((row) => row.status === "pending")
+    .map((row) => ({ platform: row.platform as "youtube" | "tiktok", authorName: row.author_name, body: row.body }));
   const { error } = await client.from("live_host_messages").upsert(fresh.map(({ move: _move, ...row }) => row), { onConflict: "platform,external_id", ignoreDuplicates: true });
   if (error) throw new Error(`insert live_host_messages failed: ${error.message}`);
-  return moves;
+  return { moves, asked };
 }
 
-async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession, settings: LiveHostSettings, adapter: YoutubeLiveChatAdapter, now: Date, moves: string[] = []): Promise<string | null> {
+async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession, settings: LiveHostSettings, adapter: YoutubeLiveChatAdapter, now: Date, sink: StoredIncoming = { moves: [], asked: [] }): Promise<string | null> {
   if (!settings.youtubeVideoId) return null;
   if (session.youtubeNextPollAt && new Date(session.youtubeNextPollAt).getTime() > now.getTime()) return null;
   try {
@@ -619,7 +632,8 @@ async function pollYoutubeChat(client: SupabaseClient, session: LiveHostSession,
         page.messages.map((m) => ({ platform: "youtube" as const, externalId: m.id, authorName: m.authorDisplayName, body: m.text, receivedAt: m.publishedAt ?? undefined })),
         now,
       );
-      moves.push(...found);
+      sink.moves.push(...found.moves);
+      sink.asked.push(...found.asked);
     }
     return null;
   } catch (err) {
@@ -743,9 +757,10 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   }
   const youtube = deps.youtube === undefined ? createYoutubeLiveChatAdapter() : deps.youtube;
   if (youtube) {
-    const moves: string[] = [];
-    base.note = await pollYoutubeChat(client, session, settings, youtube, now, moves);
-    if (moves.length > 0) base.moves = moves;
+    const sink: StoredIncoming = { moves: [], asked: [] };
+    base.note = await pollYoutubeChat(client, session, settings, youtube, now, sink);
+    if (sink.moves.length > 0) base.moves = sink.moves;
+    if (sink.asked.length > 0) base.incoming = sink.asked.slice(0, 3);
   }
   // A YouTube stream with no live link in the app runs fine and silently reads no chat: say so in the worker's log.
   if (input.platform === "youtube" && !settings.youtubeVideoId) {
@@ -753,6 +768,9 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   }
 
   if (input.busy) return base;
+  // New comments are reported on their own tick, so the worker can show them and react within a second; the next tick
+  // (which the worker runs at once) drafts the answer.
+  if (input.ackFirst === true && base.incoming && base.incoming.length > 0) return base;
 
   // A line already drafted but not yet confirmed spoken is handed out again rather than drafting a second one.
   const { data: queuedRows, error: queuedError } = await client.from("live_host_utterances").select("*").eq("session_id", session.id).eq("status", "queued").order("created_at", { ascending: true }).limit(1);

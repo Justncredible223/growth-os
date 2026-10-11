@@ -268,6 +268,7 @@ interface TickResult {
   joinsWelcomed?: boolean;
   spendTodayUsd?: number;
   moves?: string[];
+  incoming?: Array<{ platform: string; authorName: string; body: string }>;
 }
 export interface WordCue {
   text: string;
@@ -465,7 +466,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   /** Plays one pre-voiced reaction right away, if nothing is being said and the cool-down has passed. */
   function playFiller(): void {
-    if (!config.duo || !live || speaking !== null || fillerPlaying !== null || stageClients.size === 0) return;
+    if (!live || speaking !== null || fillerPlaying !== null || stageClients.size === 0) return;
     const index = pickFiller(fillers.length, lastFillerIndex, lastFillerAt, Date.now());
     if (index === null) return;
     const filler = fillers[index]!;
@@ -494,7 +495,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   /** Voices the fillers once, as soon as the warm voice helper is ready. Failures just mean no fillers. */
   async function prepareFillers(): Promise<void> {
-    if (!config.duo || fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
+    if (fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
     fillersPreparing = true;
     try {
       for (let i = 0; i < DUO_FILLERS.length; i++) {
@@ -750,6 +751,8 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   tiktok.onReaction = (kind) => sendMove(kind === "gift" ? "dance" : kind === "follow" ? "flex" : kind === "share" ? "spin" : "jump");
 
   let lastNote: string | null = null;
+  /** Set when a tick found new comments: the loop skips its wait so the answer starts being drafted at once. */
+  let tickAgainNow = false;
   let ticksSinceStreamCheck = 0;
   /** Until the server has answered one tick, this process is "fresh": it asks for a new show if the room has been quiet. */
   let freshStart = true;
@@ -806,6 +809,7 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
         platform: config.platform,
         costMode: config.costMode,
         fresh: freshStart,
+        ackFirst: true,
         // Not while the TikTok reader is down: without it nobody would ever count as present.
         audienceOnly: !config.idleSegments && (config.platform === "youtube" || tiktok.connected),
         messages,
@@ -832,6 +836,14 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
     if (typeof result.spendTodayUsd === "number") lastSpendUsd = result.spendTodayUsd;
     // Moves viewers asked for in YouTube chat (read on the server): played at once, nothing spoken.
     if (result.moves?.length) sendMove(result.moves[0]!);
+    // New comments: on screen and acknowledged within a second, before the answer has been written. The next tick
+    // (run straight away) drafts it.
+    if (result.incoming?.length && live) {
+      broadcast("incoming", result.incoming.slice(0, 2));
+      broadcast("react", { mode: "thinking", side: config.cohostSide });
+      playFiller();
+      tickAgainNow = true;
+    }
     if (result.joinsWelcomed) tiktok.clearJoins();
     if (result.note && result.note !== lastNote) log(`note: ${result.note}`);
     lastNote = result.note;
@@ -927,6 +939,10 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
   log(`Connected to ${config.baseUrl}. Waiting for the switch in the Growth OS app.`);
   while (!stopping) {
     await tick();
+    if (tickAgainNow) {
+      tickAgainNow = false;
+      continue;
+    }
     await new Promise((resolve) => setTimeout(resolve, TICK_MS));
   }
 }
