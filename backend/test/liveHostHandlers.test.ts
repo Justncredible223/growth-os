@@ -315,18 +315,17 @@ describe("runLiveHostTick", () => {
   });
 
   it("cost: routine segments go to the fast model and fact segments stay on the stronger one", async () => {
-    // A young session, so the Fillbook spot is not yet due and the rotation decides the segment.
-    const session = { id: "s1", status: "live", started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() };
-    const modelFor = async (lastSegment: string) => {
-      const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [{ ...session, last_segment: lastSegment }] });
+    // The rundown decides the segment from how far into the show it is: the psychology block (minute 25) is routine
+    // segments, the overview block (minute 5) is fact segments.
+    const modelAt = async (ageMinutes: number) => {
+      const session = { id: "s1", status: "live", started_at: new Date(NOW.getTime() - ageMinutes * 60_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: "cold_open" };
+      const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [session] });
       const llm = scriptedLlm([line("Quick one for chat: type a number.")]);
       await runLiveHostTick(asSupabase(client), { platform: "youtube", costMode: "balanced" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
       return (JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { model?: string }).model ?? "default";
     };
-    // After tilt_o_meter the rotation reaches eval_graveyard (routine); after eval_graveyard it reaches desk_lesson (fact),
-    // because the trivia pair is retired.
-    expect(await modelFor("tilt_o_meter")).toContain("haiku");
-    expect(await modelFor("eval_graveyard")).not.toContain("haiku");
+    expect(await modelAt(25)).toContain("haiku");
+    expect(await modelAt(5)).not.toContain("haiku");
   });
 
   it("cost: a small overage is trimmed without paying for a second draft, a large one is sent back once", async () => {
@@ -344,9 +343,10 @@ describe("runLiveHostTick", () => {
   });
 
   it("Red is scheduled: asked for about every third line, not for fact segments or right after him", async () => {
-    const started = new Date(NOW.getTime() - 120_000).toISOString();
     const spoken = (id: string, text: string, offsetSeconds: number) => ({ id, session_id: "s1", kind: "segment", segment: null, spoken_text: text, mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - offsetSeconds * 1000).toISOString(), spoken_at: null });
-    const askedForRed = async (utterances: Array<ReturnType<typeof spoken>>, lastSegment: string) => {
+    // Minute 25 of the show is the psychology block (routine segments); minute 5 is the overview block (fact segments).
+    const askedForRed = async (utterances: Array<ReturnType<typeof spoken>>, lastSegment: string, ageMinutes = 25) => {
+      const started = new Date(NOW.getTime() - ageMinutes * 60_000).toISOString();
       const client = buildClient({
         live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
         live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: lastSegment }],
@@ -368,7 +368,7 @@ describe("runLiveHostTick", () => {
     expect(await askedForRed([spoken("u1", "Welcome.", 30)], "cold_open")).toBe(true);
     // Never on the very first line, and never on a fact segment (desk_lesson).
     expect(await askedForRed([], "cold_open")).toBe(false);
-    expect(await askedForRed(plain, "eval_graveyard")).toBe(false); // the trivia pair is retired, so the next segment is desk_lesson
+    expect(await askedForRed(plain, "cold_open", 5)).toBe(false); // the overview block is fact segments
   });
 
   it("a direct question is answered straight: no Red scheduled and no Red line kept", async () => {
@@ -429,10 +429,12 @@ describe("runLiveHostTick", () => {
     expect(sent.messages[0]!.content).toContain("OVERUSED RIGHT NOW");
     expect(sent.messages[0]!.content).toContain("the market being closed");
 
-    // Tilt-o-Meter comes after Welcome In in the rotation; a draft without tiltLevel is redone once.
+    // Tilt-o-Meter is the only psychology-block segment not said recently; a draft without tiltLevel is redone once.
+    const said = (id: string, segment: string, secondsAgo: number) => ({ id, session_id: "s1", kind: "segment", segment, spoken_text: "Earlier.", mood: "smirk", card: null, mentions_fillbook: false, status: "spoken", created_at: new Date(NOW.getTime() - secondsAgo * 1000).toISOString(), spoken_at: null });
     const next = buildClient({
       live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
-      live_host_sessions: [{ ...young, started_at: new Date(NOW.getTime() - 120_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: "roast_my_trade" }],
+      live_host_sessions: [{ ...young, started_at: new Date(NOW.getTime() - 25 * 60_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: "rate_my_excuse" }],
+      live_host_utterances: [said("u1", "rate_my_excuse", 100), said("u2", "eval_graveyard", 200), said("u3", "famous_last_words", 300)],
     });
     const meter = scriptedLlm([line("A trader moves his stop three times. How tilted is that?"), line("A trader moves his stop three times. Seven out of ten.", { tiltLevel: 7 })]);
     const result = await runLiveHostTick(asSupabase(next), { platform: "youtube" }, { now: NOW, llmClient: meter.client, youtube: null, grounding: GROUNDING });
@@ -452,23 +454,23 @@ describe("runLiveHostTick", () => {
     expect(result.utterance?.spokenText).toContain("moves his stop three times");
   });
 
-  it("the Fillbook pitch waits for chat that is alive, and for 15 minutes", async () => {
-    const lastSegment = "eval_graveyard";
+  it("the Fillbook pitch waits for a live room and for 15 minutes", async () => {
     const run = async (ageMinutes: number, chatSecondsAgo: number | null) => {
-      const messages = chatSecondsAgo === null ? [] : [{ id: "m0", session_id: "s1", platform: "youtube", external_id: "e0", author_name: "Jo", body: "hi", received_at: new Date(NOW.getTime() - chatSecondsAgo * 1000).toISOString(), status: "answered", status_reason: null, utterance_id: null }];
+      const message = (id: string, author: string) => ({ id, session_id: "s1", platform: "youtube", external_id: id, author_name: author, body: "hi", received_at: new Date(NOW.getTime() - (chatSecondsAgo ?? 0) * 1000).toISOString(), status: "answered", status_reason: null, utterance_id: null });
+      const messages = chatSecondsAgo === null ? [] : [message("m0", "Jo"), message("m1", "Sam")];
       const client = buildClient({
         live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
-        live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - ageMinutes * 60_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: lastSegment }],
+        live_host_sessions: [{ id: "s1", status: "live", started_at: new Date(NOW.getTime() - ageMinutes * 60_000).toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString(), last_segment: "eval_graveyard" }],
         live_host_messages: messages,
       });
       const llm = scriptedLlm([line("A line for the room.")]);
-      const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+      const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
       return result.utterance?.segmentTitle;
     };
     expect(await run(8, 30)).not.toBe("Where Tilt Lives"); // too early
-    expect(await run(20, null)).not.toBe("Where Tilt Lives"); // nobody chatting
-    expect(await run(20, 600)).not.toBe("Where Tilt Lives"); // chat went cold
-    expect(await run(20, 30)).toBe("Where Tilt Lives");
+    expect(await run(45, null)).not.toBe("Where Tilt Lives"); // nobody chatting
+    expect(await run(45, 600)).not.toBe("Where Tilt Lives"); // chat went cold
+    expect(await run(45, 30)).toBe("Where Tilt Lives");
   });
 
   it("variety: with nobody chatting, a segment is told not to end by asking chat to type", async () => {
@@ -1034,5 +1036,32 @@ describe("chat move requests", () => {
   it("does not swallow real questions that mention a move word", () => {
     for (const body of ["why did the market spin out after the news", "how do I wave off a bad trade", "what is a flex account"]) expect(pureMoveRequest(body), body).toBeNull();
     expect(chatMoveWord("what is a flex account")).toBe("flex");
+  });
+});
+
+describe("YouTube audience gating and operator switches", () => {
+  const young = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000).toISOString();
+  const chat = (id: string, author: string, secondsAgo: number, status = "answered") => ({ id, session_id: "live", platform: "youtube", external_id: id, author_name: author, body: "hello there", received_at: new Date(NOW.getTime() - secondsAgo * 1000).toISOString(), status, status_reason: null, utterance_id: null });
+  const session = () => ({ id: "live", status: "live", started_at: young(30), last_heartbeat_at: young(0.1), last_utterance_at: young(3), last_segment: "roast_my_trade" });
+
+  it("runs a rundown segment when two different people are chatting", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [session()], live_host_messages: [chat("a", "Dana", 60), chat("b", "Sam", 90)] });
+    const llm = scriptedLlm([line("A lesson about the loss limit.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance).not.toBeNull();
+  });
+
+  it("stays quiet for a single chatter after the opening", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [session()], live_host_messages: [chat("a", "Dana", 60), chat("b", "Dana", 90)] });
+    const llm = scriptedLlm([line("Unprompted.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", audienceOnly: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance).toBeNull();
+  });
+
+  it("does not answer chat while the operator has chat replies off", async () => {
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [session()], live_host_messages: [chat("p", "Dana", 20, "pending")] });
+    const llm = scriptedLlm([line("Should not be said.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", audienceOnly: true, controls: { chat: false } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(result.utterance).toBeNull();
   });
 });

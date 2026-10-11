@@ -1,4 +1,5 @@
 import { pureMoveRequest } from "./liveHostMoves.js";
+import { pickRundownSegment } from "./liveHostRundown.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MODEL_HAIKU, createLlmClient, type LlmClient } from "../content/llmClient.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
@@ -77,6 +78,13 @@ export function splitRedLine(spokenText: string): { redLine: string | null; tilt
  * while someone has joined or chatted within this long; otherwise he stays quiet until the next person arrives.
  */
 export const AUDIENCE_PRESENT_FOR_MS = 3 * 60_000;
+/**
+ * Unprompted segments on YouTube (after the opening) need a real audience: this many different people chatting within
+ * the last AUDIENCE_PRESENT_FOR_MS. One viewer gets answers, not a show.
+ */
+export const AUDIENCE_FOR_RUNDOWN = 2;
+/** Between unprompted segments on YouTube, so a small room is not lectured at. */
+export const YOUTUBE_RUNDOWN_GAP_MS = 60_000;
 /** On YouTube the host opens the room for this long even if nobody has chatted yet. */
 export const YOUTUBE_OPENING_GRACE_MS = 2 * 60_000;
 const JOIN_WELCOME_TITLE = "New Arrivals";
@@ -464,6 +472,8 @@ export async function getLiveHostStatus(client: SupabaseClient, now: Date = new 
 // ---------------------------------------------------------------------------
 
 export interface TickInput {
+  /** Operator switches from the worker's console. Undefined means on. */
+  controls?: { chat?: boolean; promos?: boolean };
   /** Chat the worker read itself (TikTok). YouTube chat is read here on the server. */
   messages?: IncomingChatMessage[];
   /** True while the worker is still speaking the previous line: ingest chat, but do not draft another yet. */
@@ -802,7 +812,21 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     await client.from("live_host_messages").update({ status: "skipped", status_reason: "chat moved on" }).in("id", passedOver.map((m) => m.id));
     pending = pending.slice(-MAX_MESSAGES_PER_LINE);
   }
-  const batch = pending.slice(0, MAX_MESSAGES_PER_LINE);
+  // Questions first, then oldest; the same words from the same person once; one per person per line. Chat replies off
+  // (operator switch) leaves the messages stored and unanswered.
+  const prioritized = (() => {
+    const seen = new Set<string>();
+    const authors = new Set<string>();
+    const ordered = [...pending].sort((a, b) => Number(looksLikeQuestion(b.body)) - Number(looksLikeQuestion(a.body)) || new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+    return ordered.filter((message) => {
+      const key = `${message.authorName}:${message.body.trim().toLowerCase()}`;
+      if (seen.has(key) || authors.has(message.authorName)) return false;
+      seen.add(key);
+      authors.add(message.authorName);
+      return true;
+    });
+  })();
+  const batch = input.controls?.chat === false ? [] : prioritized.slice(0, MAX_MESSAGES_PER_LINE);
 
   // Recent lines: the host's memory for this stream, and the basis for rationing Fillbook mentions.
   const { data: recentRows } = await client.from("live_host_utterances").select("*").eq("session_id", session.id).neq("status", "dropped").order("created_at", { ascending: false }).limit(RECENT_EXCHANGES);
@@ -862,13 +886,31 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       const openingGrace = input.platform === "youtube" && sessionAgeMs < YOUTUBE_OPENING_GRACE_MS;
       // On YouTube he only answers: after the opening a chat message earns a reply, not a string of unprompted segments
       // (a viewer who typed once and then got a lecture every 30 seconds found it random).
-      if (input.platform === "youtube" && !openingGrace) return base;
+      if (input.platform === "youtube" && !openingGrace) {
+        const since = new Date(now.getTime() - AUDIENCE_PRESENT_FOR_MS).toISOString();
+        const { data: recentChatters } = await client.from("live_host_messages").select("author_name").eq("session_id", session.id).gte("received_at", since).limit(100);
+        const distinct = new Set(((recentChatters ?? []) as Array<{ author_name: string }>).map((row) => row.author_name)).size;
+        // One viewer gets answers, not a show; a small real audience gets the rundown at a calm pace.
+        if (distinct < AUDIENCE_FOR_RUNDOWN) return base;
+        if (now.getTime() - quietSince < YOUTUBE_RUNDOWN_GAP_MS) return base;
+      }
       if (now.getTime() - lastSeen > AUDIENCE_PRESENT_FOR_MS && !openingGrace) return base;
     }
-    const spotDue = sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS && chatIsLive;
-    segment = nextSegment(session.lastSegment, spotDue);
+    const promosOn = input.controls?.promos !== false;
+    const spotDue = promosOn && sessionAgeMs >= FILLBOOK_SPOT_NOT_BEFORE_MS && sinceLastMentionMs >= FILLBOOK_SPOT_EVERY_MS && chatIsLive;
+    // The show rundown picks the next unprompted segment: the least recently used one of the current block, with
+    // earlier streams' usage as the tiebreak so consecutive episodes are not the same.
+    const { data: priorRows } = await client.from("live_host_utterances").select("segment").neq("session_id", session.id).not("segment", "is", null).order("created_at", { ascending: false }).limit(60);
+    const priorUseCounts: Record<string, number> = {};
+    for (const row of (priorRows ?? []) as Array<{ segment: string | null }>) if (row.segment) priorUseCounts[row.segment] = (priorUseCounts[row.segment] ?? 0) + 1;
+    segment = input.platform !== "youtube" ? nextSegment(session.lastSegment, spotDue) : pickRundownSegment({
+      elapsedMinutes: sessionAgeMs / 60_000,
+      recentSegmentIds: [session.lastSegment, ...recentUtterances.map((u) => u.segment ?? null)].filter((id, index, all) => id !== null && (index === 0 || id !== all[index - 1])),
+      priorUseCounts,
+      fillbookSpotAllowed: spotDue && session.lastSegment !== "fillbook_spot",
+    }).segment;
   }
-  const fillbookMentionAllowed = askedDirectly || segment?.isFillbookSpot === true || recentMentions < PROMO_MAX_MENTIONS;
+  const fillbookMentionAllowed = askedDirectly || (input.controls?.promos !== false && (segment?.isFillbookSpot === true || recentMentions < PROMO_MAX_MENTIONS));
   // TikTok chat on means the stream is on TikTok, where sending viewers off-platform is a LIVE violation.
   // The worker states where it is streaming. An explicit "youtube" that is not also reading TikTok chat means the
   // website may be said; anything else (TikTok, both, unknown) points to the link in the bio. The owner's TikTok-chat
@@ -1149,4 +1191,69 @@ export async function markUtteranceSpoken(client: SupabaseClient, utteranceId: s
   if (!row) throw new LiveHostActionError(`No queued live_host_utterances row with id "${utteranceId}"`);
   // Quiet time is measured from when the host finished speaking, not from when the line was drafted.
   await client.from("live_host_sessions").update({ last_utterance_at: now.toISOString() }).eq("id", row.session_id);
+}
+
+
+export interface LiveHostEpisodeReport {
+  sessionId: string;
+  startedAt: string;
+  endedAt: string | null;
+  minutes: number;
+  linesSpoken: number;
+  segments: Record<string, number>;
+  chatMessages: number;
+  uniqueChatters: number;
+  answeredMessages: number;
+  fillbookMentions: number;
+  /** Total Live Host model spend that calendar day, not just this session (the ledger is per day). */
+  spendThatDayUsd: number | null;
+}
+
+/**
+ * Episode report: the last few sessions with what actually happened in them, newest first. Counts only what the
+ * Live Host itself recorded. Viewer numbers, watch time, click-through and signups are NOT here: they live in YouTube
+ * Studio and the site's analytics, and joining them is a human step (see docs/fillbook-live-growth).
+ */
+export async function getLiveHostReport(client: SupabaseClient, limit = 8, now: Date = new Date()): Promise<{ generatedAt: string; episodes: LiveHostEpisodeReport[]; changeNotes: string[] }> {
+  const capped = Math.max(1, Math.min(20, Math.floor(limit)));
+  const { data: sessionRows } = await client.from("live_host_sessions").select("id, started_at, last_heartbeat_at, ended_at").order("started_at", { ascending: false }).limit(capped);
+  const episodes: LiveHostEpisodeReport[] = [];
+  for (const row of (sessionRows ?? []) as Array<{ id: string; started_at: string; last_heartbeat_at: string | null; ended_at: string | null }>) {
+    const { data: utterances } = await client.from("live_host_utterances").select("segment, mentions_fillbook, status").eq("session_id", row.id).limit(2000);
+    const { data: messages } = await client.from("live_host_messages").select("author_name, status").eq("session_id", row.id).limit(5000);
+    const spoken = ((utterances ?? []) as Array<{ segment: string | null; mentions_fillbook: boolean; status: string }>).filter((u) => u.status === "spoken");
+    const segments: Record<string, number> = {};
+    for (const u of spoken) if (u.segment) segments[u.segment] = (segments[u.segment] ?? 0) + 1;
+    const chat = (messages ?? []) as Array<{ author_name: string; status: string }>;
+    const end = row.ended_at ?? row.last_heartbeat_at ?? now.toISOString();
+    let spend: number | null = null;
+    try {
+      spend = await getLiveHostSpendTodayUsd(client, new Date(row.started_at));
+    } catch {
+      spend = null;
+    }
+    episodes.push({
+      sessionId: row.id,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      minutes: Math.max(0, Math.round((new Date(end).getTime() - new Date(row.started_at).getTime()) / 60_000)),
+      linesSpoken: spoken.length,
+      segments,
+      chatMessages: chat.length,
+      uniqueChatters: new Set(chat.map((m) => m.author_name)).size,
+      answeredMessages: chat.filter((m) => m.status === "answered").length,
+      fillbookMentions: spoken.filter((u) => u.mentions_fillbook).length,
+      spendThatDayUsd: spend,
+    });
+  }
+  const changeNotes: string[] = [];
+  const [latest, previous] = episodes;
+  if (latest && previous) {
+    if (latest.uniqueChatters <= previous.uniqueChatters) changeNotes.push("Unique chatters did not grow versus the previous episode: change the hook or the promotion before changing the show.");
+    if (latest.chatMessages > 0 && latest.answeredMessages / latest.chatMessages < 0.6) changeNotes.push("Fewer than 60% of chat messages were answered: check reply latency and the answer queue.");
+    const top = Object.entries(latest.segments).sort((a, b) => b[1] - a[1])[0];
+    if (top && latest.linesSpoken >= 8 && top[1] / latest.linesSpoken > 0.4) changeNotes.push(`One segment (${top[0]}) was over 40% of the show: widen the topic pool.`);
+  }
+  if (episodes.length === 0) changeNotes.push("No sessions recorded yet.");
+  return { generatedAt: now.toISOString(), episodes, changeNotes };
 }

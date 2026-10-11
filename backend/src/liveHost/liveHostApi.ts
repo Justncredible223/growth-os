@@ -3,6 +3,7 @@ import { errorMessage } from "../lib/errorMessage.js";
 import { getServiceClient } from "../lib/supabaseClient.js";
 import {
   LiveHostActionError,
+  getLiveHostReport,
   getLiveHostStatus,
   isMissingLiveHostTables,
   markUtteranceSpoken,
@@ -14,7 +15,7 @@ import {
 } from "./liveHostHandlers.js";
 
 /** The Live Host actions the PC worker performs with the automation token. Everything else on the resource is owner-only. */
-const LIVE_HOST_WORKER_ACTIONS = new Set(["tick", "spoken"]);
+const LIVE_HOST_WORKER_ACTIONS = new Set(["tick", "spoken", "report"]);
 
 /** True for the Live Host calls the automation token may make: reading status, and the worker's own tick/spoken. */
 /**
@@ -35,6 +36,7 @@ export function tickInputFromBody(body: {
   costMode?: unknown;
   fresh?: boolean;
   ackFirst?: boolean;
+  controls?: unknown;
 }): TickInput {
   const duo = body.duo === true;
   return {
@@ -45,6 +47,10 @@ export function tickInputFromBody(body: {
     costMode: body.costMode,
     fresh: body.fresh === true,
     ackFirst: body.ackFirst === true,
+    controls:
+      body.controls && typeof body.controls === "object"
+        ? { chat: (body.controls as { chat?: unknown }).chat === false ? false : undefined, promos: (body.controls as { promos?: unknown }).promos === false ? false : undefined }
+        : undefined,
     workerInfo: body.workerInfo && typeof body.workerInfo === "object" ? body.workerInfo : {},
     joins: Array.isArray(body.joins) ? body.joins.slice(0, 50) : [],
     // Duo-only fields are ignored unless the worker says it is in duo mode.
@@ -105,6 +111,8 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
       costMode?: unknown;
       fresh?: boolean;
       ackFirst?: boolean;
+      controls?: unknown;
+      limit?: number;
       hostMessages?: TickInput["hostMessages"];
       hostName?: unknown;
       runSegment?: TickInput["runSegment"];
@@ -132,6 +140,9 @@ export async function handleLiveHost(req: VercelRequest, res: VercelResponse): P
         res.status(200).json(
           await runLiveHostTick(client, tickInputFromBody(body)),
         );
+        return;
+      case "report":
+        res.status(200).json(await getLiveHostReport(client, typeof body.limit === "number" ? body.limit : 8));
         return;
       case "spoken":
         if (!body.utteranceId) {
