@@ -31,6 +31,12 @@ export class LiveHostActionError extends Error {}
 export const WORKER_OFFLINE_AFTER_MS = 45_000;
 /** A session whose worker has been silent this long is closed, so a crashed worker never leaves a "live" session behind. */
 export const SESSION_ABANDONED_AFTER_MS = 5 * 60_000;
+/**
+ * A worker that starts up (its first tick) does not carry on a session whose room has been quiet this long: that was
+ * a show that ended, and carrying it on meant a restarted worker inherited an expired opening window and sat silent.
+ * A crash and restart in the middle of a show (a line spoken within this time) still carries on.
+ */
+export const FRESH_START_AFTER_QUIET_MS = 3 * 60_000;
 /** Chat messages answered together in one spoken line. */
 export const MAX_MESSAGES_PER_LINE = 3;
 /** A message nobody got to within this long is skipped: answering it later reads as a non sequitur. */
@@ -488,6 +494,8 @@ export interface TickInput {
   hostMessages?: Array<{ id?: unknown; text?: unknown; relayedFrom?: unknown }>;
   /** The name the co-host goes by on stream. Cleaned like any name. */
   hostName?: unknown;
+  /** True on the first tick after the worker process started. */
+  fresh?: boolean;
   /** "quality" (default: the stronger model for every line), "balanced" (fast model for routine segments) or "low". */
   costMode?: unknown;
   /**
@@ -685,6 +693,13 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   if (session && now.getTime() - new Date(session.lastHeartbeatAt).getTime() > SESSION_ABANDONED_AFTER_MS) {
     await endSession(client, session.id, "worker stopped responding", now);
     session = null;
+  }
+  if (session && input.fresh === true) {
+    const lastSpokeAt = session.lastUtteranceAt ? new Date(session.lastUtteranceAt).getTime() : new Date(session.startedAt).getTime();
+    if (now.getTime() - lastSpokeAt > FRESH_START_AFTER_QUIET_MS) {
+      await endSession(client, session.id, "worker restarted after a quiet spell", now);
+      session = null;
+    }
   }
   if (!session) {
     const { data, error } = await client

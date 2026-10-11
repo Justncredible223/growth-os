@@ -479,6 +479,27 @@ describe("runLiveHostTick", () => {
     expect(sent.messages[0]!.content).toContain("Do not end this line by asking chat to type or answer anything");
   });
 
+  it("a restarted worker starts a fresh show after a quiet spell, so it opens the room again", async () => {
+    const old = { id: "old", status: "live", started_at: new Date(NOW.getTime() - 25 * 60_000).toISOString(), last_heartbeat_at: new Date(NOW.getTime() - 60_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 15 * 60_000).toISOString(), last_segment: "trivia_answer" };
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [old] });
+    const llm = scriptedLlm([line("Someone connected a candle to a microphone. Say hi in chat.")]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", fresh: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const sessions = client.tables.live_host_sessions!;
+    expect(sessions.find((row) => row.id === "old")!.status).toBe("ended");
+    expect(sessions.find((row) => row.id === "old")!.ended_reason).toBe("worker restarted after a quiet spell");
+    expect(sessions).toHaveLength(2);
+    expect(result.utterance?.segmentTitle).toBe("Welcome In");
+  });
+
+  it("a worker that restarts in the middle of a show carries on the same session", async () => {
+    const live = { id: "live", status: "live", started_at: new Date(NOW.getTime() - 25 * 60_000).toISOString(), last_heartbeat_at: new Date(NOW.getTime() - 5_000).toISOString(), last_utterance_at: new Date(NOW.getTime() - 40_000).toISOString(), last_segment: "roast_my_trade" };
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false })], live_host_sessions: [live] });
+    const llm = scriptedLlm([line("Another one.")]);
+    await runLiveHostTick(asSupabase(client), { platform: "youtube", fresh: true }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(client.tables.live_host_sessions).toHaveLength(1);
+    expect(client.tables.live_host_sessions![0]!.status).toBe("live");
+  });
+
   it("warns, in the tick note, when a YouTube stream has no live link set", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, youtube_video_id: null })] });
     const llm = scriptedLlm([line("Hello there.")]);
@@ -955,6 +976,13 @@ describe("tickInputFromBody", () => {
     expect(input.hostMessages).toEqual([]);
     expect(input.hostName).toBeUndefined();
     expect(input.runSegment).toBeNull();
+  });
+
+  it("carries costMode and fresh through the tick API", () => {
+    const input = tickInputFromBody({ costMode: "balanced", fresh: true });
+    expect(input.costMode).toBe("balanced");
+    expect(input.fresh).toBe(true);
+    expect(tickInputFromBody({}).fresh).toBe(false);
   });
 
   it("keeps the existing fields and caps the lists", () => {
