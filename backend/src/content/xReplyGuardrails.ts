@@ -98,6 +98,45 @@ export function impliesContactOrLinkRequest(messageText: string): boolean {
 }
 
 /**
+ * Fillbook runs a real, live Elite giveaway (fillbookhq.com/giveaway; free to enter, asks entrants to follow
+ * @FillbookHQ on X and enter an email + X username there; we use /go/* short links on our own domain). A draft must
+ * never deny any of that, and must never call a post from our own account an impersonation (2026-10-12: an auto-draft
+ * told the public that our own giveaway was an impersonation account). Deliberately literal patterns.
+ */
+const FALSE_GIVEAWAY_CLAIM_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  {
+    pattern: /\b(?:does(?:n't| not)|do(?:n't| not)|never|won't|will not|isn't|is not|aren't|are not|no longer)\b[^.!?]{0,40}\b(?:run|runs|running|host|hosts|hosting|hold|holds|offer|offers|have|has|do|does|giv\w+)\b[^.!?]{0,30}\bgiveaways?\b/i,
+    reason: "falsely says Fillbook does not run giveaways (the Elite giveaway at fillbookhq.com/giveaway is real)",
+  },
+  {
+    pattern: /\b(?:there(?:'s| is) no|no such|not (?:a|an) (?:real|official|legit\w*)|fake|bogus|phony|fraudulent) (?:\w+ )?giveaways?\b|\bgiveaway\b[^.!?]{0,20}\b(?:is|was|looks|seems)\b[^.!?]{0,15}\b(?:fake|a scam|scam\w*|bogus|phony|not real|not legit\w*)/i,
+    reason: "calls the real Fillbook giveaway fake or a scam",
+  },
+  {
+    pattern: /\b(?:does(?:n't| not)|do(?:n't| not)|never|won't|will not)\b[^.!?]{0,30}\b(?:ask|asks|require|requires|tell|tells)\b[^.!?]{0,30}\b(?:follow\w*|enter (?:a |the |any |our )?(?:giveaway|contest|draw|link|email|at)|sign ?up (?:for|to) (?:a |the |any |our )?giveaway)/i,
+    reason: "falsely says Fillbook never asks anyone to follow or enter (the giveaway does ask entrants to follow @FillbookHQ and enter at fillbookhq.com/giveaway)",
+  },
+  {
+    pattern: /\b(?:does(?:n't| not)|do(?:n't| not)|never|won't|will not)\b[^.!?]{0,30}\buse\b[^.!?]{0,30}\b(?:shorten\w*|short ?links?|shorteners?|bit\.ly|tinyurl)/i,
+    reason: "falsely says Fillbook does not use short links (our own /go/ links on fillbookhq.com are real)",
+  },
+];
+
+/** True (with a reason) if the reply denies something true about the real Elite giveaway. Null for a clean reply. */
+export function containsFalseGiveawayClaim(reply: string): GuardrailViolation | null {
+  const match = FALSE_GIVEAWAY_CLAIM_PATTERNS.find(({ pattern }) => pattern.test(reply));
+  return match ? { reason: match.reason } : null;
+}
+
+/** For a post authored by our OWN account: any "impersonation / fake account / not us" framing is wrong by definition. */
+const IMPERSONATION_FRAMING_PATTERN = /\bimpersonat\w*|\b(?:fake|spoof\w*|clone|knock-?off|copycat|phishing)\s+(?:account|profile|page)\b|\b(?:is|are|looks?|seems?)\s+(?:a\s+)?(?:scam|fake)\b|\bnot (?:us|affiliated|official|from us|ours)\b|\bdoes(?:n't| not) (?:come from|belong to) us\b/i;
+
+/** True (with a reason) if a reply frames a post by our own account as an impersonation/scam/not official. */
+export function containsOwnPostImpersonationClaim(reply: string): GuardrailViolation | null {
+  return IMPERSONATION_FRAMING_PATTERN.test(reply) ? { reason: "calls a post from Fillbook's own account an impersonation, scam or not official" } : null;
+}
+
+/**
  * Patterns for the two things this project's brand rules explicitly ban:
  * Fillbook (a company) speaking as if it personally trades, and any
  * customer/performance claim not grounded in verified knowledge. Kept
@@ -285,6 +324,9 @@ export function checkReplyGuardrails(reply: string, expectsLink: boolean, option
 
   const unverifiedClaim = containsUnverifiedClaim(reply);
   if (unverifiedClaim) return unverifiedClaim;
+
+  const giveawayClaim = containsFalseGiveawayClaim(reply);
+  if (giveawayClaim) return giveawayClaim;
 
   const aiTell = containsAiTell(reply);
   if (aiTell) return aiTell;
