@@ -11,6 +11,7 @@ import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseReposi
 import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../signals/adapters/youtubeLiveChatAdapter.js";
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
+import { matchInstantAnswer } from "./liveHostInstant.js";
 import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
 import { FACT_SEGMENTS, parseCostMode, useFastModel } from "./liveHostModels.js";
 import { OPENING_DEFAULTS, stripChatReactionClaims, varietyGuidance, varietyProblem } from "./liveHostVariety.js";
@@ -829,6 +830,52 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     });
   })();
   const batch = input.controls?.chat === false ? [] : prioritized.slice(0, MAX_MESSAGES_PER_LINE);
+
+  // Instant answer: a short common question (hello, what is Fillbook, price, who are you) is answered from a
+  // pre-written, pre-checked line with no model call, so the reply starts as soon as the message is read.
+  if (batch.length > 0 && !input.duo) {
+    const top = batch[0]!;
+    const { data: recentForInstant } = await client.from("live_host_utterances").select("spoken_text").eq("session_id", session.id).neq("status", "dropped").order("created_at", { ascending: false }).limit(6);
+    const recentTilt = ((recentForInstant ?? []) as Array<{ spoken_text: string }>).map((row) => splitRedLine(row.spoken_text).tiltLine);
+    const workerReadsTiktok = (input.workerInfo as { tiktokChat?: unknown } | undefined)?.tiktokChat === true;
+    const websiteAllowed = input.platform === "youtube" && !workerReadsTiktok;
+    const instant = matchInstantAnswer(top.body, { authorName: safeAuthorName(top.authorName), websiteAllowed, recentLines: recentTilt });
+    if (instant) {
+      const problem = checkSpokenLine(instant.text, { fillbookMentionAllowed: true, websiteMentionAllowed: websiteAllowed });
+      if (!problem) {
+        try {
+          await authorizeLiveHostSpeechAndAudit(
+            { ownerSwitchedOn: settings.desiredState === "on", systemPaused, sessionId: session.id, guardrailProblem: null, text: instant.text },
+            deps.auditSink ?? supabaseAuditSink(client),
+          );
+          const { data: instantRow, error: instantError } = await client
+            .from("live_host_utterances")
+            .insert({
+              session_id: session.id,
+              kind: "reply",
+              segment: null,
+              spoken_text: instant.text,
+              mood: "proud",
+              card: null,
+              mentions_fillbook: mentionsFillbook(instant.text),
+              status: "queued",
+              created_at: now.toISOString(),
+            })
+            .select("*")
+            .single();
+          if (instantError) throw new Error(`insert live_host_utterances failed: ${instantError.message}`);
+          const utteranceRow = toUtterance(instantRow as UtteranceRow);
+          await client.from("live_host_messages").update({ status: "answered", utterance_id: utteranceRow.id }).eq("id", top.id);
+          await client.from("live_host_sessions").update({ last_utterance_at: now.toISOString() }).eq("id", session.id);
+          base.timingsMs = { draft: 0 };
+          return { ...base, utterance: toTickUtterance(utteranceRow, [top], null, null) };
+        } catch (err) {
+          if (!(err instanceof LiveHostSpeechRejectedError)) throw err;
+          // Refused by the firewall: fall through to the normal drafter.
+        }
+      }
+    }
+  }
 
   // Recent lines: the host's memory for this stream, and the basis for rationing Fillbook mentions.
   const { data: recentRows } = await client.from("live_host_utterances").select("*").eq("session_id", session.id).neq("status", "dropped").order("created_at", { ascending: false }).limit(RECENT_EXCHANGES);
