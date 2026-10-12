@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { matchInstantAnswer } from "../src/liveHost/liveHostInstant.js";
 import { checkSpokenLine } from "../src/liveHost/liveHostGuardrails.js";
 
-const ctx = { authorName: "Shane", websiteAllowed: true, recentLines: [] as string[] };
+const ctx = { authorName: "Alex", websiteAllowed: true, recentLines: [] as string[] };
 
 describe("instant answers", () => {
   it.each([
