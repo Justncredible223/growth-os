@@ -21,7 +21,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "video-factory"))
 from edge_tts_words import synthesize  # noqa: E402
-from windows_voice import synthesize_windows  # noqa: E402
+from windows_voice import synthesize_windows, warm_piper  # noqa: E402
 
 # When the free neural voice refuses (it can answer 403 for hours), go straight to the Windows backup voice for this
 # long before trying it again, so a block is not hammered and a line is not delayed by a doomed attempt.
@@ -65,6 +65,8 @@ async def handle(request: dict) -> None:
 async def main() -> None:
     loop = asyncio.get_running_loop()
     reply({"ready": True})
+    # Load the backup neural voices in the background so the first line that needs them is not the slow one.
+    loop.run_in_executor(None, warm_piper)
     while True:
         line = await loop.run_in_executor(None, sys.stdin.readline)
         if not line:

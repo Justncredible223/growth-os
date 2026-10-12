@@ -289,6 +289,28 @@ const DENIAL = /\b(?:no|not|never|nobody|without|isn't|aren't|won't|can't|cannot
  * "the line ...", or null for a clean line. Brand-rule vocabulary (the table-driven check) is run separately by
  * the caller because it needs the database.
  */
+/**
+ * Fillbook prices are said only as the current ones (Free, Core $24.99 a month, Elite $39.99 a month; Starter is retired
+ * for new signups). A sentence that talks about Fillbook, a plan or a subscription and puts a billing amount on it is
+ * checked: it may carry only the approved figures, and none of the retired or invented ones. The first live had him say
+ * "twelve ninety-nine to thirty-nine ninety-nine a month".
+ */
+const PRICE_SUBJECT = /\b(?:fill-?book|plans?|elite|core|starter|subscriptions?|memberships?|premium|pro plan|trial|journal costs?|pricing|prices?)\b/i;
+const PRICE_AMOUNT =
+  /\$\s?\d|\b\d+\.\d{2}\b|\b(?:a|per|each|every) (?:month|year)\b|\bmonthly\b|\bannual(?:ly)?\b|\b(?:dollars?|bucks)\b|\b(?:\w+[- ])?ninety[- ]nine\b/i;
+const PRICE_APPROVED = /\b(?:twenty[- ]four ninety[- ]nine|24\.99|thirty[- ]nine ninety[- ]nine|39\.99|three (?:hundred )?ninety[- ]nine|399\.90|free)\b/i;
+const PRICE_RETIRED =
+  /(?<![\w-])(?:twelve ninety[- ]nine|12\.99|fourteen ninety[- ]nine|14\.99|nine ninety[- ]nine|9\.99|nineteen ninety[- ]nine|19\.99|twenty[- ]nine ninety[- ]nine|29\.99|forty[- ]nine ninety[- ]nine|49\.99|starter)\b/i;
+
+export function findPriceClaim(line: string): string | null {
+  for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+    if (!PRICE_SUBJECT.test(sentence) || !PRICE_AMOUNT.test(sentence)) continue;
+    if (PRICE_RETIRED.test(sentence)) return "quotes a Fillbook price that is retired or wrong (say Core is twenty-four ninety-nine a month, Elite thirty-nine ninety-nine, or point to the website for plans)";
+    if (!PRICE_APPROVED.test(sentence)) return "puts a billing amount on Fillbook that is not on the approved price list (point to the website for plans instead)";
+  }
+  return null;
+}
+
 export function checkSpokenLine(text: string, context: SpokenLineContext): string | null {
   const line = text.trim();
   if (line.length === 0) return "is empty";
@@ -302,6 +324,8 @@ export function checkSpokenLine(text: string, context: SpokenLineContext): strin
   if (tradeCall) return tradeCall;
   const legalRisk = findLegalRisk(line);
   if (legalRisk) return legalRisk;
+  const priceClaim = findPriceClaim(line);
+  if (priceClaim) return priceClaim;
 
   const withoutDenials = line.replace(DENIAL, " ");
   const unverified = containsUnverifiedClaim(withoutDenials);
