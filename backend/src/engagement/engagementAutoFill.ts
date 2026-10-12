@@ -5,6 +5,7 @@ import {
   EngagementDraftDeclined,
   discoverYoutube,
   draftItem,
+  revalidateStoredDrafts,
   skipItem,
   type DiscoveryDiagnostics,
   type DiscoveryResult,
@@ -241,6 +242,17 @@ async function run(client: SupabaseClient, deps: AutoFillDeps): Promise<AutoFill
   // Retention first and always: the 30-day purge of cached YouTube data is a policy obligation, so it runs on
   // every scheduled pass, even when the system is paused or the key is missing. It also detects a missing migration.
   await repo.purgeStaleCache(client, now);
+
+  // Drop stored drafts that claim first-person experience before anything else reads the queue. Items left with no
+  // draft return to "new" and are redrafted below through the normal path and its per-run cap.
+  try {
+    const revalidated = await revalidateStoredDrafts(client, await repo.listQueue(client, 500), now);
+    if (revalidated.draftsDropped > 0) {
+      console.log(`engagement_autofill: dropped ${revalidated.draftsDropped} stored draft(s) claiming first-person experience (${revalidated.itemsReset} item(s) to redraft)`);
+    }
+  } catch (err) {
+    console.warn("engagement_autofill: draft revalidation failed", errorMessage(err));
+  }
 
   if (await deps.isPaused()) return emptyResult("skipped -- system is paused", true);
 

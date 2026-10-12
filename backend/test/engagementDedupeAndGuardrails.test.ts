@@ -54,7 +54,7 @@ describe("near-duplicate detection", () => {
 });
 
 describe("engagement comment guardrails", () => {
-  const good = "Taking the second entry only after the sweep reclaims the level is the rule I keep breaking.";
+  const good = "Taking the second entry only after the sweep reclaims the level is the rule most traders keep breaking.";
 
   it("accepts a specific, non-promotional comment", () => {
     expect(checkEngagementComment(good, "youtube")).toBeNull();
@@ -79,7 +79,7 @@ describe("engagement comment guardrails", () => {
   });
 
   it("enforces TikTok's shorter comment limit", () => {
-    const long = "Sizing down after two losses is the one rule that actually changed my month, and I keep forgetting it when the open is fast and loud and everything on the screen looks like a setup I should take.";
+    const long = "Sizing down after two losses is the one rule that actually changes a month, and it gets forgotten when the open is fast and loud and everything on the screen looks like a setup worth taking.";
     expect(long.length).toBeGreaterThan(150);
     expect(checkEngagementComment(long, "tiktok")).toMatch(/too long/);
     expect(checkEngagementComment(long, "youtube")).toBeNull();
