@@ -28,6 +28,42 @@ def _piper_model(edge_voice: str) -> str:
     return os.path.join(PIPER_DIR, (PIPER_MALE if _MALE.search(edge_voice or "") else PIPER_FEMALE) + ".onnx")
 
 
+KOKORO_DIR = os.environ.get("TILT_KOKORO_DIR", os.path.join(os.path.expanduser("~"), ".kokoro"))
+KOKORO_MALE = os.environ.get("TILT_KOKORO_MALE", "am_adam")
+KOKORO_FEMALE = os.environ.get("TILT_KOKORO_FEMALE", "af_heart")
+# Kokoro is the most natural of the offline voices but slower (about 1.5x real time on this laptop): used for lines up
+# to this many words, which covers chat answers (capped at 40) and the sentence-by-sentence pieces of longer lines.
+KOKORO_MAX_WORDS = int(os.environ.get("TILT_KOKORO_MAX_WORDS", "48"))
+_KOKORO = None
+_KOKORO_LOCK = threading.Lock()
+
+
+def _load_kokoro():
+    global _KOKORO
+    with _KOKORO_LOCK:
+        if _KOKORO is None:
+            from kokoro_onnx import Kokoro  # noqa: PLC0415 - lazy: the helper must start without it
+
+            model = os.path.join(KOKORO_DIR, "kokoro-v1.0.int8.onnx")
+            voices = os.path.join(KOKORO_DIR, "voices-v1.0.bin")
+            if not (os.path.exists(model) and os.path.exists(voices)):
+                raise FileNotFoundError("kokoro model files are not installed")
+            _KOKORO = Kokoro(model, voices)
+        return _KOKORO
+
+
+def _kokoro_wav(edge_voice: str, text: str, wav_file: str, edge_rate: str) -> bool:
+    import soundfile  # noqa: PLC0415
+
+    kokoro = _load_kokoro()
+    match = re.match(r"([+-]?\d+)%", edge_rate or "")
+    pct = int(match.group(1)) if match else 0
+    voice = KOKORO_MALE if _MALE.search(edge_voice or "") else KOKORO_FEMALE
+    samples, rate = kokoro.create(text, voice=voice, speed=max(0.8, min(1.3, 1.05 + pct / 100.0)), lang="en-us")
+    soundfile.write(wav_file, samples, rate)
+    return os.path.exists(wav_file) and os.path.getsize(wav_file) > 1000
+
+
 _PIPER_VOICES: dict = {}
 _PIPER_LOCK = threading.Lock()
 
@@ -45,7 +81,11 @@ def _load_piper(model_path: str):
 
 
 def warm_piper() -> None:
-    """Loads both backup voices ahead of the first line. Never raises."""
+    """Loads the backup voices ahead of the first line. Never raises."""
+    try:
+        _load_kokoro()
+    except Exception:  # noqa: BLE001
+        pass
     for edge_voice in ("en-US-AndrewNeural", "en-US-JennyNeural"):
         model = _piper_model(edge_voice)
         if os.path.exists(model):
@@ -87,8 +127,13 @@ def synthesize_windows(edge_voice: str, text: str, media_path: str, words_path: 
         with open(text_file, "w", encoding="utf-8") as f:
             f.write(text)
         wrote_wav = False
+        if len(text.split()) <= KOKORO_MAX_WORDS:
+            try:
+                wrote_wav = _kokoro_wav(edge_voice, text, wav_file, edge_rate)
+            except Exception:  # noqa: BLE001 - fall through to Piper
+                wrote_wav = False
         model = _piper_model(edge_voice)
-        if os.path.exists(model):
+        if not wrote_wav and os.path.exists(model):
             try:
                 from piper.config import SynthesisConfig  # noqa: PLC0415
 
