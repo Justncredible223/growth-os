@@ -17,9 +17,16 @@ import asyncio
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "video-factory"))
 from edge_tts_words import synthesize  # noqa: E402
+from windows_voice import synthesize_windows  # noqa: E402
+
+# When the free neural voice refuses (it can answer 403 for hours), go straight to the Windows backup voice for this
+# long before trying it again, so a block is not hammered and a line is not delayed by a doomed attempt.
+EDGE_RETRY_AFTER_SECONDS = 90.0
+_edge_blocked_until = 0.0
 
 
 def reply(payload: dict) -> None:
@@ -32,8 +39,23 @@ async def handle(request: dict) -> None:
     try:
         with open(request["textFile"], "r", encoding="utf-8") as handle_file:
             text = handle_file.read()
-        await synthesize(request["voice"], text, request["mediaPath"], request["wordsPath"], request.get("rate", "+0%"), request.get("pitch", "+0Hz"))
-        reply({"id": request_id, "ok": True})
+        global _edge_blocked_until
+        used_backup = False
+        if time.monotonic() >= _edge_blocked_until:
+            try:
+                await synthesize(request["voice"], text, request["mediaPath"], request["wordsPath"], request.get("rate", "+0%"), request.get("pitch", "+0Hz"))
+            except (Exception, SystemExit) as edge_error:  # noqa: BLE001 - any refusal means use the backup voice
+                _edge_blocked_until = time.monotonic() + EDGE_RETRY_AFTER_SECONDS
+                sys.stderr.write("edge voice refused (" + str(edge_error)[:80] + "); using the Windows backup voice" + chr(10))
+                sys.stderr.flush()
+                used_backup = True
+        else:
+            used_backup = True
+        if used_backup:
+            await asyncio.get_running_loop().run_in_executor(
+                None, synthesize_windows, request["voice"], text, request["mediaPath"], request["wordsPath"], request.get("rate", "+0%")
+            )
+        reply({"id": request_id, "ok": True, "backup": used_backup})
     except SystemExit as exit_error:  # synthesize() exits when the service returned no word timings
         reply({"id": request_id, "ok": False, "error": f"no word timings (exit {exit_error.code})"})
     except Exception as error:  # noqa: BLE001 - one bad line must never kill the helper
