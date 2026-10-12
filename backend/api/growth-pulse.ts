@@ -127,7 +127,8 @@ export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
  * history for the prior "code-complete, credentials pending" state this
  * replaced.
  *
- * Called 3x/day by .github/workflows/growth-pulse.yml. Same auth contract
+ * Called 3x/day by Vercel Cron (backend/vercel.json; moved from .github/workflows/growth-pulse.yml 2026-10-12,
+ * which is now the manual "Run workflow" trigger). Same auth contract
  * as daily-pipeline.ts: GET or POST with `Authorization: Bearer
  * <CRON_SECRET>`.
  */

@@ -7,6 +7,18 @@
     {
       "path": "/api/daily-pipeline?group=x_feed_post",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/growth-pulse?x=true&videoReconciliation=true&youtubeComments=true&results=true&partnerships=true",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/growth-pulse?x=true&videoReconciliation=true&youtubeComments=true&results=true&partnerships=false",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/growth-pulse?x=true&videoReconciliation=true&youtubeComments=true&results=true&partnerships=false",
+      "schedule": "0 1 * * *"
     }
   ],
   "functions": {
