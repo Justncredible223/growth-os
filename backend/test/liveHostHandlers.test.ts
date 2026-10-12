@@ -982,12 +982,14 @@ describe("tickInputFromBody", () => {
     expect(input.runSegment).toEqual({ id: "tilt_o_meter" });
   });
 
-  it("drops the duo fields unless duo is true", () => {
+  it("drops the duo fields unless duo is true, but keeps a chosen segment", () => {
     const input = tickInputFromBody({ hostMessages: [{ id: "p1", text: "hi" }], hostName: "Justin", runSegment: {} });
     expect(input.duo).toBe(false);
     expect(input.hostMessages).toEqual([]);
     expect(input.hostName).toBeUndefined();
-    expect(input.runSegment).toBeNull();
+    // A chosen segment is kept in solo mode too: the solo control panel uses it.
+    expect(input.runSegment).toEqual({});
+    expect(tickInputFromBody({}).runSegment).toBeNull();
   });
 
   it("carries costMode and fresh through the tick API", () => {

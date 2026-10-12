@@ -58,7 +58,8 @@ export function tickInputFromBody(body: {
     duo,
     hostMessages: duo && Array.isArray(body.hostMessages) ? body.hostMessages.slice(0, 10) : [],
     hostName: duo && typeof body.hostName === "string" ? body.hostName.slice(0, 40) : undefined,
-    runSegment: duo && body.runSegment && typeof body.runSegment === "object" ? body.runSegment : null,
+    // Kept in solo mode too: the solo control panel runs a chosen segment the same way the duo console does.
+    runSegment: body.runSegment && typeof body.runSegment === "object" ? body.runSegment : null,
   };
 }
 
