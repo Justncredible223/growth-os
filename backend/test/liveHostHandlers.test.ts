@@ -70,7 +70,7 @@ describe("runLiveHostTick", () => {
   it("stays off, and drafts nothing, while the owner's switch is off", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ desired_state: "off" })] });
     const llm = scriptedLlm([line("Hello.")]);
-    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "walk me through how a trailing drawdown resets after a payout")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(result.desired).toBe("off");
     expect(result.utterance).toBeNull();
     expect(llm.fetchImpl).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("runLiveHostTick", () => {
   it("on a TikTok stream, rejects a line that names the website and accepts one that points to the bio", async () => {
     const client = buildClient();
     const llm = scriptedLlm([line("Jo, Fillbook is at fillbookhq dot com."), line("Jo, Fillbook is the journal I live in. The link is in the bio.")]);
-    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Jo", "what is Fillbook?")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Jo", "what does Fillbook actually do for a prop trader running three accounts at once?")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(llm.fetchImpl).toHaveBeenCalledTimes(2);
     expect(result.utterance?.spokenText).toContain("link is in the bio");
     const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
@@ -185,7 +185,7 @@ describe("runLiveHostTick", () => {
   });
 
   it("off TikTok, the website may be said", async () => {
-    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, youtube_video_id: null })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() }], live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }] });
+    const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, youtube_video_id: null })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() }], live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what does Fillbook actually do for a prop trader running three accounts at once?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }] });
     const llm = scriptedLlm([line("Jo, Fillbook is the journal I live in. It is at fillbookhq dot com.")]);
     const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(llm.fetchImpl).toHaveBeenCalledTimes(1);
@@ -221,7 +221,7 @@ describe("runLiveHostTick", () => {
   it("stays quiet once today's spend reaches the daily budget", async () => {
     const client = buildClient({ cost_events: [{ cost_usd: 3.5, created_at: NOW.toISOString(), context: { endpoint: "live-host-line" } }] });
     const llm = scriptedLlm([line("Hello.")]);
-    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "walk me through how a trailing drawdown resets after a payout")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(result.utterance).toBeNull();
     expect(result.note).toMatch(/Daily budget reached/);
     expect(llm.fetchImpl).not.toHaveBeenCalled();
@@ -230,7 +230,7 @@ describe("runLiveHostTick", () => {
   it("does not count the rest of Growth OS against the host's daily budget", async () => {
     const client = buildClient({ cost_events: [{ cost_usd: 40, created_at: NOW.toISOString(), context: { endpoint: "inbound-draft" } }, { cost_usd: 9, created_at: NOW.toISOString(), context: null }] });
     const llm = scriptedLlm([line("Mike, welcome in.")]);
-    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "walk me through how a trailing drawdown resets after a payout")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(result.utterance?.spokenText).toBe("Mike, welcome in.");
   });
 
@@ -261,7 +261,7 @@ describe("runLiveHostTick", () => {
 
   it("points to the bio unless the worker says the stream is on YouTube only", async () => {
     const youtubeOnly = settingsRow({ tiktok_chat_enabled: false });
-    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
+    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what does Fillbook actually do for a prop trader running three accounts at once?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
     const liveSession = { id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() };
     const client = buildClient({ live_host_settings: [youtubeOnly], live_host_sessions: [liveSession], live_host_messages: [pendingMessage] });
     const llm = scriptedLlm([line("Jo, it is at fillbookhq dot com."), line("Jo, Fillbook is the journal I live in. The link is in the bio.")]);
@@ -272,7 +272,7 @@ describe("runLiveHostTick", () => {
 
   it("a stream the worker says is YouTube may say the website even though the TikTok chat setting is on", async () => {
     const liveSession = { id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() };
-    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
+    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what does Fillbook actually do for a prop trader running three accounts at once?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: true })], live_host_sessions: [liveSession], live_host_messages: [pendingMessage] });
     const llm = scriptedLlm([line("Jo, it is the journal I live in, and it is at fillbookhq dot com.")]);
     const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", workerInfo: { tiktokChat: false } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
@@ -287,7 +287,7 @@ describe("runLiveHostTick", () => {
 
   it("still points to the bio on YouTube if the worker is reading TikTok chat too", async () => {
     const liveSession = { id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString() };
-    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is Fillbook?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
+    const pendingMessage = { id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what does Fillbook actually do for a prop trader running three accounts at once?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null };
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: true })], live_host_sessions: [liveSession], live_host_messages: [pendingMessage] });
     const llm = scriptedLlm([line("Jo, it is at fillbookhq dot com."), line("Jo, it is the journal I live in. The link is in the bio.")]);
     const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", workerInfo: { tiktokChat: true } }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
@@ -537,6 +537,15 @@ describe("runLiveHostTick", () => {
     expect(typeof result.spendTodayUsd).toBe("number");
   });
 
+  it("answers a common question instantly from a prepared line, with no model call", async () => {
+    const client = buildClient();
+    const llm = scriptedLlm([]);
+    const result = await runLiveHostTick(asSupabase(client), { platform: "youtube", messages: [tiktokMessage("m1", "Mike", "what is fillbook")] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    expect(llm.fetchImpl).not.toHaveBeenCalled();
+    expect(result.utterance?.kind).toBe("reply");
+    expect(result.utterance?.spokenText).toMatch(/trading journal/i);
+  });
+
   it("says nothing if the owner switches off while the line is being written", async () => {
     const client = buildClient();
     const { client: llmClient, fetchImpl } = scriptedLlm([line("Mike, welcome in.")]);
@@ -546,7 +555,7 @@ describe("runLiveHostTick", () => {
       const body = { content: [{ type: "tool_use", name: "submit_line", input: line("Mike, welcome in.") }], usage: { input_tokens: 1, output_tokens: 1 } };
       return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
     });
-    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, llmClient, youtube: null, grounding: GROUNDING });
+    const result = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "walk me through how a trailing drawdown resets after a payout")] }, { now: NOW, llmClient, youtube: null, grounding: GROUNDING });
     expect(result.desired).toBe("off");
     expect(result.utterance).toBeNull();
     expect(client.tables.live_host_utterances).toHaveLength(0);
@@ -593,7 +602,7 @@ describe("runLiveHostTick", () => {
   it("answers chat before welcoming, and never welcomes while the host is speaking", async () => {
     const client = buildClient();
     const llm = scriptedLlm([line("Mike, welcome in.")]);
-    const withChat = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")], joins: [{ name: "Dana" }] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
+    const withChat = await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "walk me through how a trailing drawdown resets after a payout")], joins: [{ name: "Dana" }] }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
     expect(withChat.utterance?.kind).toBe("reply");
     expect(withChat.joinsWelcomed).toBeUndefined();
     const busy = await runLiveHostTick(asSupabase(client), { busy: true, joins: [{ name: "Dana" }] }, { now: new Date(NOW.getTime() + 3_000), llmClient: llm.client, youtube: null, grounding: GROUNDING });
@@ -671,7 +680,7 @@ describe("runLiveHostTick", () => {
 
   it("ignores TikTok chat unless the owner enabled it", async () => {
     const client = buildClient({ live_host_settings: [settingsRow({ tiktok_chat_enabled: false, idle_seconds: 600 })], live_host_sessions: [{ id: "s1", status: "live", started_at: NOW.toISOString(), last_heartbeat_at: NOW.toISOString(), last_utterance_at: NOW.toISOString() }] });
-    await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "hi")] }, { now: NOW, youtube: null, grounding: GROUNDING });
+    await runLiveHostTick(asSupabase(client), { messages: [tiktokMessage("m1", "Mike", "walk me through how a trailing drawdown resets after a payout")] }, { now: NOW, youtube: null, grounding: GROUNDING });
     expect(client.tables.live_host_messages).toHaveLength(0);
   });
 

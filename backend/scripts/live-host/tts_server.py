@@ -22,6 +22,11 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "video-factory"))
 from edge_tts_words import synthesize  # noqa: E402
 from windows_voice import synthesize_windows, warm_piper  # noqa: E402
+import azure_voice  # noqa: E402
+
+# A failed Azure call (network blip, bad key) skips Azure for this long so lines are not delayed by doomed attempts.
+AZURE_RETRY_AFTER_SECONDS = 45.0
+_azure_blocked_until = 0.0
 
 # When the free neural voice refuses (it can answer 403 for hours), go straight to the Windows backup voice for this
 # long before trying it again, so a block is not hammered and a line is not delayed by a doomed attempt.
@@ -39,8 +44,24 @@ async def handle(request: dict) -> None:
     try:
         with open(request["textFile"], "r", encoding="utf-8") as handle_file:
             text = handle_file.read()
-        global _edge_blocked_until
+        global _edge_blocked_until, _azure_blocked_until
         used_backup = False
+        used_azure = False
+        # Official Azure Speech first (Andrew, the original voice), within the monthly free-character budget.
+        if time.monotonic() >= _azure_blocked_until and azure_voice.can_use(text):
+            try:
+                await asyncio.get_running_loop().run_in_executor(
+                    None, azure_voice.synthesize_azure, request["voice"], text, request["mediaPath"], request["wordsPath"],
+                    request.get("rate", "+0%"), request.get("pitch", "+0Hz"),
+                )
+                used_azure = True
+            except Exception as azure_error:  # noqa: BLE001 - any failure falls through to the other voices
+                _azure_blocked_until = time.monotonic() + AZURE_RETRY_AFTER_SECONDS
+                sys.stderr.write("azure voice failed (" + type(azure_error).__name__ + "); using the offline voices" + chr(10))
+                sys.stderr.flush()
+        if used_azure:
+            reply({"id": request_id, "ok": True, "backup": False, "voice": "azure", "azureChars": azure_voice.chars_used()})
+            return
         if time.monotonic() >= _edge_blocked_until:
             try:
                 await synthesize(request["voice"], text, request["mediaPath"], request["wordsPath"], request.get("rate", "+0%"), request.get("pitch", "+0Hz"))
