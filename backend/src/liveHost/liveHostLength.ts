@@ -26,7 +26,8 @@ export function spokenWordLimit(context: LengthContext): number | null {
   if (context.show) return 60;
   if (context.duo) return context.segment ? 60 : 55;
   if (context.segment) return 60;
-  return null;
+  // An answer to a viewer in solo mode: short enough that the draft and the voice are both quick.
+  return 40;
 }
 
 const MUST_KEEP = /\b(?:not (?:financial )?advice|entertainment)\b/i;

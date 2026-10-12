@@ -11,12 +11,12 @@ describe("wordCount", () => {
 });
 
 describe("spokenWordLimit", () => {
-  it("is tightest for welcomes, then duo replies, and absent for ordinary solo replies", () => {
+  it("is 40 for welcomes and for solo answers to chat, 55 for duo replies, 60 for segments", () => {
     expect(spokenWordLimit({ duo: false, show: false, segment: false, joinWelcome: true })).toBe(40);
     expect(spokenWordLimit({ duo: true, show: true, segment: true, joinWelcome: false })).toBe(60);
     expect(spokenWordLimit({ duo: true, show: false, segment: false, joinWelcome: false })).toBe(55);
     expect(spokenWordLimit({ duo: false, show: false, segment: true, joinWelcome: false })).toBe(60);
-    expect(spokenWordLimit({ duo: false, show: false, segment: false, joinWelcome: false })).toBeNull();
+    expect(spokenWordLimit({ duo: false, show: false, segment: false, joinWelcome: false })).toBe(40);
   });
 });
 
