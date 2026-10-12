@@ -57,7 +57,23 @@ const INBOUND_LINK_POLICY =
   `contact/reach/find Fillbook, or explicitly asks for a link or website, you may include exactly this link once, ` +
   `at the end of the reply, and set usesLink=true: ${INBOUND_TRACKABLE_LINK}. Never use any other link or domain. ` +
   `If they didn't clearly ask for contact info or a link, set usesLink=false and do not include a link at all, ` +
-  `even if it feels helpful.`;
+  `even if it feels helpful. The one exception: if their message is about the Fillbook giveaway, you may ` +
+  `include fillbookhq.com/giveaway (and only that) once and set usesLink=true.`;
+
+/**
+ * What is TRUE about Fillbook's giveaway and official channels (verified against fillbookhq.com/giveaway, 2026-10-12).
+ * Added after an auto-draft told the public that our own giveaway post was an impersonation account. Kept here as
+ * code, not only in the database, so it ships with every deploy and cannot be missing from a prompt.
+ */
+export const INBOUND_GIVEAWAY_FACTS = `Verified facts about Fillbook's giveaway and official channels (these are TRUE; never contradict them):
+- Fillbook runs a real, live giveaway: a free year of Fillbook Elite ($399.90 value). It is free to enter, no purchase necessary.
+- Entry period: Oct 11 2026 12:00 AM EDT to Nov 30 2026 11:59 PM EST.
+- It DOES ask people to follow @FillbookHQ on X and to enter their email and X username at fillbookhq.com/giveaway. The official rules are on that page.
+- Official links are on fillbookhq.com, including short links under fillbookhq.com/go/ (for example fillbookhq.com/go/x). Fillbook does use its own short links.
+- A post about the giveaway from the real @FillbookHQ account is NOT an impersonation and NOT a scam. Never call it one.
+- Only treat something as an impersonation or scam if it comes from a DIFFERENT account posing as Fillbook (a lookalike handle) or links somewhere other than fillbookhq.com. Even then, state calmly that the only official giveaway page is fillbookhq.com/giveaway and do not repeat the scammer's claims.
+- NEVER write that Fillbook does not run giveaways, does not ask anyone to follow or enter, or does not use short links. Those statements are false.
+- If someone asks whether the giveaway is real or legit: say yes, and point them to fillbookhq.com/giveaway for the official rules. Do not promise or imply they will win, no guarantees, no odds, no pressure.`;
 
 /**
  * X-specific (2026-09-25): same "show what Fillbook would show them" guidance as Prospecting replies
@@ -132,6 +148,8 @@ This is a real one-on-one reply on ${profile.displayName}, not a broadcast post:
 - ${profile.styleRules}
 - ${profile.noPitchGuidance}
 - Ground any product claim ONLY in the verified knowledge given -- never invent a feature.
+
+${INBOUND_GIVEAWAY_FACTS}
 
 Link policy: ${INBOUND_LINK_POLICY}
 

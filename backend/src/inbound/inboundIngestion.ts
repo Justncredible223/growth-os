@@ -2,6 +2,7 @@ import type { XMention, XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import type { IngestionCursorStore } from "../signals/adapters/ingestionCursorStore.js";
 import type { InboundRepository, NewInboundEngagement } from "./types.js";
 import { classifyPriority } from "./inboundClassifier.js";
+import { closeOwnAccountItems, isOwnAccountAuthor } from "./ownAccount.js";
 
 /** Own cursor, deliberately separate from xIngestion.ts's "x_mention" cursor -- this pipeline classifies/stores every mention differently and must not skip one the other pipeline already consumed, or vice versa. */
 export const INBOUND_CURSOR_SOURCE = "x_mention_inbound";
@@ -26,6 +27,10 @@ export interface IngestInboundResult {
   fetched: number;
   inserted: number;
   skippedExisting: number;
+  /** Posts authored by our own account (self-mentions, replies to ourselves) that were deliberately not stored. Present only when non-zero. */
+  skippedOwnAccount?: number;
+  /** Already-stored active items from our own account that this run closed ("own account"). Present only when non-zero. */
+  closedOwnAccount?: number;
 }
 
 /**
@@ -55,8 +60,15 @@ export async function ingestInboundMentions(
   const mentions = await deps.adapter.fetchOwnMentions(userId, sinceId, now);
   let inserted = 0;
   let skippedExisting = 0;
+  let skippedOwnAccount = 0;
 
   for (const mention of mentions) {
+    // Our own posts (a self-mention, a reply we made to ourselves) are never inbound engagement.
+    // Matched by id (the /users/me id this run already resolved) or case-insensitive handle.
+    if (isOwnAccountAuthor({ platform: "x", authorId: mention.authorId, authorHandle: mention.authorHandle }, { userId })) {
+      skippedOwnAccount++;
+      continue;
+    }
     const row = await buildRow(deps, userId, mention, backlogRecovery, now);
     const result = await deps.repo.upsertIfNew(row);
     if (result.created) inserted++;
@@ -67,7 +79,21 @@ export async function ingestInboundMentions(
     await cursorStore.save(INBOUND_CURSOR_SOURCE, mentions[0]!.id);
   }
 
-  return { fetched: mentions.length, inserted, skippedExisting };
+  // One-time, idempotent clean-up of self-authored rows stored before this check existed (never deletes; see ownAccount.ts).
+  let closedOwnAccount = 0;
+  try {
+    closedOwnAccount = (await closeOwnAccountItems(deps.repo, { userId })).length;
+  } catch {
+    // Best effort: the queue read also hides and closes self-authored rows, so a failed clean-up must not fail ingestion.
+  }
+
+  return {
+    fetched: mentions.length,
+    inserted,
+    skippedExisting,
+    ...(skippedOwnAccount > 0 ? { skippedOwnAccount } : {}),
+    ...(closedOwnAccount > 0 ? { closedOwnAccount } : {}),
+  };
 }
 
 async function buildRow(

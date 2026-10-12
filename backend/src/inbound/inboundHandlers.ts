@@ -4,8 +4,10 @@ import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
-import { draftInboundResponse, INBOUND_APPROVED_LINK_DOMAINS, INBOUND_TRACKABLE_LINK, type InboundDraftContext } from "./inboundResponseWriter.js";
-import { checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, impliesContactOrLinkRequest } from "../content/xReplyGuardrails.js";
+import { draftInboundResponse, INBOUND_TRACKABLE_LINK, type InboundDraftContext } from "./inboundResponseWriter.js";
+import { draftWithRetries } from "../content/xReplyGuardrails.js";
+import { assessInboundDraft } from "./inboundDraftPolicy.js";
+import { OWN_ACCOUNT_NOTE, closeOwnAccountItems, isOwnAccountRow, type OwnAccountIdentity } from "./ownAccount.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { SupabaseInboundRepository } from "./supabaseInboundRepository.js";
 import { ingestInboundMentions } from "./inboundIngestion.js";
@@ -14,7 +16,7 @@ import { SupabaseIngestionCursorStore } from "../signals/adapters/ingestionCurso
 import { findCreatorIdByHandle } from "../creators/supabaseCreatorRepository.js";
 import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../lib/integrationHealth.js";
 import { errorMessage } from "../lib/errorMessage.js";
-import type { InboundEngagement, InboundStatus } from "./types.js";
+import type { InboundEngagement, InboundRepository, InboundStatus } from "./types.js";
 
 export class InboundActionError extends Error {}
 
@@ -24,6 +26,20 @@ const OVERDUE_HOURS = 48;
 export interface InboundListItem extends InboundEngagement {
   creatorHandle: string | null;
   creatorCategory: string | null;
+}
+
+/**
+ * Queue-load read that can never show or count a self-authored item: the safety-net cleanup runs first (best
+ * effort; a failed write must not take the queue down), and the result is filtered again in memory regardless.
+ */
+async function listExcludingOwnAccount(repo: InboundRepository, statuses: InboundStatus[], own: OwnAccountIdentity = {}): Promise<InboundEngagement[]> {
+  try {
+    await closeOwnAccountItems(repo, own);
+  } catch {
+    // Best effort -- the in-memory filter below still hides the rows.
+  }
+  const rows = await repo.listByStatus(statuses);
+  return rows.filter((row) => !isOwnAccountRow(row, own));
 }
 
 /**
@@ -38,7 +54,7 @@ export async function listInbound(client: SupabaseClient, includeResolved = fals
     ? ["new", "needs_response", "draft_ready", "responded", "follow_up", "review_needed", "closed"]
     : ACTIVE_STATUSES;
   const repo = new SupabaseInboundRepository(client);
-  const rows = await repo.listByStatus(statuses);
+  const rows = await listExcludingOwnAccount(repo, statuses);
 
   const creatorIds = [...new Set(rows.map((r) => r.creatorId).filter((id): id is string => id !== null))];
   const creatorById = new Map<string, { handle: string; category: string }>();
@@ -106,7 +122,7 @@ export function computeInboundSummary(active: InboundEngagement[], now: Date = n
 
 export async function summarizeInbound(client: SupabaseClient): Promise<InboundSummary> {
   const repo = new SupabaseInboundRepository(client);
-  const active = await repo.listByStatus(ACTIVE_STATUSES);
+  const active = await listExcludingOwnAccount(repo, ACTIVE_STATUSES);
   return computeInboundSummary(active);
 }
 
@@ -135,6 +151,12 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   const repo = new SupabaseInboundRepository(client);
   const row = await repo.getById(id);
   if (!row) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
+  // A post from our own account is never drafted for (it would be a reply to ourselves, and the model has called
+  // our own giveaway an impersonation before). Dismiss it with the audit note instead.
+  if (isOwnAccountRow(row)) {
+    if (row.status !== "closed" && row.status !== "responded") await repo.updateStatus(id, "closed", { respondedNote: OWN_ACCOUNT_NOTE });
+    throw new InboundActionError("This post is from Fillbook's own account, so it is not inbound engagement and was dismissed instead of drafted.");
+  }
 
   const { brandRulesSummary, verifiedKnowledgeSummary } = await loadGroundingContext(client);
   const llmClient = createLlmClient(process.env, (usage) => {
@@ -156,25 +178,9 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   const { draft: accepted, hardReason } = await draftWithRetries({
     generate: (retryFeedback) =>
       draftInboundResponse(llmClient, retryFeedback ? { ...draftContext, retryFeedback } : draftContext, brandRulesSummary, verifiedKnowledgeSummary),
-    assess: (candidate) => {
-      let hard: string | null;
-      // A link is only ever earned when BOTH the model declared usesLink=true
-      // AND the person's own message actually asked for contact info/a link --
-      // checked here (not inside checkReplyGuardrails, which has no visibility
-      // into the original message) so a model that sets usesLink=true on an
-      // unrelated conversation still gets rejected, not silently trusted.
-      if (candidate.usesLink && !impliesContactOrLinkRequest(row.body)) {
-        hard = "includes a link, but the original message never asked for contact info or a link";
-      } else {
-        // Mechanical, $0 safety net -- see xReplyGuardrails.ts. A link is only
-        // ever permitted when usesLink=true (checked above against the original
-        // message) AND it resolves to Fillbook's own approved contact link -- an
-        // arbitrary or promotional domain is still rejected even with
-        // usesLink=true.
-        hard = checkReplyGuardrails(candidate.reply, candidate.usesLink, { approvedLinkDomains: INBOUND_APPROVED_LINK_DOMAINS })?.reason ?? null;
-      }
-      return { hard, soft: checkReplySoftStyle(candidate.reply)?.reason ?? null };
-    },
+    // Mechanical, $0 safety net (see inboundDraftPolicy.ts and xReplyGuardrails.ts): link earned only by an explicit ask
+    // (or a giveaway question, then only fillbookhq.com/giveaway), approved domains only, no false giveaway claims.
+    assess: (candidate) => assessInboundDraft(candidate, { messageText: row.body, authorIsOwnAccount: false }),
   });
   if (!accepted) {
     throw new InboundActionError(`Draft rejected -- ${hardReason}. Try drafting again.`);
