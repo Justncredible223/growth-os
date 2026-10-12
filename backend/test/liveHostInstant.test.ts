@@ -16,6 +16,14 @@ describe("instant answers", () => {
     ["are you an ai", "is-ai"],
     ["what can it do", "features"],
     ["where is the link", "where"],
+    ["what is a trailing drawdown", "trailing-drawdown"],
+    ["how does the daily loss limit work", "daily-loss-limit"],
+    ["what is the consistency rule", "consistency-rule"],
+    ["what is a revenge trade", "revenge-trade"],
+    ["mnq vs nq", "mnq-vs-nq"],
+    ["what is a prop firm", "prop-firm"],
+    ["what is an eval", "evaluation"],
+    ["thanks tilt", "thanks"],
   ])("answers %s without a model", (body, key) => {
     expect(matchInstantAnswer(body, ctx)?.key).toBe(key);
   });
@@ -24,10 +32,11 @@ describe("instant answers", () => {
     expect(matchInstantAnswer("how do I size a trade with a 20 point stop on MNQ", ctx)).toBeNull();
     expect(matchInstantAnswer("is the trailing drawdown on this firm intraday or end of day", ctx)).toBeNull();
     expect(matchInstantAnswer("my plans for tonight are a revenge trade", ctx)).toBeNull();
+    expect(matchInstantAnswer("what is the trailing drawdown on topstep", ctx)).toBeNull();
   });
 
   it("every line passes the spoken-line checks and states only approved prices", () => {
-    const bodies = ["hello", "what is fillbook", "how much", "who are you", "are you ai", "what can it do", "link"];
+    const bodies = ["hello", "what is fillbook", "how much", "who are you", "are you ai", "what can it do", "link", "what is a trailing drawdown", "how does the daily loss limit work", "what is the consistency rule", "what is a revenge trade", "mnq vs nq", "what is a prop firm", "what is an eval", "why journal", "thanks tilt"];
     for (const body of bodies) {
       for (const websiteAllowed of [true, false]) {
         const answer = matchInstantAnswer(body, { ...ctx, websiteAllowed });
