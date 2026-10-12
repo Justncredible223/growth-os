@@ -31,7 +31,7 @@ import { TtsDaemon } from "./ttsDaemon.js";
 import { OBS_SOURCE_NAME } from "./setupObs.js";
 import { TiktokChatReader } from "./tiktokChat.js";
 import { LIVE_HOST_SEGMENTS } from "../../src/liveHost/liveHostPersona.js";
-import { screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js";
+import { checkSpokenLine, screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STAGE_FILE = join(HERE, "stage", "index.html");
@@ -839,6 +839,47 @@ data: ${JSON.stringify({ live, queued: hostQueue.length })}
           }
           log(`operator: ${action}`);
           res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, controls }));
+        })();
+      });
+      return;
+    }
+    // Operator "say this": the owner hands a line to be spoken word for word (for a shout-out to a friend in chat). It is
+    // checked like any spoken line, never overlaps a line being said, and has no server record (the filler- id means
+    // /done only clears the playing flag).
+    if (req.method === "POST" && url.pathname === "/say") {
+      if (!controlAllowed(true)) {
+        res.writeHead(403).end();
+        return;
+      }
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+        if (raw.length > 2_000) req.destroy();
+      });
+      req.on("end", () => {
+        void (async () => {
+          try {
+            const text = String((JSON.parse(raw) as { text?: unknown }).text ?? "").replace(/\s+/g, " ").trim();
+            const problem = checkSpokenLine(text, { fillbookMentionAllowed: true, websiteMentionAllowed: config.platform === "youtube" });
+            if (!live || speaking !== null || fillerPlaying !== null) {
+              res.writeHead(409).end("busy");
+              return;
+            }
+            if (problem) {
+              res.writeHead(422).end(problem);
+              return;
+            }
+            const id = `filler-say-${Date.now()}`;
+            const { words, durationSeconds } = await synthesize(config, workDir, id, text);
+            fillerPlaying = setTimeout(() => {
+              fillerPlaying = null;
+            }, (durationSeconds + 3) * 1000);
+            broadcast("speak", { id, kind: "reply", segmentTitle: null, spokenText: text, redLine: null, mood: "smirk", tiltLevel: null, card: null, replyingTo: [], audioUrl: `/audio/${id}.mp3`, words, durationSeconds, sidekick: null });
+            log(`say: ${text}`);
+            res.writeHead(204).end();
+          } catch (err) {
+            res.writeHead(400).end(err instanceof Error ? err.message : "bad request");
+          }
         })();
       });
       return;

@@ -33,6 +33,68 @@ const PRICE = /\b(?:how much|price|prices|pricing|costs?|subscription)\b|\b(?:is
 const FEATURES = /\bwhat (?:can|does) (?:it|fill[\s-]?book(?:\s?hq)?) do\b|\bfeatures?\b|\bhow does (?:it|fill[\s-]?book(?:\s?hq)?) work\b|\bwhat do you (?:do|offer)\b/i;
 const WHERE = /\b(?:link|website|site|url|where (?:can|do) (?:i|we) (?:find|get|sign|go))\b/i;
 
+const THANKS = /^(?:thanks?|thank you|thx|ty|appreciate it|cheers)(?:\s+(?:tilt|man|bro|mate))?[\s!.]*$/i;
+
+/** Evergreen definitions. General education only; every line defers to the firm's own rulebook. */
+const TOPICS: Array<{ key: string; pattern: RegExp; lines: string[] }> = [
+  {
+    key: "trailing-drawdown",
+    pattern: /\b(?:what(?:'s| is)|how does|explain|whats)\b.{0,16}\btrailing (?:draw ?down|dd|max loss)\b/i,
+    lines: [
+      "A trailing drawdown follows your account's highest balance up, so your loss floor rises as you profit and never drops back. Some firms trail intraday, some at end of day, so read your firm's rule.",
+    ],
+  },
+  {
+    key: "daily-loss-limit",
+    pattern: /\b(?:what(?:'s| is)|how does|explain|whats)\b.{0,16}\bdaily (?:loss )?(?:limit|loss)\b/i,
+    lines: [
+      "A daily loss limit is the most your account can lose in one trading day before the firm closes you out for the day, or fails the account. The exact number and how it is measured depends on the firm.",
+    ],
+  },
+  {
+    key: "consistency-rule",
+    pattern: /\b(?:what(?:'s| is)|how does|explain|whats)\b.{0,16}\bconsistency (?:rule|target)\b/i,
+    lines: [
+      "A consistency rule stops one huge day from carrying your whole profit. Most versions cap how much of your total profit can come from a single day. The percentage is set by each firm.",
+    ],
+  },
+  {
+    key: "revenge-trade",
+    pattern: /\b(?:what(?:'s| is)|explain|whats)\b.{0,12}\brevenge (?:trad(?:e|es|ing))\b/i,
+    lines: [
+      "A revenge trade is a trade you take right after a loss to win it back, usually bigger than normal and with no real setup. The journal's job is to catch exactly that.",
+    ],
+  },
+  {
+    key: "mnq-vs-nq",
+    pattern: /\b(?:mnq|micro nq|micro nasdaq)\b.{0,16}\b(?:vs|versus|or|and|difference|different)\b|\bdifference between\b.{0,16}\b(?:mnq|nq)\b/i,
+    lines: [
+      "MNQ is the micro version of NQ. Same index and same moves, one tenth the size, so two dollars a point instead of twenty.",
+    ],
+  },
+  {
+    key: "prop-firm",
+    pattern: /\b(?:what(?:'s| is)|explain|whats)\b.{0,10}\b(?:an? )?prop (?:firm|trading|account)s?\b/i,
+    lines: [
+      "A prop firm funds traders after they pass an evaluation, and in return takes a share of the profits. You trade the firm's rules, not your own savings.",
+    ],
+  },
+  {
+    key: "evaluation",
+    pattern: /\b(?:what(?:'s| is)|explain|whats)\b.{0,10}\b(?:an? |the )?(?:eval|evaluation|challenge)\b/i,
+    lines: [
+      "The evaluation is the test a prop firm gives you first. Hit the profit target without breaking the drawdown or the daily loss rules, and you earn a funded account.",
+    ],
+  },
+  {
+    key: "journaling",
+    pattern: /\b(?:why|how)\b.{0,16}\b(?:journal|journaling|keep a journal)\b/i,
+    lines: [
+      "Log every trade with why you took it, then review by setup and time of day. Patterns you can't feel in the moment show up fast on paper, like the same bad hour or the same oversized trade.",
+    ],
+  },
+];
+
 function words(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
@@ -64,6 +126,15 @@ export function matchInstantAnswer(body: string, context: InstantContext): Insta
       ],
       false,
     );
+  }
+  // Trading basics asked by name: short, general, never advice. Rules differ by firm, so each line says so.
+  if (THANKS.test(text)) {
+    return make("thanks", [`Anytime, ${name}.`, `You got it, ${name}.`, `Happy to, ${name}.`], false);
+  }
+  // "What is a trailing drawdown on <firm>" is about one firm's rule: that goes to the model, which has the facts.
+  const aboutSpecificFirm = /\b(?:on|for|at|with|from|in|of)\s+\S/i.test(text.replace(/\bin (?:the )?(?:mnq|nq)\b/i, ""));
+  for (const topic of TOPICS) {
+    if (!aboutSpecificFirm && topic.pattern.test(text)) return make(topic.key, topic.lines, false);
   }
   if (IS_AI.test(text)) {
     return make("is-ai", [`Yes, ${name}, I'm an AI character. A cartoon candle with opinions about risk, not a person and not a financial advisor.`], false);

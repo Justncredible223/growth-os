@@ -94,13 +94,13 @@ describe("runLiveHostTick", () => {
     const llm = scriptedLlm([line("Mike, a trailing drawdown follows your high-water mark, so a green morning quietly raises the floor under you.")]);
     const result = await runLiveHostTick(
       asSupabase(client),
-      { messages: [tiktokMessage("m1", "@Mike_", "how does trailing drawdown work?")] },
+      { messages: [tiktokMessage("m1", "@Mike_", "how does trailing drawdown work on a funded 50K account?")] },
       { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING },
     );
 
     expect(result.desired).toBe("on");
     expect(result.utterance?.kind).toBe("reply");
-    expect(result.utterance?.replyingTo).toEqual([{ platform: "tiktok", authorName: "Mike", body: "how does trailing drawdown work?" }]);
+    expect(result.utterance?.replyingTo).toEqual([{ platform: "tiktok", authorName: "Mike", body: "how does trailing drawdown work on a funded 50K account?" }]);
     expect(client.tables.live_host_sessions).toHaveLength(1);
 
     const message = client.tables.live_host_messages![0]!;
@@ -119,7 +119,7 @@ describe("runLiveHostTick", () => {
     // The model saw the cleaned name, flagged as a first message.
     const sent = JSON.parse((llm.fetchImpl.mock.calls[0] as unknown as [string, { body: string }])[1].body) as { messages: Array<{ content: string }> };
     expect(sent.messages[0]!.content).toContain("Mike (first message: they have just arrived");
-    expect(sent.messages[0]!.content).toContain(": how does trailing drawdown work?");
+    expect(sent.messages[0]!.content).toContain(": how does trailing drawdown work on a funded 50K account?");
   });
 
   it("never passes a blocked message to the model, and records it as blocked", async () => {
@@ -384,7 +384,7 @@ describe("runLiveHostTick", () => {
       live_host_settings: [settingsRow({ tiktok_chat_enabled: false })],
       live_host_sessions: [{ id: "s1", status: "live", started_at: started, last_heartbeat_at: NOW.toISOString(), last_utterance_at: new Date(NOW.getTime() - 100_000).toISOString() }],
       live_host_utterances: [spoken("u1", "One.", 90), spoken("u2", "Two.", 60), spoken("u3", "Three.", 30)],
-      live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is a trailing drawdown exactly?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }],
+      live_host_messages: [{ id: "m1", session_id: "s1", platform: "youtube", external_id: "e1", author_name: "Jo", body: "what is a trailing drawdown exactly on a 50K funded account?", received_at: NOW.toISOString(), status: "pending", status_reason: null, utterance_id: null }],
     });
     const llm = scriptedLlm([line("Jo, a trailing drawdown follows your high-water mark.", { redLine: "I love trailing drawdowns." })]);
     const result = await runLiveHostTick(asSupabase(client), { platform: "youtube" }, { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING });
@@ -564,7 +564,7 @@ describe("runLiveHostTick", () => {
 
   it("shows only the messages the model says it answered", async () => {
     const client = buildClient();
-    const first = await runLiveHostTick(asSupabase(client), { busy: true, messages: [tiktokMessage("m1", "Mike", "how does trailing drawdown work?"), tiktokMessage("m2", "Bob", "lol"), tiktokMessage("m3", "Al", "first")] }, { now: NOW, youtube: null, grounding: GROUNDING });
+    const first = await runLiveHostTick(asSupabase(client), { busy: true, messages: [tiktokMessage("m1", "Mike", "how does trailing drawdown work on a funded 50K account?"), tiktokMessage("m2", "Bob", "lol"), tiktokMessage("m3", "Al", "first")] }, { now: NOW, youtube: null, grounding: GROUNDING });
     expect(first.utterance).toBeNull();
     const mikeId = client.tables.live_host_messages!.find((m) => m.author_name === "Mike")!.id;
     const llm = scriptedLlm([line("Mike, it follows your high-water mark.", { answeredMessageIds: [mikeId] })]);
@@ -1031,7 +1031,7 @@ describe("copiesExampleLine", () => {
     ]);
     const result = await runLiveHostTick(
       asSupabase(client),
-      { messages: [tiktokMessage("m1", "Mike", "what is a trailing drawdown?")] },
+      { messages: [tiktokMessage("m1", "Mike", "what is a trailing drawdown on a funded account?")] },
       { now: NOW, llmClient: llm.client, youtube: null, grounding: GROUNDING },
     );
     expect(llm.fetchImpl).toHaveBeenCalledTimes(2);

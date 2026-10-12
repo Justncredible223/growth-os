@@ -274,20 +274,6 @@
   @keyframes redBob { from { transform: translateY(0) rotate(-4deg); } to { transform: translateY(-14px) rotate(5deg); } }
   .redsay { position: absolute; left: 240px; top: 600px; max-width: 560px; padding: 18px 26px; border-radius: 28px 28px 28px 6px; background: #ff5d73; color: #fff; font-size: 40px; font-weight: 900; line-height: 1.15; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.7); transform-origin: 0 100%; transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2, .9, .2, 1.3); pointer-events: none; }
   .redsay.show { opacity: 1; transform: none; }
-  /* Shane: a cartoon bald guy in a hi-vis vest who stays on screen at the right edge and speaks now and then. Inside x 100-980. */
-  .shane { position: absolute; z-index: 29; right: 120px; top: 800px; width: 160px; pointer-events: none; }
-  .shane svg { width: 160px; height: 187px; overflow: visible; }
-  .shane.bob svg { animation: shaneBob 0.5s ease-in-out 3; }
-  @keyframes shaneBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
-  .shanetag { position: absolute; z-index: 29; right: 120px; top: 764px; width: 160px; text-align: center; padding: 4px 0; border-radius: 10px; background: #ff9f1a; color: #1a1202; font-size: 22px; font-weight: 900; letter-spacing: 3px; pointer-events: none; }
-  .shanesay { position: absolute; z-index: 30; right: 300px; top: 810px; max-width: 470px; padding: 16px 24px; border-radius: 26px 6px 26px 26px; background: #f3f7ff; color: #0b1424; font-size: 32px; font-weight: 800; line-height: 1.15; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); opacity: 0; transform: scale(0.7); transform-origin: 100% 50%; transition: opacity 0.2s ease, transform 0.3s cubic-bezier(.2, .9, .2, 1.3); pointer-events: none; }
-  .shanesay.show { opacity: 1; transform: none; }
-  .shanesay b { display: block; font-size: 20px; letter-spacing: 3px; color: #3b82f6; margin-bottom: 4px; }
-  body.layout-wide .shane { right: 80px; top: 780px; }
-  body.layout-wide .shanetag { right: 80px; top: 744px; }
-  body.layout-wide .shanesay { right: 80px; top: 600px; font-size: 30px; max-width: 480px; }
-  .shane[hidden], .shanetag[hidden] { display: none; }
-  body.safe-tiktok .shane, body.safe-tiktok .shanetag, body.safe-tiktok .shanesay { display: none; }
   .redsay b { display: block; font-size: 22px; letter-spacing: 3px; opacity: 0.85; margin-bottom: 4px; }
   body.safe-tiktok .red { top: 700px; width: 190px; }
   body.safe-tiktok .red svg { width: 190px; height: 250px; }
@@ -413,28 +399,6 @@
       </svg>
     </div>
     <div class="redsay" id="redsay"></div>
-    <div class="shane" id="shane" aria-label="Shane" hidden>
-      <svg viewBox="0 0 240 280">
-        <ellipse cx="120" cy="266" rx="86" ry="10" fill="rgba(0,0,0,0.4)"/>
-        <path d="M18 266 Q22 186 120 180 Q218 186 222 266 Z" fill="#3b82f6"/>
-        <path d="M32 266 Q38 192 84 184 L100 266 Z" fill="#ff9f1a"/>
-        <path d="M208 266 Q202 192 156 184 L140 266 Z" fill="#ff9f1a"/>
-        <path d="M46 238 L96 238 L97 252 L42 252 Z" fill="#e8eef7"/>
-        <path d="M144 238 L194 238 L198 252 L143 252 Z" fill="#e8eef7"/>
-        <path d="M78 184 L120 218 L162 184 Z" fill="#f2c9a0"/>
-        <ellipse cx="34" cy="112" rx="14" ry="22" fill="#ecb98a"/><ellipse cx="206" cy="112" rx="14" ry="22" fill="#ecb98a"/>
-        <ellipse cx="120" cy="104" rx="84" ry="86" fill="#f2c9a0"/>
-        <ellipse cx="88" cy="50" rx="30" ry="13" fill="#fff" opacity="0.4" transform="rotate(-24 88 50)"/>
-        <path d="M64 92 Q84 82 102 92" fill="none" stroke="#3a2a1c" stroke-width="7" stroke-linecap="round"/>
-        <path d="M138 92 Q156 82 176 92" fill="none" stroke="#3a2a1c" stroke-width="7" stroke-linecap="round"/>
-        <ellipse cx="86" cy="112" rx="13" ry="15" fill="#fff"/><ellipse cx="154" cy="112" rx="13" ry="15" fill="#fff"/>
-        <circle cx="89" cy="114" r="7" fill="#2a1a10"/><circle cx="157" cy="114" r="7" fill="#2a1a10"/>
-        <path d="M118 118 Q122 138 114 142" fill="none" stroke="#d9a678" stroke-width="5" stroke-linecap="round"/>
-        <path d="M86 156 Q120 180 154 156" fill="none" stroke="#7a3b2a" stroke-width="8" stroke-linecap="round"/>
-      </svg>
-    </div>
-    <div class="shanetag" id="shanetag" hidden>SHANE</div>
-    <div class="shanesay" id="shanesay"></div>
     <div class="sitecard" id="sitecard" aria-hidden="true"><div class="url">fillbookhq<span>.com</span></div><div class="sub">Free sample dashboard. No signup. fillbookhq.com/sample</div></div>
     <div class="showcase" id="showcase" aria-hidden="true">
       <img src="/assets/trade-log-revenge.jpg" alt="" data-crop="40,670,820,525" data-cap="Revenge and oversized trades get flagged">
@@ -1214,48 +1178,6 @@
       lastAutoMove = t; nextAutoMoveIn = (bit === "sleep" ? 9500 : 2200) + Math.random() * 3500;
     }
   }
-
-  // ---- Shane: a cartoon bald guy who pops up now and then, on his own ----
-  const SHANE_LINES = [
-    "Shane is on site. Hi-vis, hard to miss.",
-    "Safety first. Shane has the vest.",
-    "Hey Shane! Thanks for watching.",
-    "Shane clocked in. Shiny head, bright vest.",
-    "Shane, say something in chat so Tilt can answer you.",
-    "Everybody wave at Shane. He asked for this.",
-  ];
-  let shaneIndex = Math.floor(Math.random() * SHANE_LINES.length), shaneHideTimer = null;
-  function popShane() {
-    try {
-      if (document.body.classList.contains("safe-tiktok") || current) return;
-      const body = $("shane"), bubble = $("shanesay");
-      bubble.textContent = "";
-      const tag = document.createElement("b"); tag.textContent = "SHANE";
-      bubble.append(tag, document.createTextNode(SHANE_LINES[shaneIndex++ % SHANE_LINES.length]));
-      body.classList.remove("bob"); void body.offsetWidth; body.classList.add("bob");
-      bubble.classList.add("show");
-      clearTimeout(shaneHideTimer);
-      shaneHideTimer = setTimeout(() => bubble.classList.remove("show"), 6500);
-    } catch (err) { /* decoration only */ }
-  }
-  // First visit a few seconds after the stage loads, then every four to six minutes while nobody is being answered.
-  function scheduleShane(delay) { setTimeout(() => { popShane(); scheduleShane((4 + Math.random() * 2) * 60_000); }, delay); }
-  // Shane is retired from the live stage (owner asked 2026-10-12); the figure stays in the file for a later bit.
-  if (params.has("shane")) { $("shane").hidden = false; $("shanetag").hidden = false; $("shane").classList.add("show"); scheduleShane(1500); }
-  // ?say=... shows one message in Shane's bubble for half a minute (a note from the owner to him, set from the OBS URL).
-  const sayText = (params.get("say") || "").slice(0, 120);
-  if (sayText && params.has("shane")) setTimeout(() => {
-    try {
-      const body = $("shane"), bubble = $("shanesay");
-      bubble.textContent = "";
-      const tag = document.createElement("b"); tag.textContent = "FOR SHANE";
-      bubble.append(tag, document.createTextNode(sayText));
-      body.classList.remove("bob"); void body.offsetWidth; body.classList.add("bob");
-      bubble.classList.add("show");
-      clearTimeout(shaneHideTimer);
-      shaneHideTimer = setTimeout(() => bubble.classList.remove("show"), 30000);
-    } catch (err) { /* decoration only */ }
-  }, 2500);
 
   // ---- main loop ----
   let last = performance.now();
