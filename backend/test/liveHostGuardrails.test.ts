@@ -324,3 +324,19 @@ describe("Tilt's variety and honesty rules", () => {
     expect(question.brief).toContain("one simple calculation with round numbers");
   });
 });
+
+
+import { findPriceClaim } from "../src/liveHost/liveHostGuardrails";
+describe("findPriceClaim", () => {
+  it("rejects the retired or invented Fillbook prices", () => {
+    expect(findPriceClaim("Fillbook is twelve ninety-nine to thirty-nine ninety-nine a month depending on what you need.")).toMatch(/retired or wrong/);
+    expect(findPriceClaim("Fillbook is 14.99 a month.")).not.toBeNull();
+    expect(findPriceClaim("The Starter plan is cheap at twelve ninety-nine.")).not.toBeNull();
+    expect(findPriceClaim("Fillbook costs five dollars a month.")).toMatch(/approved price list/);
+  });
+  it("lets the current prices and ordinary trading talk through", () => {
+    expect(findPriceClaim("There is a free plan, Core is twenty-four ninety-nine a month, and Elite is thirty-nine ninety-nine a month.")).toBeNull();
+    expect(findPriceClaim("Every point on ES is fifty dollars, and a dime on gold is ten bucks.")).toBeNull();
+    expect(findPriceClaim("Check the website for current plans.")).toBeNull();
+  });
+});

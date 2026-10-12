@@ -468,6 +468,8 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   const fillers: Array<{ id: string; text: string; mood: string; words: WordCue[]; durationSeconds: number }> = [];
   let fillersPreparing = false;
   let fillerPlaying: NodeJS.Timeout | null = null;
+  /** Spoken fillers are only for the duo co-host flow, where the owner is on camera and a beat of banter is expected. */
+  const duoFillersWanted = config.duo;
   let lastFillerAt = 0;
   let lastFillerIndex = -1;
   let consecutiveTickFailures = 0;
@@ -535,6 +537,9 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   /** Plays one pre-voiced reaction right away, if nothing is being said and the cool-down has passed. */
   function playFiller(): void {
+    // Spoken stalling ("give me a second, I am composing") is gone: it added about 2.5 seconds of dead talk before
+    // every real answer. The comment is on screen and he looks like he is thinking (the "react" sent just before this).
+    if (!duoFillersWanted) return;
     if (!live || speaking !== null || fillerPlaying !== null || stageClients.size === 0) return;
     const index = pickFiller(fillers.length, lastFillerIndex, lastFillerAt, Date.now());
     if (index === null) return;
@@ -564,7 +569,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
 
   /** Voices the fillers once, as soon as the warm voice helper is ready. Failures just mean no fillers. */
   async function prepareFillers(): Promise<void> {
-    if (fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
+    if (!duoFillersWanted || fillersPreparing || fillers.length > 0 || !ttsDaemon?.ready) return;
     fillersPreparing = true;
     try {
       for (let i = 0; i < DUO_FILLERS.length; i++) {

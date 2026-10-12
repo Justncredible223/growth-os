@@ -9,7 +9,7 @@ const API_BASE = "https://www.googleapis.com/youtube/v3";
  */
 export const MIN_LIVE_CHAT_POLL_MS = 6_000;
 /** While people are typing, poll faster so a conversation does not feel like waiting on a satellite link. */
-export const ACTIVE_LIVE_CHAT_POLL_MS = 4_000;
+export const ACTIVE_LIVE_CHAT_POLL_MS = 2_500;
 const MAX_RESULTS = 200;
 
 export interface YoutubeLiveChatMessage {
