@@ -1,4 +1,7 @@
-name: Growth OS pulse (X, higher-than-daily)
+name: Growth OS pulse (X, higher-than-daily) -- manual run
+
+# NOTE (2026-10-12): scheduled runs moved to Vercel Cron (backend/vercel.json). The comments below describe the original
+# GitHub-scheduler design and are kept for history; this workflow is now manual-only.
 
 # Free external scheduler for the workflows that need to run more than
 # once/day -- X prospecting/inbound (3x/day). Exists because Vercel
@@ -50,10 +53,9 @@ name: Growth OS pulse (X, higher-than-daily)
 # to trigger any subset of steps on demand, e.g. after a credential change.
 
 on:
-  schedule:
-    - cron: "0 15 * * *"
-    - cron: "0 20 * * *"
-    - cron: "0 1 * * *"
+  # No `schedule:` here since 2026-10-12: the three daily runs are Vercel Cron entries in backend/vercel.json
+  # (15:00, 20:00 and 01:00 UTC). GitHub fired the old schedule 3 to 6 hours late. Do NOT re-add a schedule: both would
+  # run and every pulse step (paid X reads) would execute twice. This file stays as the manual "Run workflow" trigger.
   workflow_dispatch:
     inputs:
       x:

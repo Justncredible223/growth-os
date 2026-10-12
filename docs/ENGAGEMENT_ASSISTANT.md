@@ -30,7 +30,7 @@ project is at Vercel Hobby's function cap, so no new function file). Migration:
 
 A scheduled step, `engagement_autofill`, keeps the queue stocked so the owner only works through cards (Open, Copy,
 Done or Skip). It is a step inside `api/growth-pulse.ts` (the `youtubeComments` group), so it rides the existing
-GitHub Actions pulse (08:00, 13:00 and 18:00 Arizona time) and adds no serverless function. Code:
+Vercel Cron pulse (08:00, 13:00 and 18:00 Arizona time) and adds no serverless function. Code:
 `backend/src/engagement/engagementAutoFill.ts`.
 
 Each run, in order:
