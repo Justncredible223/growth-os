@@ -3,7 +3,7 @@ import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent } from "../cost/costTracking.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { extractYoutubeVideoId } from "../video/youtubeUrl.js";
-import { checkEngagementComment } from "./commentGuardrails.js";
+import { checkEngagementComment, findInventedExperience } from "./commentGuardrails.js";
 import { findNearDuplicate, normalizeForDedupe, selectDistinct } from "./dedupe.js";
 import { draftEngagementOptions, type EngagementDraftContext, type EngagementDraftResult } from "./engagementDrafter.js";
 import * as repo from "./engagementRepository.js";
@@ -137,6 +137,14 @@ export async function getEngagementStatus(client: SupabaseClient, deps: Engageme
   } catch (err) {
     if (repo.isMissingEngagementTables(err)) throw err;
     console.warn("engagement: cache purge failed", err);
+  }
+
+  // Drafts stored before the no-invented-experience rule are dropped when the queue is loaded (no model call here:
+  // an emptied item shows as undrafted and the next fill, or the owner's Draft button, writes it again).
+  try {
+    await revalidateStoredDrafts(client, await repo.listQueue(client, 500), now);
+  } catch (err) {
+    console.warn("engagement: draft revalidation failed", err);
   }
 
   const [queue, watchlist, done, quotaUsed] = await Promise.all([
@@ -510,6 +518,43 @@ async function loadItemOrThrow(client: SupabaseClient, id: unknown): Promise<Eng
   const item = await repo.getItem(client, id);
   if (!item) throw new EngagementActionError(`No engagement item with id "${id}"`);
   return item;
+}
+
+export interface RevalidationResult {
+  /** Items that had at least one stored draft dropped. */
+  itemsChanged: number;
+  draftsDropped: number;
+  /** Items left with no draft at all and put back to "new" so the normal drafter writes them again. */
+  itemsReset: number;
+}
+
+/**
+ * One-time, idempotent clean-up of stored drafts against the no-invented-experience rule. Only waiting items
+ * ("new" / "drafted") are touched: done and skipped rows and the audit log are history and stay exactly as they were.
+ * An item that keeps some drafts keeps them (ids unchanged); an item that loses all of them goes back to "new" and is
+ * picked up by the normal draft path (draftItem: guardrails, dedupe, cost recording), which the scheduled fill
+ * bounds by its per-run draft cap, time budget and quota guard. Redrafted text passes the rule, so a second call
+ * finds nothing to do. No model call happens here.
+ */
+export async function revalidateStoredDrafts(client: SupabaseClient, items: EngagementItem[], now: Date): Promise<RevalidationResult> {
+  const result: RevalidationResult = { itemsChanged: 0, draftsDropped: 0, itemsReset: 0 };
+  for (const item of items) {
+    if ((item.status !== "new" && item.status !== "drafted") || item.drafts.length === 0) continue;
+    const kept = item.drafts.filter((d) => findInventedExperience(d.text) === null);
+    if (kept.length === item.drafts.length) continue;
+    result.itemsChanged++;
+    result.draftsDropped += item.drafts.length - kept.length;
+    if (kept.length === 0) {
+      await repo.updateItem(client, item.id, { status: "new", drafts: [] }, now);
+      result.itemsReset++;
+      item.status = "new";
+      item.drafts = [];
+    } else {
+      await repo.updateItem(client, item.id, { drafts: kept }, now);
+      item.drafts = kept;
+    }
+  }
+  return result;
 }
 
 export async function draftItem(client: SupabaseClient, id: unknown, deps: EngagementDeps = {}): Promise<EngagementItem> {

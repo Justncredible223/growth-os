@@ -26,6 +26,34 @@ const ADVICE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\b(?:price target|financial advice|can't lose|cannot lose|sure thing|easy money|get rich|passive income)\b/i, reason: "gives or implies financial advice or easy money" },
 ];
 
+/**
+ * First-person experience markers. The comment is posted under the owner's own account, so it must never assert a
+ * personal trading experience, result, loss, routine or feeling the owner did not write. A deterministic backstop
+ * to the prompt rule (engagementDrafter.ts). Matching is on a normalized copy (curly quotes folded to straight).
+ *
+ * Lookbehind/lookahead keep acronyms and abbreviations out: "AI", "iPhone", "I.R.S.", "A.I.", "i.e." do not match.
+ * Uppercase "US" (the session / the country) is deliberately NOT matched; only the lowercase pronoun "us" is.
+ */
+export const FIRST_PERSON_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  // I, I'm, I've, I'd, I'll (any case: lazy "i" counts)
+  { pattern: /(?<![\w.'-])i(?:'(?:m|ve|d|ll))?(?![\w'-]|\.\w)/i, label: "I" },
+  { pattern: /(?<![\w.'-])(?:im|ive)(?![\w'-])/i, label: "I'm / I've" },
+  { pattern: /(?<![\w.'-])(?:my|mine|myself|me)(?![\w'-])/i, label: "my / me" },
+  { pattern: /(?<![\w.'-])(?:we|our|ours|ourselves)(?:'(?:re|ve|d|ll))?(?![\w'-])/i, label: "we / our" },
+  { pattern: /(?<![\w.'-])us(?![\w'-])/, label: "us" },
+  { pattern: /\b(?:been there|same here|can relate|so relatable|speaking from (?:personal )?experience|from personal experience|learned (?:it|this|that) the hard way)\b/i, label: "claims shared experience" },
+];
+
+/** Returns the marker that makes `text` sound like the commenter's own trading experience, or null. */
+export function findInventedExperience(text: string): string | null {
+  const normalized = text.replace(/[\u2018\u2019\u02BC\u2032]/g, "'");
+  for (const { pattern, label } of FIRST_PERSON_PATTERNS) {
+    const m = pattern.exec(normalized);
+    if (m) return `${label}: "${m[0].trim()}"`;
+  }
+  return null;
+}
+
 /** Returns the first hard problem with a comment, or null. Reuses the project's reply guardrails (links, AI tells, claims). */
 export function checkEngagementComment(text: string, platform: EngagementPlatform): string | null {
   const trimmed = text.trim();
@@ -36,5 +64,10 @@ export function checkEngagementComment(text: string, platform: EngagementPlatfor
   for (const { pattern, reason } of PROMO_PATTERNS) if (pattern.test(trimmed)) return reason;
   for (const { pattern, reason } of ADVICE_PATTERNS) if (pattern.test(trimmed)) return reason;
   const violation = checkReplyGuardrails(trimmed, false);
-  return violation ? violation.reason : null;
+  if (violation) return violation.reason;
+  const experience = findInventedExperience(trimmed);
+  if (experience) {
+    return `speaks in the first person (${experience}): it would claim a trading experience the owner never described. Write about what the video says or ask a specific question, in the second or third person`;
+  }
+  return null;
 }

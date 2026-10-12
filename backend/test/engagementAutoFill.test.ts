@@ -57,7 +57,7 @@ function build(tables: Record<string, any[]> = {}) {
 }
 
 const GOOD_OPTIONS = [
-  "Moving the stop at the first sign of red is exactly the habit I could not break either.",
+  "Moving the stop at the first sign of red is exactly the habit most traders struggle to break.",
   "What changed once you stopped, did the average loser actually get smaller?",
   "Is the rule written down before the open or decided on the spot?",
 ];
