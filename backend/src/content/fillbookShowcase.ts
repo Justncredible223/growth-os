@@ -115,6 +115,57 @@ export const FILLBOOK_SHOWCASE_VIEWS: readonly FillbookShowcaseView[] = [
     problems: "how much margin they actually use; holding overnight; margin-call worry on a personal account",
     shows: "Margin and exposure: using the day and overnight margin the trader enters themselves, the highest margin in use at one time as a share of starting capital and how many trades were held across the daily close (Fillbook does not supply margin figures and it is not a broker statement)",
   },
+  // ---- Added 2026-10-12 to match the site (PRODUCT_FACTS.md in the fillbook repo, sections 3, 4, 6a to 6e, and the in-app
+  // "What's new" entries through 2026-10-10). None of these says "real time" or "live": Fillbook works from synced closed
+  // trades, and the claim rules in brandConstitution.ts block those words in a reply that names Fillbook. ----
+  {
+    id: "account_ledger",
+    audience: "prop",
+    problems: "no idea what an evaluation or funded account has cost against what it has paid out; resets, monthly fees and payouts scattered across emails; 'am I actually up after fees on this firm?'",
+    shows: "the account ledger on Payouts: each account's fees and payouts in date order with a running balance, recurring monthly fees included, read-only and exportable to CSV or Excel",
+  },
+  {
+    id: "evaluation_ev",
+    audience: "prop",
+    problems: "deciding whether the next evaluation is worth buying; paying for resets with no idea what an attempt really costs; 'how many tries will it take me?'",
+    shows: "the expected-value card on Simulate: the break-even pass chance, expected value per attempt, expected attempts and expected spend to reach a funded account, from the fee, reset and payout numbers the trader enters (prefilled only from their own logged data or a reset fee the firm itself publishes), next to a pass probability worked out from their own trades (an estimate from their history, not a prediction)",
+  },
+  {
+    id: "payout_scan",
+    audience: "prop",
+    problems: "a payout denied or delayed over a rule they did not know about; a news-window, overnight-holding or payout-buffer rule they missed; 'did I break something before I requested?'",
+    shows: "the payout readiness scan on Rules: OK, Warning or Can't tell for consistency share, minimum trading days, an optional payout buffer, trades inside a news-blackout window around FOMC, CPI and jobs reports, positions held across the 6 PM ET rollover when overnight holding is banned, and a possible cross-account hedge, using only the rule values the trader typed in (it knows no firm's payout rules and says Can't tell when the data is not enough)",
+  },
+  {
+    id: "review_queue",
+    audience: "both",
+    problems: "trades piling up unreviewed; never tagging setups or emotions so the reports stay empty; a journal that never gets done",
+    shows: "the Review queue on Trades: the trades with no setup, tag, emotion or note, one decision at a time with keyboard shortcuts and a day streak, so the reports fill in as they go",
+  },
+  {
+    id: "exit_efficiency",
+    audience: "both",
+    problems: "taking profits too early or giving winners back; 'I was right on direction but left money on the table'; a winner that turned into a loser",
+    shows: "the Exit efficiency card in Reports: how much of each winner's best open profit was kept, how far trades went against them before the close in ticks per contract, and which losers gave back open profit (only for trades that carry MFE and MAE data, which today comes from the NinjaTrader add-on and not from CSV imports, and those add-on values are not yet checked against NinjaTrader's own figures, so call it a view of the data and never a measurement)",
+  },
+  {
+    id: "mentor_link",
+    audience: "both",
+    problems: "wanting a coach or mentor to review their trades without handing over a login or screenshots; an accountability partner who asks to see the numbers",
+    shows: "a read-only mentor link made in Settings: a page scoped to the accounts and date range the trader picks (equity curve, stats, calendar, setups, trade list) that opens with no account, expires in up to 90 days, can be revoked any time, and lets the mentor leave short comments on those trades",
+  },
+  {
+    id: "auto_sync",
+    audience: "both",
+    problems: "re-typing or exporting trades by hand; 'does your journal import from Tradovate or NinjaTrader?'; a journal that falls behind the account",
+    shows: "automatic trade import: Tradovate on a schedule plus a Sync now button, NinjaTrader 8 and Quantower through an add-on that sends each fill while the platform is running, and CSV import for other brokers and platforms (everything is built from the trades that arrived, so it can trail the broker)",
+  },
+  {
+    id: "ai_assistant",
+    audience: "both",
+    problems: "wanting to ask an AI assistant questions about their own numbers instead of pasting CSVs into a chatbot",
+    shows: "the connector for AI assistants (beta): Claude Code, Cursor or claude.ai can read the status, performance and trades of the accounts the trader chooses, read-only, with notes left out unless ticked (it is a way to ask questions about their own results, not a trading bot, and it gives no signals or advice)",
+  },
 ];
 
 export const SHOWCASE_NONE = "none";
@@ -189,10 +240,14 @@ Hard rules, no exceptions:
 - For a trader on their own money: never tell them how many contracts to trade, how much to risk or hold, whether
   to deposit or withdraw, or anything about taxes. Describe the numbers Fillbook shows from what they logged, and
   that is all.
-- Own Capital plan (live, verified): Fillbook has a plan for traders on their own money called Own Capital, $14.99 a
-  month. When you show a view to a trader on their own money, end the Fillbook sentence with that fact stated flatly,
-  for example "It's on the Own Capital plan, $14.99 a month." Say it once, never as an invitation, and never call it
-  cheap, a deal or a bargain. Never mention it to a prop-firm trader or when no view is shown. Never name any other
-  plan or price, never quote an annual price, and never mention a free trial or a discount.
+- Essentials plan (live, verified; it was called Own Capital until 2026-10-11): Fillbook has a plan for traders on their
+  own money called Essentials, $14.99 a month. When you show one of the views marked for a trader on their own money
+  (capital_curve, drawdown_odds, size_from_account, cost_of_trading, instrument_and_hours, margin_exposure) to a
+  trader on their own money, end the Fillbook sentence with that fact stated flatly, for example "It's on the
+  Essentials plan, $14.99 a month." Say it once, never as an invitation, and never call it cheap, a deal or a bargain.
+  Never mention it to a prop-firm trader or when no view is shown, and never say Essentials includes auto_sync,
+  mentor_link, ai_assistant, account_ledger, payout_scan or evaluation_ev: those sit on higher plans, so for them
+  name no plan at all. Never name any other plan or price, never quote an annual price, and never mention a free
+  trial or a discount.
 - Never impersonate an individual trader or conceal that this is the Fillbook account replying. The voice sounds
   like a real person, but the affiliation is never hidden or denied.`;
