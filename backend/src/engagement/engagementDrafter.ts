@@ -122,6 +122,10 @@ export async function draftEngagementOptions(client: LlmClient, ctx: EngagementD
     DRAFT_SCHEMA,
     ENGAGEMENT_DRAFT_TIMEOUT_MS,
     600,
+    undefined,
+    // The ~1.1k-token instruction block is identical on every item of a run (ten items inside about 35 seconds), so
+    // it is cached: reads bill at 10 percent of the input rate. Stable text first; per-video text is the user message.
+    true,
   );
   return normalizeDraftResult(raw);
 }

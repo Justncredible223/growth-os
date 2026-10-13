@@ -2,8 +2,7 @@ import { computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
 import { RECOVERY_DRAFT_NOTE, loadRecoveryState, namesFillbook, type RecoveryState } from "./prospectingRecovery.js";
 import { MENTION_BUDGET_DRAFT_NOTE, computeMentionBudget } from "./prospectingMentionBudget.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createLlmClient } from "../content/llmClient.js";
-import { recordCostEvent } from "../cost/costTracking.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
@@ -205,9 +204,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   const cheapRelevanceCheck =
     deps.cheapRelevanceCheck ??
     ((context: ProspectingDraftContext) => {
-      const llmClient = createLlmClient(process.env, (usage) => {
-        void recordCostEvent(client, usage, { prospectingCandidateId: id, endpoint: "prospecting-relevance-check" }, "prospecting_llm_call");
-      });
+      const llmClient = createRecordedLlmClient(client, { step: "prospecting-relevance-check", tier: "owner", context: { prospectingCandidateId: id }, eventType: "prospecting_llm_call" });
       return checkRelevanceCheap(llmClient, context);
     });
 
@@ -223,9 +220,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   const drafter =
     deps.drafter ??
     ((context: ProspectingDraftContext, brandRules: string, knowledge: string) => {
-      const llmClient = createLlmClient(process.env, (usage) => {
-        void recordCostEvent(client, usage, { prospectingCandidateId: id, endpoint: "prospecting-draft" }, "prospecting_llm_call");
-      });
+      const llmClient = createRecordedLlmClient(client, { step: "prospecting-draft", tier: "owner", context: { prospectingCandidateId: id }, eventType: "prospecting_llm_call" });
       return draftProspectingReply(llmClient, context, brandRules, knowledge);
     });
 

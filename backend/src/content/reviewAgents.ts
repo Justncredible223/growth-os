@@ -61,6 +61,12 @@ export interface ReviewContext {
 }
 
 const VERDICT_TOOL_NAME = "submit_verdict";
+/**
+ * A verdict is a boolean, a number, one or two sentences and a short issue list (typically 80 to 200 output tokens).
+ * The client default of 1024 only bounded a runaway answer loosely; 500 is generous for the schema and caps it.
+ */
+export const REVIEW_VERDICT_MAX_TOKENS = 500;
+
 const VERDICT_SCHEMA = {
   type: "object",
   properties: {
@@ -163,7 +169,7 @@ export async function runReviewAgent(
     "---",
   ].join("\n");
 
-  const input = await client.callTool<VerdictToolInput>(systemPrompt, userMessage, VERDICT_TOOL_NAME, VERDICT_SCHEMA, undefined, undefined, MODEL_HAIKU, true);
+  const input = await client.callTool<VerdictToolInput>(systemPrompt, userMessage, VERDICT_TOOL_NAME, VERDICT_SCHEMA, undefined, REVIEW_VERDICT_MAX_TOKENS, MODEL_HAIKU, true);
 
   return {
     agent,

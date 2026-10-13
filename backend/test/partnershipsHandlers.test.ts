@@ -122,6 +122,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     process.env.ANTHROPIC_API_KEY = "test-key";
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     global.fetch = originalFetch;
     process.env.ANTHROPIC_API_KEY = originalKey;
   });
@@ -380,6 +381,9 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
 
   it("FIXED (was a known limitation, now closed): two concurrent generate-draft calls for DIFFERENT prospects near the generation budget cap no longer both spend -- an atomic, serialized reservation (not the per-prospect generation_claimed_at mutex, which never covered this) closes the cross-prospect race", async () => {
     global.fetch = contentAwareFetch() as unknown as typeof fetch;
+    // This test seeds $9.70 of spend TODAY to exercise the partnerships month cap; the daily LLM ceiling
+    // (llmBudget.ts) would otherwise trip first, so it is lifted here to keep this test about the month cap.
+    vi.stubEnv("LLM_DAILY_HARD_CEILING_USD", "1000");
 
     // $9.70 of real generation-bucket spend leaves $0.30 of headroom under
     // the $10.00 generation cap -- enough for ONE $0.25 reservation ceiling,

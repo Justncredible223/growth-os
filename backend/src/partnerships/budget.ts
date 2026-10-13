@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectCostEvents, sumCostUsd } from "../cost/costTracking.js";
 
 /**
  * Independent monthly budget line, same reasoning as
@@ -63,12 +64,6 @@ export function evaluatePartnershipBudget(monthSpendUsd: number, budgetUsd: numb
 export async function getPartnershipMonthSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
-  const { data, error } = await client
-    .from("cost_events")
-    .select("cost_usd")
-    .in("event_type", ["partnership_llm_call", "partnership_x_search_read"])
-    .gte("created_at", monthStart)
-    .lt("created_at", nextMonthStart);
-  if (error) throw new Error(`getPartnershipMonthSpendUsd failed: ${error.message}`);
-  return ((data ?? []) as Array<{ cost_usd: number | null }>).reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
+  const rows = await selectCostEvents(client, "cost_usd", { since: monthStart, until: nextMonthStart, eventTypes: ["partnership_llm_call", "partnership_x_search_read"], label: "getPartnershipMonthSpendUsd" });
+  return sumCostUsd(rows);
 }

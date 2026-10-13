@@ -5,8 +5,7 @@ import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOppo
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { draftOpportunityReply, OpportunityReplyError } from "../src/opportunities/opportunityReplyWriter.js";
 import { loadGroundingContext } from "../src/inbound/inboundHandlers.js";
-import { createLlmClient } from "../src/content/llmClient.js";
-import { recordCostEvent } from "../src/cost/costTracking.js";
+import { createRecordedLlmClient } from "../src/cost/recordedLlmClient.js";
 
 /**
  * GET: the existing opportunity list.
@@ -32,9 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const { brandRulesSummary, verifiedKnowledgeSummary } = await loadGroundingContext(client);
-      const llmClient = createLlmClient(process.env, (usage) => {
-        void recordCostEvent(client, usage, { opportunityId: body.opportunityId, endpoint: "opportunity-reply-draft" });
-      });
+      const llmClient = createRecordedLlmClient(client, { step: "opportunity-reply-draft", tier: "owner", context: { opportunityId: body.opportunityId } });
 
       const draft = await draftOpportunityReply(client, llmClient, body.opportunityId, brandRulesSummary, verifiedKnowledgeSummary);
       res.status(200).json({ draft });

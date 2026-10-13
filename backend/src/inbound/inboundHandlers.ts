@@ -2,8 +2,8 @@ import { loadInboundStyleExamples } from "./inboundStyleExamples.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
-import { createLlmClient } from "../content/llmClient.js";
-import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
+import { estimateCostUsd } from "../cost/costTracking.js";
 import { draftInboundResponse, INBOUND_TRACKABLE_LINK, type InboundDraftContext } from "./inboundResponseWriter.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
 import { assessInboundDraft } from "./inboundDraftPolicy.js";
@@ -159,9 +159,7 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   }
 
   const { brandRulesSummary, verifiedKnowledgeSummary } = await loadGroundingContext(client);
-  const llmClient = createLlmClient(process.env, (usage) => {
-    void recordCostEvent(client, usage, { inboundEngagementId: id, endpoint: "inbound-draft" });
-  });
+  const llmClient = createRecordedLlmClient(client, { step: "inbound-draft", tier: "owner", context: { inboundEngagementId: id } });
 
   const draftContext: InboundDraftContext = {
     platform: row.platform,

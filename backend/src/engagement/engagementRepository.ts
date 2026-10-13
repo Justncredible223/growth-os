@@ -299,6 +299,23 @@ export async function quotaUsedToday(client: SupabaseClient, now: Date): Promise
   return ((data ?? []) as Row[]).reduce((sum, r) => sum + Number(r.units ?? 0), 0);
 }
 
+/**
+ * Model calls already spent today (UTC day, same as the cost ledger) drafting THIS item, read from cost_events so
+ * the count survives across serverless invocations and across the autofill's three daily runs. Used to stop an item
+ * whose draft keeps failing from being re-drafted on every run.
+ */
+export async function countDraftCallsToday(client: SupabaseClient, itemId: string, now: Date): Promise<number> {
+  const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  const { count, error } = await client
+    .from("cost_events")
+    .select("id", { count: "exact", head: true })
+    .gte("created_at", startOfDay)
+    .eq("context->>endpoint", "engagement-draft")
+    .eq("context->>engagementItemId", itemId);
+  if (error) fail("draft call count", error);
+  return count ?? 0;
+}
+
 export async function recordQuotaUnits(client: SupabaseClient, endpoint: string, units: number, now: Date): Promise<void> {
   const { error } = await client.from("engagement_quota_ledger").insert({ day: pacificDayKey(now), endpoint, units, created_at: now.toISOString() });
   if (error) fail("quota write", error);

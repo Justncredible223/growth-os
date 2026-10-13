@@ -5,9 +5,10 @@ import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
 import { SupabaseContentScoreRepository } from "../content/contentScoreRepository.js";
 import { SupabaseCampaignRepository } from "../content/supabaseCampaignRepository.js";
-import { createLlmClient, type LlmUsage } from "../content/llmClient.js";
+import type { LlmUsage } from "../content/llmClient.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { runCampaignPipeline, type PipelineOpportunity } from "../content/campaignPipeline.js";
-import { estimateCostUsd, recordCostEvent } from "../cost/costTracking.js";
+import { estimateCostUsd } from "../cost/costTracking.js";
 import { reservePartnershipBudget, releasePartnershipBudgetReservation } from "./budgetReservation.js";
 import { hasSufficientEvidenceForPitch, hasConcretePartnershipBasis } from "./discoveryScoring.js";
 import { canMarkContacted, isValidTransition } from "./stageTransitions.js";
@@ -219,9 +220,17 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
   // says nothing about whether the DB insert itself succeeded (see
   // recordCostEvent's own docstring on why that distinction matters here).
   const costWritePromises: Promise<boolean>[] = [];
-  const llmClient = createLlmClient(process.env, (usage) => {
-    usages.push(usage);
-    costWritePromises.push(recordCostEvent(client, usage, { endpoint: "partnerships", partnershipId: id }, "partnership_llm_call"));
+  const llmClient = createRecordedLlmClient(client, {
+    step: "partnerships",
+    tier: "owner",
+    context: { partnershipId: id },
+    eventType: "partnership_llm_call",
+    onUsage: (usage) => {
+      usages.push(usage);
+    },
+    onCostRecorded: (recorded) => {
+      costWritePromises.push(Promise.resolve(recorded));
+    },
   });
 
   const { data: opportunityRow, error: opportunityError } = await client

@@ -1,9 +1,10 @@
 import { pureMoveRequest } from "./liveHostMoves.js";
 import { pickRundownSegment } from "./liveHostRundown.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { MODEL_HAIKU, createLlmClient, type LlmClient } from "../content/llmClient.js";
+import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
-import { recordCostEvent } from "../cost/costTracking.js";
+import { selectCostEvents, sumCostUsd } from "../cost/costTracking.js";
 import { authorizeLiveHostSpeechAndAudit, LiveHostSpeechRejectedError, type AuditSink } from "../firewall/externalWriteFirewall.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
@@ -103,11 +104,9 @@ export const LIVE_HOST_COST_ENDPOINT = "live-host-line";
  */
 export async function getLiveHostSpendTodayUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-  const { data, error } = await client.from("cost_events").select("cost_usd, context").gte("created_at", startOfToday);
-  if (error) throw new Error(`getLiveHostSpendTodayUsd failed: ${error.message}`);
-  return ((data ?? []) as Array<{ cost_usd: number | null; context: { endpoint?: unknown } | null }>)
-    .filter((row) => row.context?.endpoint === LIVE_HOST_COST_ENDPOINT)
-    .reduce((sum, row) => sum + Number(row.cost_usd ?? 0), 0);
+  // Paged: a single select stops at 1000 rows, which on a busy day made this budget gate undercount.
+  const rows = await selectCostEvents(client, "cost_usd, context", { since: startOfToday, label: "getLiveHostSpendTodayUsd" });
+  return sumCostUsd(rows.filter((row) => row.context?.endpoint === LIVE_HOST_COST_ENDPOINT));
 }
 
 const TABLES = /(live_host_settings|live_host_sessions|live_host_messages|live_host_utterances)/;
@@ -1025,9 +1024,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   const sessionId = session.id;
   const llmClient =
     deps.llmClient ??
-    createLlmClient(process.env, (usage) => {
-      costWrites.push(recordCostEvent(client, usage, { liveHostSessionId: sessionId, endpoint: LIVE_HOST_COST_ENDPOINT }));
-    });
+    createRecordedLlmClient(client, { step: LIVE_HOST_COST_ENDPOINT, tier: "live", context: { liveHostSessionId: sessionId } });
   const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
 
   // The brand-rule check needs the database, so each candidate's verdict is worked out as it is generated and

@@ -12,7 +12,7 @@ import { interpretExperiment } from "../src/experiments/experimentEngine.js";
 import { SupabaseExperimentRepository, measureExperiment } from "../src/experiments/supabaseExperimentRepository.js";
 import type { NewExperiment } from "../src/experiments/types.js";
 import { SupabaseNotificationRepository } from "../src/notifications/supabaseNotificationRepository.js";
-import { getTodaySpendUsd } from "../src/cost/costTracking.js";
+import { breakdownCostEvents, getTodaySpendUsd, selectCostEvents, selectCostEventsResult, sumCostUsd } from "../src/cost/costTracking.js";
 import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
 import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
@@ -246,7 +246,7 @@ async function handleEveningReport(req: VercelRequest, res: VercelResponse): Pro
       client.from("campaign_assets").select("id", { count: "exact", head: true }).gte("created_at", since),
       client.from("campaigns").select("status").gte("decided_at", since),
       client.from("content_scores").select("verdict").gte("created_at", since),
-      client.from("cost_events").select("cost_usd").gte("created_at", since),
+      selectCostEventsResult(client, "cost_usd", { since }),
       client.from("inbound_engagements").select("id", { count: "exact", head: true }).gte("responded_at", since),
       client.from("opportunities").select("title, score").gte("created_at", since).order("score", { ascending: false }).limit(1).maybeSingle(),
     ]);
@@ -259,7 +259,7 @@ async function handleEveningReport(req: VercelRequest, res: VercelResponse): Pro
     const passCount = scores.filter((s) => s.verdict === "pass").length;
     const reviewPassRate = scores.length > 0 ? passCount / scores.length : null;
 
-    const totalCostToday = (costToday.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
+    const totalCostToday = sumCostUsd(costToday.data ?? []);
 
     res.status(200).json({
       generatedAt: new Date().toISOString(),
@@ -504,18 +504,15 @@ async function handleXFeedPostHistory(req: VercelRequest, res: VercelResponse): 
 async function handleCostSummary(res: VercelResponse): Promise<void> {
   try {
     const client = getServiceClient();
-    const { data, error } = await client
-      .from("cost_events")
-      .select("cost_usd, input_tokens, output_tokens, model, created_at");
-    if (error) throw error;
-
-    const rows = (data ?? []) as Array<{
-      cost_usd: number;
-      input_tokens: number;
-      output_tokens: number;
-      model: string;
-      created_at: string;
-    }>;
+    // Paged read of EVERY row (the old single select stopped at 1000 and reported $11.82 of a real ~$26 month).
+    const allRows = await selectCostEvents(client, "event_type, cost_usd, input_tokens, output_tokens, model, created_at, context");
+    const rows = allRows.map((r) => ({
+      cost_usd: Number(r.cost_usd ?? 0),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
+      model: r.model ?? "unknown",
+      created_at: r.created_at ?? "",
+    }));
 
     const totalCostUsd = rows.reduce((sum, r) => sum + Number(r.cost_usd), 0);
     const totalInputTokens = rows.reduce((sum, r) => sum + r.input_tokens, 0);
@@ -532,6 +529,8 @@ async function handleCostSummary(res: VercelResponse): Promise<void> {
       totalCalls: rows.length,
       totalInputTokens,
       totalOutputTokens,
+      // Additive (2026-10-13): which job costs what. Window is the last 30 days; byDayStep attributes a spike day.
+      breakdown: breakdownCostEvents(allRows, new Date(), 30),
     });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
@@ -648,7 +647,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         client.from("signals").select("source"),
         client.from("opportunities").select("status"),
         client.from("campaign_assets").select("stage"),
-        client.from("cost_events").select("cost_usd"),
+        selectCostEventsResult(client, "cost_usd"),
         autoDraftRunRepo.getLastRun(),
         autoDraftRunRepo.getMonthSpendUsd(yearMonth),
         computeTodayXPostView(client, now),
@@ -675,7 +674,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         client.from("content_publications").select("channel, owner_reported_published_at").gte("recorded_at", sevenDaysAgo.toISOString()),
         client.from("link_clicks").select("id", { count: "exact", head: true }).gte("clicked_at", sevenDaysAgo.toISOString()),
         client.from("conversion_events").select("event_type, utm_source, occurred_at").gte("occurred_at", sevenDaysAgo.toISOString()),
-        client.from("cost_events").select("cost_usd").gte("created_at", sevenDaysAgo.toISOString()),
+        selectCostEventsResult(client, "cost_usd", { since: sevenDaysAgo.toISOString() }),
         // Existence check only (head:true, limit irrelevant) -- has
         // FillbookHQ's sync EVER delivered anything, any event_type, any
         // time -- distinguishes "genuinely zero this window" from "never
@@ -691,7 +690,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       return counts;
     };
-    const totalCostUsd = (costRows.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
+    const totalCostUsd = sumCostUsd(costRows.data ?? []);
 
     // Ranks by whichever of utm_source/utm_medium is present, per row (a
     // signup can legitimately have neither -- a direct visit with no UTM
@@ -713,7 +712,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       utmSource: r.utm_source,
       occurredAt: r.occurred_at,
     }));
-    const recentCostUsd = ((recentCostEvents.data ?? []) as Array<{ cost_usd: number }>).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+    const recentCostUsd = sumCostUsd(recentCostEvents.data ?? []);
     const growthLoop = computeGrowthLoopSummary({
       windowDays: 7,
       publications: publicationRows,

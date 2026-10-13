@@ -5,8 +5,9 @@ import { ContentQualityGate } from "./contentQualityGate.js";
 import { CampaignFactory } from "./campaignFactory.js";
 import { SupabaseContentScoreRepository } from "./contentScoreRepository.js";
 import { SupabaseCampaignRepository } from "./supabaseCampaignRepository.js";
-import { createLlmClient, type LlmUsage } from "./llmClient.js";
-import { estimateCostUsd, recordCostEvent } from "../cost/costTracking.js";
+import type { LlmUsage } from "./llmClient.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
+import { estimateCostUsd } from "../cost/costTracking.js";
 import { SupabaseXFeedPostRunRepository } from "./xFeedPostRunRepository.js";
 import { X_FEED_POST_ASSET_TYPE, type FeedPostTopic, type XFeedPostStepDeps } from "./dailyXFeedPost.js";
 import type { UsageTracker } from "./runCampaignForOpportunity.js";
@@ -89,9 +90,14 @@ export async function buildXFeedPostStepDeps(client: SupabaseClient): Promise<{ 
     aiCalls: () => usages.length,
     costUsd: () => usages.reduce((sum, u) => sum + estimateCostUsd(u), 0),
   };
-  const llmClient = createLlmClient(process.env, (u: LlmUsage) => {
-    usages.push(u);
-    void recordCostEvent(client, u, { endpoint: "x-feed-post" });
+  // "owner" tier: the daily post is the product's one guaranteed daily output (and Regenerate is the owner's own tap),
+  // so it is exempt from the background ceiling; only the absolute daily backstop (llmBudget.ts) can skip it.
+  const llmClient = createRecordedLlmClient(client, {
+    step: "x-feed-post",
+    tier: "owner",
+    onUsage: (u: LlmUsage) => {
+      usages.push(u);
+    },
   });
 
   const deps: XFeedPostStepDeps = {

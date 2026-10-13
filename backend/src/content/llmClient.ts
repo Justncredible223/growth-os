@@ -21,6 +21,26 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.LLM_CALL_TIMEOUT_MS) || 20_000;
 export class LlmClientError extends Error {}
 
 /**
+ * Thrown BEFORE any network call when the daily LLM budget (src/cost/llmBudget.ts) is used up. It is a clean
+ * "skip", not a failure: callers that run on a schedule turn it into a "skipped -- daily LLM budget reached" line.
+ */
+export class LlmBudgetError extends LlmClientError {
+  constructor(message = "skipped -- daily LLM budget reached") {
+    super(message);
+    this.name = "LlmBudgetError";
+  }
+}
+
+export function isLlmBudgetError(err: unknown): err is LlmBudgetError {
+  return err instanceof LlmBudgetError || (err instanceof Error && err.name === "LlmBudgetError");
+}
+
+/** Consulted before every model call; throws LlmBudgetError when the call must not be made. */
+export interface LlmBudgetGuard {
+  check(): Promise<void>;
+}
+
+/**
  * Retry policy for transient Claude API failures. On 2026-09-29 every
  * Campaign Run for six minutes died on a single "HTTP 503 -- credential
  * validation failed" from one review-agent call, a blip the API recovered
@@ -65,6 +85,8 @@ export interface ToolCallResult<T> {
 }
 
 export interface LlmUsage {
+  /** The job that made the call (e.g. "engagement-draft"); set by the client from its options. */
+  step?: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -88,10 +110,12 @@ export class LlmClient {
     private apiKey: string,
     private fetchImpl: typeof fetch = fetch,
     private workspaceId?: string,
-    private onUsage?: (usage: LlmUsage) => void,
+    // May return a promise: callTool awaits it, so a cost row is written before the invocation can be frozen.
+    private onUsage?: (usage: LlmUsage) => unknown,
     // Off unless asked for, so a test's failing fetch mock fails once and
     // fast; createLlmClient (every production caller) turns it on.
     private retry: RetryOptions = NO_RETRY,
+    private options: { step?: string; guard?: LlmBudgetGuard } = {},
   ) {}
 
   /**
@@ -112,6 +136,9 @@ export class LlmClient {
     model = MODEL,
     cacheSystemPrompt = false,
   ): Promise<T> {
+    // Budget check first: no tokens are spent (and nothing is recorded) when today's ceiling is already reached.
+    await this.options.guard?.check();
+
     const systemValue = cacheSystemPrompt
       ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
       : systemPrompt;
@@ -160,13 +187,20 @@ export class LlmClient {
     };
 
     if (json.usage && this.onUsage) {
-      this.onUsage({
-        model: json.model,
-        inputTokens: json.usage.input_tokens,
-        outputTokens: json.usage.output_tokens,
-        cacheCreationInputTokens: json.usage.cache_creation_input_tokens,
-        cacheReadInputTokens: json.usage.cache_read_input_tokens,
-      });
+      // Awaited and shielded: a failed cost write must never lose the model's answer, and awaiting it means a
+      // serverless invocation cannot end before the row is written (the old fire-and-forget lost rows).
+      try {
+        await this.onUsage({
+          step: this.options.step,
+          model: json.model,
+          inputTokens: json.usage.input_tokens,
+          outputTokens: json.usage.output_tokens,
+          cacheCreationInputTokens: json.usage.cache_creation_input_tokens,
+          cacheReadInputTokens: json.usage.cache_read_input_tokens,
+        });
+      } catch {
+        // Cost visibility is best-effort here; recordCostEvent already swallows its own failures.
+      }
     }
 
     const toolUse = json.content.find((block) => block.type === "tool_use" && block.name === toolName);
@@ -204,7 +238,11 @@ export class LlmClient {
   }
 }
 
-export function createLlmClient(env: NodeJS.ProcessEnv = process.env, onUsage?: (usage: LlmUsage) => void): LlmClient {
+export function createLlmClient(
+  env: NodeJS.ProcessEnv = process.env,
+  onUsage?: (usage: LlmUsage) => unknown,
+  options: { step?: string; guard?: LlmBudgetGuard } = {},
+): LlmClient {
   const apiKey = env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new LlmClientError(
@@ -214,5 +252,5 @@ export function createLlmClient(env: NodeJS.ProcessEnv = process.env, onUsage?: 
   }
   // Identity-linked keys (the default type Console now issues) require the
   // workspace they act in to be named explicitly on every request.
-  return new LlmClient(apiKey, fetch, env.ANTHROPIC_WORKSPACE_ID, onUsage, DEFAULT_RETRY);
+  return new LlmClient(apiKey, fetch, env.ANTHROPIC_WORKSPACE_ID, onUsage, DEFAULT_RETRY, options);
 }
