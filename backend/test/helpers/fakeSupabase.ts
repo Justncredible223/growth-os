@@ -74,6 +74,7 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
   private orderBy: { column: string; ascending: boolean } | null = null;
   private singleMode: "single" | "maybeSingle" | null = null;
   private countMode = false;
+  private rangeBounds: { from: number; to: number } | null = null;
 
   constructor(private client: FakeSupabaseClient, table: string) {
     this.entry = { table, op: "select", filters: [] };
@@ -99,6 +100,8 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
   or(filterString: string) { this.entry.filters.push({ kind: "or", column: "", value: filterString }); return this; }
   order(column: string, options?: { ascending?: boolean }) { this.orderBy = { column, ascending: options?.ascending ?? true }; return this; }
   limit(n: number) { this.entry.limit = n; return this; }
+  /** PostgREST range(from, to), inclusive, applied after ordering. */
+  range(from: number, to: number) { this.rangeBounds = { from, to }; return this; }
   maybeSingle() { this.singleMode = "maybeSingle"; return this; }
   single() { this.singleMode = "single"; return this; }
   update(payload: FakeRow) { this.entry.op = "update"; this.entry.payload = payload; return this; }
@@ -108,7 +111,9 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
 
   private matches(row: FakeRow): boolean {
     return this.entry.filters.every(({ kind, column, value }) => {
-      const actual = row[column];
+      // PostgREST JSON path: "context->>endpoint" reads one key of a jsonb column as text.
+      const jsonPath = /^(.+)->>(.+)$/.exec(column);
+      const actual = jsonPath ? (row[jsonPath[1]!] as Record<string, unknown> | null | undefined)?.[jsonPath[2]!] : row[column];
       switch (kind) {
         case "eq": return actual === value;
         case "neq": return actual !== value;
@@ -170,6 +175,7 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
       const { column, ascending } = this.orderBy;
       matched = [...matched].sort((a, b) => (a[column] < b[column] ? -1 : a[column] > b[column] ? 1 : 0) * (ascending ? 1 : -1));
     }
+    if (this.rangeBounds) matched = matched.slice(this.rangeBounds.from, this.rangeBounds.to + 1);
     if (this.entry.limit !== undefined) matched = matched.slice(0, this.entry.limit);
     if (this.entry.head) return { data: null, error: null, count: matched.length };
     return this.finish(matched);

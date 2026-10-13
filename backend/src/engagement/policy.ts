@@ -165,6 +165,20 @@ export const AUTOFILL_MAX_SEARCHES_PER_RUN = 3;
 export const AUTOFILL_SEARCH_RESULTS_PER_QUERY = 25;
 /** The fill pre-drafts at most this many items per run; each draft may cost one top-comments read. */
 export const AUTOFILL_MAX_DRAFTS_PER_RUN = 10;
+
+/**
+ * Hard bound on drafter MODEL CALLS in one autofill run, regeneration rounds included. AUTOFILL_MAX_DRAFTS_PER_RUN
+ * bounds items, but each item may take up to 3 rounds, so ten items could be 30 calls; this makes the worst case 15
+ * (1.5 calls per item). Added 2026-10-13 (LLM spend audit).
+ */
+export const AUTOFILL_MAX_DRAFTER_CALLS_PER_RUN = 15;
+
+/**
+ * Model calls the SCHEDULED fill may spend on one item in one UTC day (rounds of every attempt, across all three
+ * runs). One full attempt is up to 3 rounds; this allows that plus one more round, then the item waits for tomorrow
+ * (or the owner's own Draft tap, which is not capped). Stops a persistently failing item being redrafted each run.
+ */
+export const AUTOFILL_MAX_DRAFT_CALLS_PER_ITEM_PER_DAY = 4;
 /** Videos older than this are dropped, and the search window uses the same value. */
 export const AUTOFILL_MAX_AGE_DAYS = 14;
 /** Videos with fewer views are dropped. Unchanged until a run's rejection breakdown shows it is the bottleneck. */

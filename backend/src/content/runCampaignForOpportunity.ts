@@ -8,9 +8,10 @@ import { ContentQualityGate } from "./contentQualityGate.js";
 import { CampaignFactory } from "./campaignFactory.js";
 import { SupabaseContentScoreRepository, type ContentScoreRepository } from "./contentScoreRepository.js";
 import { SupabaseCampaignRepository } from "./supabaseCampaignRepository.js";
-import { createLlmClient, LlmClient, type LlmUsage } from "./llmClient.js";
+import { LlmClient, type LlmUsage } from "./llmClient.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { runCampaignPipeline, type CampaignRepository, type PipelineOpportunity, type PipelineResult } from "./campaignPipeline.js";
-import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
+import { estimateCostUsd } from "../cost/costTracking.js";
 
 export type CampaignRunSource = "manual" | "auto-draft";
 
@@ -161,9 +162,14 @@ export async function buildSupabaseRunCampaignDeps(
   }
 
   const usage = createUsageTracker();
-  const llmClient = createLlmClient(process.env, (u: LlmUsage) => {
-    usage.usages.push(u);
-    void recordCostEvent(client, u, { opportunityId: getOpportunityId(), endpoint: "run-campaign", source });
+  // An explicit owner request ("manual") is exempt from the background ceiling; the scheduled auto-draft is not.
+  const llmClient = createRecordedLlmClient(client, {
+    step: "run-campaign",
+    tier: source === "manual" ? "owner" : "background",
+    context: { source },
+    onUsage: (u: LlmUsage) => {
+      usage.usages.push(u);
+    },
   });
 
   const deps: RunCampaignDeps = {

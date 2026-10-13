@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createLlmClient } from "../content/llmClient.js";
-import { recordCostEvent } from "../cost/costTracking.js";
+import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
+import type { LlmCallerTier } from "../cost/llmBudget.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { extractYoutubeVideoId } from "../video/youtubeUrl.js";
 import { checkEngagementComment, findInventedExperience } from "./commentGuardrails.js";
@@ -19,6 +19,7 @@ import {
   checkQuotaBudget,
   nextAutoFillRun,
   AUTOFILL_TARGET_WAITING,
+  AUTOFILL_MAX_DRAFT_CALLS_PER_ITEM_PER_DAY,
   pacificDayKey,
   type SearchOrder,
   resolveLimits,
@@ -36,6 +37,9 @@ export { isMissingEngagementTables } from "./engagementRepository.js";
 
 /** A request the owner can fix (bad input, nothing to draft). Maps to HTTP 400. */
 export class EngagementActionError extends Error {}
+
+/** The run's drafter-call budget is spent: not a problem with the item, so the item is left for the next run. */
+export class EngagementRunBudgetReached extends Error {}
 
 /** The drafter chose not to comment (off topic, sensitive, nothing to add). Still an owner-visible 400. */
 export class EngagementDraftDeclined extends EngagementActionError {
@@ -62,6 +66,13 @@ export interface EngagementDeps {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   drafter?: (context: EngagementDraftContext) => Promise<EngagementDraftResult>;
+  /**
+   * Who is drafting. The scheduled autofill passes "background" (subject to the daily LLM ceiling, the per-item daily
+   * call cap, and never redrafts an item that already has drafts); the owner's own Draft tap is "owner" (the default).
+   */
+  llmTier?: LlmCallerTier;
+  /** Shared across one run: drafter model calls left. Each round spends one; at zero drafting stops (EngagementRunBudgetReached). */
+  draftCallBudget?: { remaining: number };
   loadGrounding?: (client: SupabaseClient) => Promise<{ brandRulesSummary: string }>;
 }
 
@@ -568,6 +579,15 @@ export async function draftItem(client: SupabaseClient, id: unknown, deps: Engag
   const block = checkDraftingAllowance(item.platform, item.creatorId, done, now, limits);
   if (block) throw new EngagementBlockedError(block);
 
+  // Scheduled drafting only (the owner's own tap is never refused here): never write again for an item that already
+  // has drafts, and stop an item that has used its model calls for the day.
+  if (deps.llmTier === "background") {
+    if (item.drafts.length > 0) return item;
+    if ((await repo.countDraftCallsToday(client, item.id, now)) >= AUTOFILL_MAX_DRAFT_CALLS_PER_ITEM_PER_DAY) {
+      throw new EngagementRunBudgetReached("this item has used its model calls for today");
+    }
+  }
+
   // Top comments give the draft something real to react to. Best-effort: quota or API trouble just means fewer clues.
   let topComments = item.topComments;
   if (item.platform === "youtube" && topComments.length === 0) {
@@ -590,12 +610,15 @@ export async function draftItem(client: SupabaseClient, id: unknown, deps: Engag
     // Grounding is a nicety; the hard guardrails below do not depend on it.
   }
 
-  const costWrites: Array<Promise<unknown>> = [];
   const drafter =
     deps.drafter ??
     (async (context: EngagementDraftContext) => {
-      const llm = createLlmClient(deps.env ?? process.env, (usage) => {
-        costWrites.push(recordCostEvent(client, usage, { endpoint: "engagement-draft", engagementItemId: item.id }));
+      // One recorder for every call (step, tokens, cached tokens); the cost row is written inside the call.
+      const llm = createRecordedLlmClient(client, {
+        step: "engagement-draft",
+        tier: deps.llmTier ?? "owner",
+        context: { engagementItemId: item.id },
+        env: deps.env,
       });
       return draftEngagementOptions(llm, context);
     });
@@ -603,8 +626,17 @@ export async function draftItem(client: SupabaseClient, id: unknown, deps: Engag
   const accepted: string[] = [];
   const feedback: string[] = [];
   let skipReason: string | null = null;
-  try {
-    for (let round = 0; round < MAX_DRAFT_ROUNDS && accepted.length < 2; round++) {
+  for (let round = 0; round < MAX_DRAFT_ROUNDS && accepted.length < 2; round++) {
+    {
+      // The run's shared call budget (scheduled fill only): stop regenerating once spent. Whatever already passed is
+      // kept; an item with nothing yet is left untouched for the next run rather than closed.
+      if (deps.draftCallBudget) {
+        if (deps.draftCallBudget.remaining <= 0) {
+          if (accepted.length === 0 && !skipReason) throw new EngagementRunBudgetReached("drafter call budget for this run is spent");
+          break;
+        }
+        deps.draftCallBudget.remaining--;
+      }
       const result = await drafter({
         platform: item.platform,
         title: item.title,
@@ -629,8 +661,6 @@ export async function draftItem(client: SupabaseClient, id: unknown, deps: Engag
       for (const r of rejected) feedback.push(`"${r.text}" ${r.reason}`);
       accepted.push(...fresh);
     }
-  } finally {
-    await Promise.allSettled(costWrites);
   }
 
   if (accepted.length === 0) {
