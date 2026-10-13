@@ -91,6 +91,8 @@ import com.fillbook.growthos.ui.screens.ContentLibraryScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.InboundScreen
 import com.fillbook.growthos.ui.screens.EngagementScreen
+import com.fillbook.growthos.ui.screens.EngagementShareInbox
+import com.fillbook.growthos.ui.components.SharedEngagementLink
 import com.fillbook.growthos.ui.screens.LiveHostScreen
 import com.fillbook.growthos.ui.screens.ProspectingScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
@@ -201,7 +203,7 @@ class MainActivity : FragmentActivity() {
         // launch never re-runs onCreate.
         pendingDeepLinkRoute.value = intent?.let { VideoNotifications.deepLinkRouteFor(it) }
         // Only on a fresh launch: a recreated activity still carries the old intent, and an OAuth code is single-use.
-        if (savedInstanceState == null) intent?.let { handleOAuthCallback(it) }
+        if (savedInstanceState == null) intent?.let { handleOAuthCallback(it); handleSharedLink(it) }
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
@@ -217,6 +219,19 @@ class MainActivity : FragmentActivity() {
         setIntent(intent)
         pendingDeepLinkRoute.value = VideoNotifications.deepLinkRouteFor(intent)
         handleOAuthCallback(intent)
+        handleSharedLink(intent)
+    }
+
+    /**
+     * A TikTok or YouTube video shared to Fillbook from the share sheet: hand the link to the Engage tab, which adds it
+     * and drafts a comment. The intent is replaced afterwards so a recreated activity cannot re-add the same link.
+     */
+    private fun handleSharedLink(intent: android.content.Intent) {
+        if (intent.action != android.content.Intent.ACTION_SEND) return
+        val link = SharedEngagementLink.extract(intent.getStringExtra(android.content.Intent.EXTRA_TEXT)) ?: return
+        setIntent(android.content.Intent(this, MainActivity::class.java))
+        EngagementShareInbox.link.value = link
+        pendingDeepLinkRoute.value = Destination.Engage.route
     }
 
     private fun handleOAuthCallback(intent: android.content.Intent) {
