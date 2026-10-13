@@ -84,6 +84,15 @@ fun engagementEmptyMessage(status: EngagementStatus): String =
  * posts natively and then taps Done, which only records it. The server enforces the daily cap, the gap between
  * actions and the per-creator cooldown, and the screen shows its refusals as written.
  */
+/**
+ * A video link shared to Fillbook from TikTok's or YouTube's share sheet (MainActivity.handleSharedLink). The screen
+ * takes it once, adds it to the queue through the same call as the paste box, drafts comments and opens the item.
+ * Process-wide so a share that arrives before the app is unlocked or before this tab is first shown is not lost.
+ */
+object EngagementShareInbox {
+    val link = mutableStateOf<String?>(null)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EngagementScreen(repo: GrowthOsRepository) {
@@ -133,6 +142,30 @@ fun EngagementScreen(repo: GrowthOsRepository) {
     }
 
     LaunchedEffect(Unit) { refresh() }
+
+    // A link shared from the TikTok or YouTube share sheet: add it, draft comments, and open it ready to copy.
+    val sharedLink = EngagementShareInbox.link.value
+    LaunchedEffect(sharedLink) {
+        val link = sharedLink ?: return@LaunchedEffect
+        EngagementShareInbox.link.value = null
+        busy = true
+        try {
+            val added = repo.addEngagementLink(link)
+            actionError = null
+            val ready = try {
+                repo.draftEngagement(added.id)
+            } catch (e: Exception) {
+                actionError = failure(e, "Added the video, but couldn't draft comments. Open it and tap Draft comments.")
+                added
+            }
+            refresh()
+            selectedId = ready.id
+        } catch (e: Exception) {
+            actionError = failure(e, "Couldn't add that shared link. Try pasting it instead.")
+            refresh()
+        }
+        busy = false
+    }
 
     val current = status
     val selected = current?.queue?.firstOrNull { it.id == selectedId }
@@ -187,6 +220,15 @@ fun EngagementScreen(repo: GrowthOsRepository) {
                             copiedDraft[selected.id] = draftId
                             val warning = result.warnings.firstOrNull()
                             snackbarHostState.showSnackbar(warning ?: "Copied. Paste it into the comment box yourself.")
+                        }
+                    },
+                    onCopyAndOpen = { draftId, text ->
+                        perform("Couldn't copy that. Try again.") {
+                            val result = repo.copyEngagement(selected.id, draftId, text)
+                            copyToClipboard(context, "Comment", result.text)
+                            copiedDraft[selected.id] = draftId
+                            val url = repo.openEngagement(selected.id)
+                            if (!openExternalUrl(context, url)) actionError = "Copied, but no app could open that link."
                         }
                     },
                     onDone = { did ->
@@ -343,6 +385,7 @@ private fun EngagementDetail(
     onOpen: () -> Unit,
     onDraft: () -> Unit,
     onCopy: (draftId: String, text: String) -> Unit,
+    onCopyAndOpen: (draftId: String, text: String) -> Unit,
     onDone: (did: String) -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -402,12 +445,20 @@ private fun EngagementDetail(
                     textAlign = TextAlign.End,
                 )
                 Spacer(Modifier.height(6.dp))
-                SecondaryButton(
-                    text = "Copy",
-                    onClick = { onCopy(draft.id, text) },
-                    enabled = !busy && entry.blockMessage == null && text.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SecondaryButton(
+                        text = "Copy",
+                        onClick = { onCopy(draft.id, text) },
+                        enabled = !busy && entry.blockMessage == null && text.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                    )
+                    PrimaryButton(
+                        text = "Copy + open video",
+                        onClick = { onCopyAndOpen(draft.id, text) },
+                        enabled = !busy && entry.blockMessage == null && text.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
         item {
