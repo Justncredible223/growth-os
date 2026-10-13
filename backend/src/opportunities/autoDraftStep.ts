@@ -1,3 +1,4 @@
+import { isLlmBudgetError } from "../content/llmClient.js";
 import type { OpportunityRepository } from "./types.js";
 import type { RunCampaignDeps } from "../content/runCampaignForOpportunity.js";
 import { runCampaignForOpportunity } from "../content/runCampaignForOpportunity.js";
@@ -133,6 +134,8 @@ export async function runAutoDraftStep(deps: AutoDraftStepDeps, runDate: string,
       error: overCallCap ? `exceeded MAX_CALLS_PER_RUN (${aiCalls} > ${MAX_CALLS_PER_RUN})` : undefined,
     };
   } catch (err) {
+    // The daily LLM ceiling (cost/llmBudget.ts) is a deliberate skip, not a failure.
+    if (isLlmBudgetError(err)) return await skip("daily_llm_budget_reached", 0);
     const message = err instanceof Error ? err.message : String(err);
     await deps.runRepo.completeRun(claimedId, {
       status: "failed",

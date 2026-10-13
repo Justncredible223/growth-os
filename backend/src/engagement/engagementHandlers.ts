@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import type { LlmCallerTier } from "../cost/llmBudget.js";
+import type { LlmUsage } from "../content/llmClient.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { extractYoutubeVideoId } from "../video/youtubeUrl.js";
 import { checkEngagementComment, findInventedExperience } from "./commentGuardrails.js";
@@ -71,6 +72,8 @@ export interface EngagementDeps {
    * call cap, and never redrafts an item that already has drafts); the owner's own Draft tap is "owner" (the default).
    */
   llmTier?: LlmCallerTier;
+  /** Called with each model call's usage (after its cost row is written); the scheduled fill sums it into its summary line. */
+  onLlmUsage?: (usage: LlmUsage) => void;
   /** Shared across one run: drafter model calls left. Each round spends one; at zero drafting stops (EngagementRunBudgetReached). */
   draftCallBudget?: { remaining: number };
   loadGrounding?: (client: SupabaseClient) => Promise<{ brandRulesSummary: string }>;
@@ -619,6 +622,7 @@ export async function draftItem(client: SupabaseClient, id: unknown, deps: Engag
         tier: deps.llmTier ?? "owner",
         context: { engagementItemId: item.id },
         env: deps.env,
+        onUsage: deps.onLlmUsage,
       });
       return draftEngagementOptions(llm, context);
     });

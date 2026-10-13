@@ -83,3 +83,42 @@ describe("Engage drafting spend caps", () => {
     expect(args[7]).toBe(true); // cacheSystemPrompt
   });
 });
+
+describe("scheduled fill under the spend controls", () => {
+  const T = new Date("2026-10-13T20:00:00.000Z");
+  const row = (n: number, overrides: Record<string, unknown> = {}) => ({
+    id: `item-${n}`, platform: "youtube", external_id: `vid${String(n).padStart(8, "0")}`, url: `https://www.youtube.com/shorts/vid${n}`,
+    title: `Futures trading lesson ${n}`, creator_id: `UC${n}`, creator_name: `Creator ${n}`, thumbnail_url: null, description: null,
+    top_comments: ["A comment"], stats: null, source: "search", status: "drafted", drafts: [{ id: "d1", text: "A draft" }],
+    skip_reason: null, fetched_at: T.toISOString(), created_at: new Date(T.getTime() - n * 1000).toISOString(), updated_at: T.toISOString(), ...overrides,
+  });
+  const world = (extra: any[]) =>
+    new FakeSupabaseClient({
+      engagement_items: [...Array.from({ length: 10 }, (_, i) => row(i)), ...extra],
+      engagement_actions: [], engagement_watchlist: [], engagement_quota_ledger: [],
+      integration_health: [{ platform: "engagement_seed_v2", status: "healthy" }], cost_events: [],
+    });
+  const deps = (drafter: any) => ({ now: () => T, env: { YOUTUBE_API_KEY: "k" } as NodeJS.ProcessEnv, isPaused: async () => false, loadGrounding: async () => ({ brandRulesSummary: "" }), drafter });
+
+  it("stops drafting with 'skipped -- daily LLM budget reached' and leaves the item waiting", async () => {
+    const { runEngagementAutoFill } = await import("../src/engagement/engagementAutoFill");
+    const { LlmBudgetError } = await import("../src/content/llmClient");
+    const db = world([row(50, { status: "new", drafts: [] }), row(51, { status: "new", drafts: [] })]);
+    const drafter = vi.fn(async () => { throw new LlmBudgetError(); });
+    const result = await runEngagementAutoFill(asSupabase(db), deps(drafter));
+    expect(drafter).toHaveBeenCalledTimes(1);
+    expect(result.summary).toContain("skipped -- daily LLM budget reached");
+    expect(db.tables.engagement_items!.filter((i) => i.status === "new")).toHaveLength(2);
+  });
+
+  it("stops at the per-run drafter-call cap even when every item needs several rounds", async () => {
+    const { runEngagementAutoFill } = await import("../src/engagement/engagementAutoFill");
+    const items = Array.from({ length: 8 }, (_, i) => row(60 + i, { status: "new", drafts: [] }));
+    const db = world(items);
+    // Generic praise fails the guardrails every round, so each item would take 3 rounds (24 calls without the cap).
+    const drafter = vi.fn(async () => ({ options: ["Great video, love this content!"], skipReason: null }));
+    const result = await runEngagementAutoFill(asSupabase(db), deps(drafter));
+    expect(drafter.mock.calls.length).toBeLessThanOrEqual(AUTOFILL_MAX_DRAFTER_CALLS_PER_RUN);
+    expect(result.summary).toMatch(/drafter call cap per run/);
+  });
+});

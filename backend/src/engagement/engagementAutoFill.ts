@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../lib/errorMessage.js";
 import { isLlmBudgetError } from "../content/llmClient.js";
+import { estimateCostUsd } from "../cost/costTracking.js";
 import {
   EngagementActionError,
   EngagementDraftDeclined,
@@ -315,7 +316,18 @@ async function run(client: SupabaseClient, deps: AutoFillDeps): Promise<AutoFill
   const undrafted = (await repo.listQueue(client, 500)).filter((i) => i.status === "new" && i.drafts.length === 0).reverse();
   // Scheduled drafting is background work: it is subject to the daily LLM ceiling, the per-item daily call cap, and
   // one shared drafter-call budget for the whole run (regeneration rounds included).
-  const draftDeps: AutoFillDeps = { ...deps, llmTier: "background", draftCallBudget: { remaining: AUTOFILL_MAX_DRAFTER_CALLS_PER_RUN } };
+  let llmCalls = 0;
+  let llmCostUsd = 0;
+  const draftDeps: AutoFillDeps = {
+    ...deps,
+    llmTier: "background",
+    draftCallBudget: { remaining: AUTOFILL_MAX_DRAFTER_CALLS_PER_RUN },
+    onLlmUsage: (usage) => {
+      llmCalls++;
+      llmCostUsd += estimateCostUsd(usage);
+      deps.onLlmUsage?.(usage);
+    },
+  };
   for (const item of undrafted) {
     if (drafted + autoSkipped >= AUTOFILL_MAX_DRAFTS_PER_RUN) {
       stopNote = "draft cap per run";
@@ -381,6 +393,7 @@ async function run(client: SupabaseClient, deps: AutoFillDeps): Promise<AutoFill
     `drafted ${drafted}`,
     ...(autoSkipped > 0 ? [`auto-skipped ${autoSkipped}`] : []),
     `queue ${waiting}`,
+    ...(llmCalls > 0 ? [`LLM ${llmCalls} call(s) $${llmCostUsd.toFixed(3)}`] : []),
     `quota ${quotaUsed - quotaBefore} units this run (${quotaUsed}/${limits.youtubeDailyQuotaBudget} today)`,
   ];
   const notes = [

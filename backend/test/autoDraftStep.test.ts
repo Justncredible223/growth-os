@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { LlmClient, type LlmUsage } from "../src/content/llmClient";
+import { LlmBudgetError, LlmClient, type LlmUsage } from "../src/content/llmClient";
 import { CampaignFactory } from "../src/content/campaignFactory";
 import { ContentQualityGate } from "../src/content/contentQualityGate";
 import { BrandConstitution } from "../src/knowledge/brandConstitution";
@@ -98,6 +98,22 @@ function buildStepDeps(fetchMock: ReturnType<typeof vi.fn>, opportunityRepo: InM
 }
 
 describe("runAutoDraftStep", () => {
+  it("a reached daily LLM budget is a skip (no failure, no model call), not a failed run", async () => {
+    const fetchMock = vi.fn();
+    const oppRepo = new InMemoryOpportunityRepository();
+    await seedOpportunity(oppRepo);
+    const deps = buildStepDeps(fetchMock, oppRepo);
+    const guarded = new LlmClient("test-key", fetchMock, undefined, undefined, undefined, {
+      guard: { check: async () => { throw new LlmBudgetError(); } },
+    });
+    deps.runCampaignDeps = { ...(deps.runCampaignDeps as RunCampaignDeps), llmClient: guarded };
+
+    const result = await runAutoDraftStep(deps, "2026-09-08", now);
+    expect(result.status).toBe("skipped");
+    expect(result.skipReason).toBe("daily_llm_budget_reached");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("one qualifying opportunity -> one draft, reaching ready_for_owner", async () => {
     const fetchMock = vi
       .fn()
