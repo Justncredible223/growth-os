@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../lib/errorMessage.js";
+import { isLlmBudgetError } from "../content/llmClient.js";
 import {
   EngagementActionError,
   EngagementDraftDeclined,
+  EngagementRunBudgetReached,
   discoverYoutube,
   draftItem,
   revalidateStoredDrafts,
@@ -14,6 +16,7 @@ import {
 import * as repo from "./engagementRepository.js";
 import {
   AUTOFILL_MAX_AGE_DAYS,
+  AUTOFILL_MAX_DRAFTER_CALLS_PER_RUN,
   AUTOFILL_MAX_DRAFTS_PER_RUN,
   AUTOFILL_MAX_SEARCHES_PER_RUN,
   AUTOFILL_MIN_VIEWS,
@@ -307,7 +310,12 @@ async function run(client: SupabaseClient, deps: AutoFillDeps): Promise<AutoFill
   let failures = 0;
   let stopNote: string | null = null;
   const declineReasons: string[] = [];
-  const undrafted = (await repo.listQueue(client, 500)).filter((i) => i.status === "new").reverse();
+  // Items that already carry drafts are never written again (a "new" item with leftover drafts is a half-finished
+  // state, not a request for more model calls).
+  const undrafted = (await repo.listQueue(client, 500)).filter((i) => i.status === "new" && i.drafts.length === 0).reverse();
+  // Scheduled drafting is background work: it is subject to the daily LLM ceiling, the per-item daily call cap, and
+  // one shared drafter-call budget for the whole run (regeneration rounds included).
+  const draftDeps: AutoFillDeps = { ...deps, llmTier: "background", draftCallBudget: { remaining: AUTOFILL_MAX_DRAFTER_CALLS_PER_RUN } };
   for (const item of undrafted) {
     if (drafted + autoSkipped >= AUTOFILL_MAX_DRAFTS_PER_RUN) {
       stopNote = "draft cap per run";
@@ -319,9 +327,22 @@ async function run(client: SupabaseClient, deps: AutoFillDeps): Promise<AutoFill
     }
     attempted++;
     try {
-      await draftItem(client, item.id, deps);
+      await draftItem(client, item.id, draftDeps);
       drafted++;
     } catch (err) {
+      if (isLlmBudgetError(err)) {
+        stopNote = "skipped -- daily LLM budget reached";
+        break;
+      }
+      if (err instanceof EngagementRunBudgetReached) {
+        // Out of model calls for this run (or this item's calls for today): leave the item as it is.
+        attempted--;
+        if (draftDeps.draftCallBudget!.remaining <= 0) {
+          stopNote = "drafter call cap per run";
+          break;
+        }
+        continue;
+      }
       if (err instanceof EngagementBlockedError) {
         if (err.block.code === "daily_cap") {
           stopNote = "daily cap reached";
@@ -368,7 +389,7 @@ async function run(client: SupabaseClient, deps: AutoFillDeps): Promise<AutoFill
     ...(discovery?.stoppedReason ? [`discovery stopped: ${discovery.stoppedReason}`] : []),
     ...(discovery && discovery.errors.length > 0 ? [`${discovery.errors.length} source error(s)`] : []),
     ...(discoveryError ? [`discovery failed: ${discoveryError}`] : []),
-    ...(stopNote ? [`drafting stopped: ${stopNote}`] : []),
+    ...(stopNote ? [stopNote.startsWith("skipped") ? stopNote : `drafting stopped: ${stopNote}`] : []),
   ];
   const detail: AutoFillDetail = {
     at: now.toISOString(),

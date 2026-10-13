@@ -3,6 +3,9 @@ import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
 import { SHOWCASE_REPLY_GUIDANCE } from "../content/fillbookShowcase.js";
 import { formatStyleExamples, type StyleExample } from "../prospecting/prospectingStyleExamples.js";
 
+/** A reply is one to three sentences plus a boolean; 600 output tokens is far above any valid answer and bounds a runaway one. */
+const REPLY_DRAFT_MAX_TOKENS = 600;
+
 const DRAFT_SCHEMA = {
   type: "object",
   properties: {
@@ -240,7 +243,7 @@ export async function draftInboundResponse(
     "submit_reply",
     DRAFT_SCHEMA,
     undefined,
-    undefined,
+    REPLY_DRAFT_MAX_TOKENS,
     undefined,
     true,
   );
