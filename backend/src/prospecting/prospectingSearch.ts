@@ -11,10 +11,12 @@ import {
   currentRunSlot,
   evaluateMonthlyBudget,
   evaluateQueueCapacity,
+  planSearchBreadth,
   runSlotsPerDay,
   selectTopicsForRun,
 } from "./prospectingEligibility.js";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
+import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import type { ProspectingRepository } from "./types.js";
 
 export interface ProspectingRunResult {
@@ -39,7 +41,12 @@ export interface ProspectingRunResult {
    */
   excludedAsIrrelevant: number;
   costUsd: number;
+  /** Candidates already waiting in today's working set when this run started (null when the run stopped before counting). */
+  selectableBefore?: number | null;
 }
+
+/** Rows scanned to count what is waiting. Was QUEUE_FULL_THRESHOLD + 1; the selectable count needs the whole backlog (the queue endpoint reads up to 500). */
+const BACKLOG_SCAN_LIMIT = 200;
 
 export interface ProspectingRunDeps {
   adapter: XSignalAdapter;
@@ -98,11 +105,24 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // Only candidates still within the reply window (MAX_AGE_FOR_DAILY_SELECTION_MS) count toward capacity:
   // stale candidates that daily selection will reject anyway must not block
   // new fresh searches (deadlock: queue counted as full, but nothing shown).
-  const backlog = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], QUEUE_FULL_THRESHOLD + 1);
+  const backlog = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], BACKLOG_SCAN_LIMIT);
   const freshBacklogCount = backlog.filter((c) => isEligibleForDailySelection(c.postCreatedAt, now)).length;
   const queueCheck = evaluateQueueCapacity(freshBacklogCount);
   if (!queueCheck.eligible) {
     return { skipped: true, skipReason: queueCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0 };
+  }
+
+  // How many of the waiting candidates the owner would actually be shown right now (same gate + selection the queue
+  // endpoint applies). Scheduled runs use it to skip or thin the search; an owner-triggered "search now" (runIndexOverride)
+  // always searches, as before.
+  const selectable = selectDailyWorkingSet(
+    backlog.filter((c) => isReplyWorthyPost(c.postText) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
+    now,
+  ).selected.length;
+  const isManual = deps.runIndexOverride !== undefined;
+  const breadth = isManual ? ({ skip: false, topics: TOPICS_PER_SEARCH_RUN } as const) : planSearchBreadth(selectable);
+  if (breadth.skip) {
+    return { skipped: true, skipReason: breadth.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
   }
 
   // Combines the calendar day with which of the daily run slots (see
@@ -110,10 +130,11 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // 13:00/18:00 America/Phoenix by default) this invocation is so the
   // rotation advances once per run instead of once per day -- same
   // topic-list cycling behavior as before the 3x/day split, just
-  // finer-grained.
+  // finer-grained. A thinned run (breadth.topics < TOPICS_PER_SEARCH_RUN) takes the FIRST topic(s) of the same slice,
+  // so the rotation position is unchanged and the skipped topic comes round again next cycle.
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
   const runIndex = deps.runIndexOverride ?? dayIndex * runSlotsPerDay() + currentRunSlot(now);
-  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, TOPICS_PER_SEARCH_RUN);
+  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, TOPICS_PER_SEARCH_RUN).slice(0, breadth.topics);
 
   let postsRead = 0;
   let newCandidates = 0;
@@ -207,5 +228,6 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     excludedAsSpam,
     excludedAsIrrelevant,
     costUsd,
+    selectableBefore: selectable,
   };
 }
