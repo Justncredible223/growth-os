@@ -12,6 +12,7 @@ import { interpretExperiment } from "../src/experiments/experimentEngine.js";
 import { SupabaseExperimentRepository, measureExperiment } from "../src/experiments/supabaseExperimentRepository.js";
 import type { NewExperiment } from "../src/experiments/types.js";
 import { SupabaseNotificationRepository } from "../src/notifications/supabaseNotificationRepository.js";
+import { llmKeySource } from "../src/content/llmKey.js";
 import { breakdownCostEvents, getTodaySpendUsd, selectCostEvents, selectCostEventsResult, sumCostUsd } from "../src/cost/costTracking.js";
 import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
@@ -524,6 +525,8 @@ async function handleCostSummary(res: VercelResponse): Promise<void> {
       .reduce((sum, r) => sum + Number(r.cost_usd), 0);
 
     res.status(200).json({
+      // Name-only: "dedicated" (GROWTH_OS_ANTHROPIC_API_KEY), "shared-fallback" (ANTHROPIC_API_KEY) or "missing".
+      llmKeySource: llmKeySource(),
       totalCostUsd: Number(totalCostUsd.toFixed(6)),
       last24hCostUsd: Number(last24hCostUsd.toFixed(6)),
       totalCalls: rows.length,

@@ -60,6 +60,8 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON_PATH: /tmp/firebase-sa.json
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Dedicated key first; the shared secret stays as the transitional fallback (empty secrets resolve to "").
+          GROWTH_OS_ANTHROPIC_API_KEY: ${{ secrets.GROWTH_OS_ANTHROPIC_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_WORKSPACE_ID: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
           CAMPAIGN_RUN_REQUEST_ID: ${{ github.event.client_payload.campaignRunRequestId || inputs.campaignRunRequestId }}
