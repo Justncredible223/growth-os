@@ -113,6 +113,30 @@ export const STALE_EXPIRY_DAYS = 14;
  */
 export const MONTHLY_PROSPECTING_BUDGET_USD = 15.0;
 
+/**
+ * Search breadth by how much is already waiting (2026-10-14 cost cut). "Selectable" is the number of candidates that
+ * would be in today's working set right now: reply-worthy, inside the 12h freshness window, past the quality bar, one
+ * per author (prospectingDailySelection.ts). The owner can only ever be shown DAILY_SET_MAX of them, and works 8-15 a
+ * day, so reading more posts when 15 are already waiting cannot add a card to the queue.
+ *
+ * - at or above SELECTABLE_SKIP_AT: skip the search (no X read at all);
+ * - at or above SELECTABLE_THIN_AT (the daily minimum): search 1 topic instead of TOPICS_PER_SEARCH_RUN;
+ * - below that: the normal TOPICS_PER_SEARCH_RUN.
+ * Kept as literals (not imported from prospectingDailySelection.ts) for the same reason QUEUE_FULL_THRESHOLD is.
+ */
+export const SELECTABLE_SKIP_AT = 15; // DAILY_SET_MAX
+export const SELECTABLE_THIN_AT = 8; // DAILY_SET_MIN
+
+export type SearchBreadth = { skip: true; reason: string } | { skip: false; topics: number };
+
+export function planSearchBreadth(selectableCount: number): SearchBreadth {
+  if (selectableCount >= SELECTABLE_SKIP_AT) {
+    return { skip: true, reason: `enough_waiting (${selectableCount} selectable candidates already queued, the daily set shows at most ${SELECTABLE_SKIP_AT})` };
+  }
+  if (selectableCount >= SELECTABLE_THIN_AT) return { skip: false, topics: 1 };
+  return { skip: false, topics: TOPICS_PER_SEARCH_RUN };
+}
+
 export interface EligibilityCheckResult {
   eligible: boolean;
   reason?: string;

@@ -272,4 +272,89 @@ describe("runProspectingSearch", () => {
     const inserted = [...repo.rows.values()][0]!;
     expect(inserted.scoreBreakdown.priorRelationship).toMatch(/already replied/);
   });
+
+  describe("search breadth follows what is already selectable (2026-10-14 cost cut)", () => {
+    async function seedSelectable(repo: FakeProspectingRepo, count: number) {
+      for (let i = 0; i < count; i++) {
+        await repo.upsertIfNew({
+          platform: "x",
+          externalId: `waiting-${i}`,
+          discoveryQuery: "drawdown",
+          authorHandle: `author${i}`,
+          authorExternalId: `author-${i}`,
+          authorName: null,
+          authorFollowerCount: 800,
+          authorVerified: false,
+          postText: "how do you manage trailing drawdown on a funded account?",
+          postUrl: `https://x.com/i/web/status/waiting-${i}`,
+          postCreatedAt: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+          publicMetrics: {},
+          opportunityScore: 60,
+          scoreBreakdown: {},
+          creatorCandidate: false,
+          discoveredAt: now.toISOString(),
+        });
+      }
+    }
+    const run = (repo: FakeProspectingRepo, adapter: any, extra: Record<string, unknown> = {}) =>
+      runProspectingSearch({ adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
+
+    it("makes no X read when a full daily set (15) is already waiting", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const repo = new FakeProspectingRepo();
+      await seedSelectable(repo, 15);
+      const result = await run(repo, adapter);
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toMatch(/enough_waiting/);
+      expect(result.costUsd).toBe(0);
+      expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+    });
+
+    it("searches one topic instead of two once the daily minimum (8) is waiting", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const repo = new FakeProspectingRepo();
+      await seedSelectable(repo, 8);
+      const result = await run(repo, adapter);
+      expect(result.skipped).toBe(false);
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
+      expect(result.selectableBefore).toBe(8);
+    });
+
+    it("searches the full slice when fewer than 8 are waiting", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const repo = new FakeProspectingRepo();
+      await seedSelectable(repo, 7);
+      await run(repo, adapter);
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(TOPICS_PER_SEARCH_RUN);
+    });
+
+    it("does not count candidates that are not selectable (stale, or off-topic)", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const repo = new FakeProspectingRepo();
+      await seedSelectable(repo, 15);
+      for (const row of repo.rows.values()) row.postCreatedAt = new Date(now.getTime() - 30 * 60 * 60 * 1000).toISOString();
+      const result = await run(repo, adapter);
+      expect(result.skipped).toBe(false);
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(TOPICS_PER_SEARCH_RUN);
+    });
+
+    it("an owner-triggered search now (runIndexOverride) always searches the full slice", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const repo = new FakeProspectingRepo();
+      await seedSelectable(repo, 15);
+      const result = await run(repo, adapter, { runIndexOverride: 3 });
+      expect(result.skipped).toBe(false);
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(TOPICS_PER_SEARCH_RUN);
+    });
+
+    it("a thinned run searches the FIRST topic of the same slice, so rotation position is unchanged", async () => {
+      const full = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      await run(new FakeProspectingRepo(), full);
+      const thin = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const repo = new FakeProspectingRepo();
+      await seedSelectable(repo, 9);
+      await run(repo, thin);
+      expect(thin.searchRecentPosts.mock.calls[0]![0]).toBe(full.searchRecentPosts.mock.calls[0]![0]);
+    });
+  });
 });

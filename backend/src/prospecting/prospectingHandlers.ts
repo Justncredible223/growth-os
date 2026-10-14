@@ -53,6 +53,7 @@ export function toProspectingJson(candidate: ProspectingCandidate) {
 }
 
 const NON_TERMINAL_STATUSES = ["new", "shown", "drafting", "ready"] as const;
+const TERMINAL_STATUSES: readonly string[] = ["replied", "skipped", "not_relevant", "already_handled", "expired"];
 
 /**
  * Why today's set looks the way it does -- added 2026-09-07 alongside the
@@ -186,6 +187,14 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   const repo = repoFor(client, deps);
   const row = await repo.getById(id);
   if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
+
+  // Never pay for the same post twice (2026-10-14 cost cut). The app only offers "Draft reply" on a card with no
+  // draft, so a second call here is a double tap or a stale client: hand back the draft that already exists. A card the
+  // owner has already closed out is refused outright. Both return before any relevance check or model call.
+  if (row.status === "ready" && row.draftReply) return row;
+  if (TERMINAL_STATUSES.includes(row.status)) {
+    throw new ProspectingActionError(`Not drafting -- this candidate is already ${row.status.replace("_", " ")}.`);
+  }
 
   if (!isReplyWorthyPost(row.postText)) {
     await repo.updateStatus(id, "not_relevant");
