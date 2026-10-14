@@ -29,6 +29,7 @@ import { createYoutubeCommentAdapter } from "../src/signals/adapters/youtubeAdap
 import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
 import { isMissingPostingTables, saveOwnTweets, syncYoutubeStats } from "../src/posting/postingRepository.js";
 import { recordXOwnedReadCostEvent } from "../src/cost/costTracking.js";
+import { loadOwnPostsSyncState, runOwnPostsStep } from "../src/posting/ownPostsRefresh.js";
 import { runEngagementAutoFill } from "../src/engagement/engagementAutoFill.js";
 import { AUTOFILL_HEALTH_KEY } from "../src/engagement/engagementHandlers.js";
 
@@ -411,12 +412,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Checked first so a missing table never spends an X read.
         const { error: tableError } = await client.from("x_own_posts").select("tweet_id").limit(1);
         if (tableError && isMissingPostingTables(new Error(`x_own_posts: ${tableError.message} ${tableError.code ?? ""}`))) return "skipped -- migration 0043 not applied yet";
-        const reads = getXReads();
-        const userId = await reads.resolveOwnUserId(now);
-        const tweets = await reads.adapter.fetchOwnTweets(userId, 60, now);
-        const cost = await recordXOwnedReadCostEvent(client, tweets.length, { endpoint: "users/tweets", purpose: "results_tracking" });
-        const saved = await saveOwnTweets(client, tweets, now);
-        return `${saved.saved} own tweets (${saved.replies} replies, ${saved.matched} matched to Prospecting), $${cost.toFixed(3)}`;
+        // Once a day, sized to the tweets whose views can still change (src/posting/ownPostsRefresh.ts). A manual
+        // run can pass ?forceOwnPosts=1 to read regardless of the cadence.
+        const force = req.query.forceOwnPosts === "1" || req.query.forceOwnPosts === "true";
+        const state = await loadOwnPostsSyncState(client, now);
+        return runOwnPostsStep({
+          state,
+          now,
+          force,
+          // Resolved lazily: a skipped run makes no X call at all, not even the user-id lookup.
+          fetchOwnTweets: async (maxResults) => {
+            const reads = getXReads();
+            return reads.adapter.fetchOwnTweets(await reads.resolveOwnUserId(now), maxResults, now);
+          },
+          recordCost: (n) => recordXOwnedReadCostEvent(client, n, { endpoint: "users/tweets", purpose: "results_tracking" }),
+          save: (tweets) => saveOwnTweets(client, tweets, now),
+        });
       }),
     );
   }
