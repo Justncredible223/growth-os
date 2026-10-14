@@ -31,6 +31,7 @@ import { TtsDaemon } from "./ttsDaemon.js";
 import { OBS_SOURCE_NAME } from "./setupObs.js";
 import { TiktokChatReader } from "./tiktokChat.js";
 import { LIVE_HOST_SEGMENTS } from "../../src/liveHost/liveHostPersona.js";
+import { parseCostMode } from "../../src/liveHost/liveHostModels.js";
 import { checkSpokenLine, screenIncomingMessage } from "../../src/liveHost/liveHostGuardrails.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -287,7 +288,8 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     pythonCommand: env.LIVE_HOST_PYTHON || "python",
     duo: (env.LIVE_HOST_MODE || "").toLowerCase() === "duo",
     hostName: env.LIVE_HOST_COHOST_NAME || "Host",
-    costMode: ["quality", "balanced", "low"].includes((env.LIVE_HOST_COST || "").toLowerCase()) ? (env.LIVE_HOST_COST as string).toLowerCase() : "quality",
+    // Default balanced; LIVE_HOST_COST_MODE=quality (or the older LIVE_HOST_COST) flips it back.
+    costMode: parseCostMode(env.LIVE_HOST_COST_MODE || env.LIVE_HOST_COST, {} as NodeJS.ProcessEnv),
     cohostSide: (["left", "right", "down"] as const).find((side) => side === (env.LIVE_HOST_COHOST_SIDE || "").toLowerCase()) ?? "down",
   };
 }
@@ -453,6 +455,7 @@ export async function runWorker(config: WorkerConfig): Promise<void> {
   const workDir = join(tmpdir(), "fillbook-live-host");
   rmSync(workDir, { recursive: true, force: true });
   mkdirSync(workDir, { recursive: true });
+  log(`cost mode: ${config.costMode} (set LIVE_HOST_COST_MODE=quality to flip back)`);
 
   // Keep one voice process warm: starting Python and importing edge_tts costs several seconds on some PCs.
   ttsDaemon = new TtsDaemon(config.pythonCommand, [TTS_SERVER_SCRIPT], log);

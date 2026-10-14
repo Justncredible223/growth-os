@@ -98,7 +98,7 @@ character. Education and entertainment only, not financial advice."
    Supabase SQL editor. Until then the app tab says "isn't set up yet".
 2. **Server env (Vercel).** `APP_API_TOKEN_AUTOMATION` (32+ characters) must
    be set; the worker uses it. `YOUTUBE_API_KEY` must be set for YouTube
-   chat. `ANTHROPIC_API_KEY` is already used by the rest of Growth OS.
+   chat. Growth OS reads `GROWTH_OS_ANTHROPIC_API_KEY` first (fallback `ANTHROPIC_API_KEY`).
 3. **App.** Rebuild and install the Android app (JDK 17 to 21). Live Host is
    in the More sheet.
 4. **OBS on the PC.** Install OBS Studio 28 or newer.
@@ -417,11 +417,14 @@ What is on regardless of mode:
   85 percent so do those, so he keeps talking within the budget instead of going silent;
 - the daily budget ($3 by default, set in the app) is a hard stop.
 
-Choose a tier with `LIVE_HOST_COST` in the worker's environment:
+Choose a tier with `LIVE_HOST_COST_MODE` in the worker's environment (the older `LIVE_HOST_COST` still works; the
+server also reads `LIVE_HOST_COST_MODE` when a worker sends no mode). **Default since 2026-10-13: `balanced`.** To flip
+back, set `LIVE_HOST_COST_MODE=quality` and restart the worker. The mode is printed at worker start, returned as
+`costMode` on every tick and stored in the session's `worker_info.costMode`, so each stream's mode is visible.
 
-- `quality` (default): the stronger model for every line. Tightest and funniest; about $0.90 an hour engaged.
-- `balanced`: the routine joke-and-hook segments on the cheaper model; about 40 percent less. Measured side by side the
-  cheaper model's lines run 55 to 70 words against 48 to 57, and are flatter.
+- `quality`: the stronger model for every line. Tightest and funniest; about $0.90 an hour engaged.
+- `balanced` (default): the routine joke-and-hook segments on the cheaper model; about 40 percent less. Measured side by
+  side the cheaper model's lines run 55 to 70 words against 48 to 57, and are flatter.
 - `low`: chat answers too, fact segments excepted; about 65 percent less.
 
 The worker prints `spent today $X` with every line it speaks.
@@ -513,3 +516,22 @@ captures from the seeded demo account in `verified-manifest.json` (example data,
 an "EXAMPLE DATA from the Fillbook app" label. The stage can load nothing else: the worker serves exactly those three
 files by name (`STAGE_ASSET_NAMES`), and a test checks their bytes against the manifest's hashes. It rides on the site
 card, so it never shows on the TikTok layout.
+
+## Anthropic keys per app
+
+Each app uses its own key so one can be rotated without touching the others. Growth OS reads
+`GROWTH_OS_ANTHROPIC_API_KEY` first and only falls back to `ANTHROPIC_API_KEY` until the new variable is set.
+`/api/health` (AI provider item) and `/api/summary?view=cost` show `llmKeySource`: `dedicated`, `shared-fallback` or
+`missing` (a name only, never a value).
+
+| App | Where | Variable |
+| --- | --- | --- |
+| Growth OS backend | Vercel project `fillbook-growth-os` | `GROWTH_OS_ANTHROPIC_API_KEY` (fallback `ANTHROPIC_API_KEY`) |
+| Growth OS campaign workflow | GitHub secret on `Justncredible223/growth-os`, `.github/workflows/campaign-run.yml` | secret `GROWTH_OS_ANTHROPIC_API_KEY` (fallback secret `ANTHROPIC_API_KEY`), also `ANTHROPIC_WORKSPACE_ID` |
+| Fillbook site | Vercel project `fillbook` (`insights.ts`, `weeklyReviewAi.ts`) | `ANTHROPIC_API_KEY`, with its own dedicated key value |
+
+Owner steps (no values in chat): in the Anthropic console create keys named `growth-os-backend` and `fillbook-site`;
+in Vercel project `fillbook-growth-os` add `GROWTH_OS_ANTHROPIC_API_KEY` (Production, plus Preview if used) and redeploy;
+add the same GitHub secret `GROWTH_OS_ANTHROPIC_API_KEY`; in Vercel project `fillbook` replace the value of
+`ANTHROPIC_API_KEY` with the `fillbook-site` key and redeploy. Confirm `llmKeySource` is `dedicated`, then remove the
+shared fallback and revoke the old shared key.

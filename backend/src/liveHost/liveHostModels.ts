@@ -7,8 +7,8 @@
  */
 
 /**
- * quality (default): the stronger model for every line except welcomes and duo replies.
- * balanced: routine joke-and-hook segments on the fast model (about 40 percent cheaper; wordier and flatter).
+ * quality: the stronger model for every line except welcomes and duo replies.
+ * balanced (default since 2026-10-13): routine joke-and-hook segments on the fast model (about 40 percent cheaper; wordier and flatter).
  * low: chat answers too, fact segments excepted.
  * Whatever the mode, the host drops to the fast model as the daily budget is used (see the thresholds below).
  */
@@ -22,8 +22,20 @@ export const ECONOMY_FROM_SPEND_FRACTION = 0.6;
 /** Share after which even fact segments do. Better a plainer line than a silent stream. */
 export const ECONOMY_ALL_FROM_SPEND_FRACTION = 0.85;
 
-export function parseCostMode(value: unknown): CostMode {
-  return value === "quality" || value === "low" || value === "balanced" ? value : "quality";
+/** The default tier. Flip back with LIVE_HOST_COST_MODE=quality (worker or server env). */
+export const DEFAULT_COST_MODE: CostMode = "balanced";
+
+function asCostMode(value: unknown): CostMode | null {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : value;
+  return v === "quality" || v === "low" || v === "balanced" ? v : null;
+}
+
+/**
+ * Resolution order: an explicit valid value (the worker sends one per tick), then LIVE_HOST_COST_MODE (or the older
+ * LIVE_HOST_COST) from the environment, then the default, balanced.
+ */
+export function parseCostMode(value: unknown, env: NodeJS.ProcessEnv = process.env): CostMode {
+  return asCostMode(value) ?? asCostMode(env.LIVE_HOST_COST_MODE) ?? asCostMode(env.LIVE_HOST_COST) ?? DEFAULT_COST_MODE;
 }
 
 export interface ModelChoiceInput {

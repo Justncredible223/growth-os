@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import { llmKeySource } from "../src/content/llmKey.js";
 import { loadVideoHealth } from "../src/video/videoHealth.js";
 import { retiredStepSkip } from "../src/retiredSteps.js";
 import { INBOUND_CURSOR_SOURCE } from "../src/inbound/inboundIngestion.js";
@@ -12,6 +13,8 @@ interface HealthItem {
   label: string;
   status: string;
   detail: string;
+  /** Name-only: which variable supplies the Anthropic key. Never a value. */
+  llmKeySource?: "dedicated" | "shared-fallback" | "missing";
 }
 
 /**
@@ -23,19 +26,21 @@ interface HealthItem {
  * out-of-band (see docs/PROGRESS_LEDGER.md Phase 6).
  */
 function checkAiProvider(): HealthItem {
-  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const keySource = llmKeySource();
+  const hasKey = keySource !== "missing";
   const hasWorkspace = Boolean(process.env.ANTHROPIC_WORKSPACE_ID);
   if (hasKey && hasWorkspace) {
-    return { label: "AI provider", status: "HEALTHY", detail: "ANTHROPIC_API_KEY + ANTHROPIC_WORKSPACE_ID configured" };
+    return { label: "AI provider", status: "HEALTHY", detail: `${keySource === "dedicated" ? "GROWTH_OS_ANTHROPIC_API_KEY" : "ANTHROPIC_API_KEY (shared fallback; set GROWTH_OS_ANTHROPIC_API_KEY)"} + ANTHROPIC_WORKSPACE_ID configured`, llmKeySource: keySource };
   }
   if (hasKey && !hasWorkspace) {
     return {
       label: "AI provider",
       status: "DEGRADED",
-      detail: "ANTHROPIC_API_KEY set but ANTHROPIC_WORKSPACE_ID missing -- identity-linked keys need both",
+      detail: "Anthropic key set but ANTHROPIC_WORKSPACE_ID missing -- identity-linked keys need both",
+      llmKeySource: keySource,
     };
   }
-  return { label: "AI provider", status: "NOT_CONNECTED", detail: "Needs an API key for deep content review (owner action)" };
+  return { label: "AI provider", status: "NOT_CONNECTED", detail: "Needs an API key for deep content review (owner action)", llmKeySource: keySource };
 }
 
 /**

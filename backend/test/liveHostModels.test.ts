@@ -5,12 +5,12 @@ import { LIVE_HOST_SEGMENTS } from "../src/liveHost/liveHostPersona";
 const base = { mode: "balanced" as const, segmentId: null, joinWelcome: false, duoReply: false, spendFraction: 0 };
 
 describe("parseCostMode", () => {
-  it("accepts the three modes and falls back to quality", () => {
+  it("accepts the three modes and falls back to balanced", () => {
     expect(parseCostMode("quality")).toBe("quality");
     expect(parseCostMode("low")).toBe("low");
     expect(parseCostMode("balanced")).toBe("balanced");
-    expect(parseCostMode("cheap")).toBe("quality");
-    expect(parseCostMode(undefined)).toBe("quality");
+    expect(parseCostMode("cheap")).toBe("balanced");
+    expect(parseCostMode(undefined)).toBe("balanced");
   });
 });
 

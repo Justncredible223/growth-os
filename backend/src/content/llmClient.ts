@@ -1,3 +1,4 @@
+import { logLlmKeySourceOnce, resolveAnthropicKey } from "./llmKey.js";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 export const MODEL_SONNET = "claude-sonnet-4-5-20250929";
@@ -243,13 +244,14 @@ export function createLlmClient(
   onUsage?: (usage: LlmUsage) => unknown,
   options: { step?: string; guard?: LlmBudgetGuard } = {},
 ): LlmClient {
-  const apiKey = env.ANTHROPIC_API_KEY;
+  const { apiKey, source } = resolveAnthropicKey(env);
   if (!apiKey) {
     throw new LlmClientError(
-      "ANTHROPIC_API_KEY is not set in the environment. Add it to backend/.env.local for local " +
+      "GROWTH_OS_ANTHROPIC_API_KEY (or the transitional fallback ANTHROPIC_API_KEY) is not set in the environment. Add it to backend/.env.local for local " +
         "dev and to Vercel's project env vars for production -- never commit it.",
     );
   }
+  logLlmKeySourceOnce(source);
   // Identity-linked keys (the default type Console now issues) require the
   // workspace they act in to be named explicitly on every request.
   return new LlmClient(apiKey, fetch, env.ANTHROPIC_WORKSPACE_ID, onUsage, DEFAULT_RETRY, options);

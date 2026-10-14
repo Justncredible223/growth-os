@@ -14,7 +14,7 @@ import { createYoutubeLiveChatAdapter, type YoutubeLiveChatAdapter } from "../si
 import { FALLBACK_AUTHOR_NAME, checkSpokenLine, mentionsFillbook, safeAuthorName, screenIncomingMessage } from "./liveHostGuardrails.js";
 import { matchInstantAnswer } from "./liveHostInstant.js";
 import { spokenWordLimit, trimToWords, wordCount } from "./liveHostLength.js";
-import { FACT_SEGMENTS, parseCostMode, useFastModel } from "./liveHostModels.js";
+import { FACT_SEGMENTS, parseCostMode, useFastModel, type CostMode } from "./liveHostModels.js";
 import { OPENING_DEFAULTS, stripChatReactionClaims, varietyGuidance, varietyProblem } from "./liveHostVariety.js";
 import { LIVE_HOST_EXAMPLE_LINES, LIVE_HOST_NAME, LIVE_HOST_SEGMENTS, nextSegment } from "./liveHostPersona.js";
 import { draftLiveLine, type ChatMessageForDraft, type LiveHostGrounding, type LiveLineDraft, type RecentExchange } from "./liveHostWriter.js";
@@ -509,7 +509,7 @@ export interface TickInput {
   fresh?: boolean;
   /** The worker wants new comments reported on their own tick, before an answer is drafted (it acknowledges them). */
   ackFirst?: boolean;
-  /** "quality" (default: the stronger model for every line), "balanced" (fast model for routine segments) or "low". */
+  /** "balanced" (default: fast model for routine segments), "quality" (the stronger model for every line) or "low". */
   costMode?: unknown;
   /**
    * Duo mode only: the co-host pressed "run a segment". Runs one segment now, skipping the quiet-time wait, as
@@ -545,6 +545,8 @@ export interface TickResult {
   joinsWelcomed?: boolean;
   /** Today's recorded Live Host spend in dollars, when this tick looked it up. */
   spendTodayUsd?: number;
+  /** The cost mode this stream runs in (balanced, quality or low); also stored in the session's worker_info. */
+  costMode?: CostMode;
   /** Where the time went on a tick that drafted a line, in milliseconds. */
   timingsMs?: { draft: number };
   /** Moves viewers asked for in new chat this tick ("dance", "spin"...). The worker plays them on the stage at once. */
@@ -737,16 +739,19 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
       session = null;
     }
   }
+  // Recorded per stream so the owner can see which mode a stream used (A/B balanced vs quality).
+  const costMode = parseCostMode(input.costMode);
+  const workerInfo = { ...(input.workerInfo ?? {}), costMode };
   if (!session) {
     const { data, error } = await client
       .from("live_host_sessions")
-      .insert({ status: "live", started_at: now.toISOString(), last_heartbeat_at: now.toISOString(), worker_info: input.workerInfo ?? {} })
+      .insert({ status: "live", started_at: now.toISOString(), last_heartbeat_at: now.toISOString(), worker_info: workerInfo })
       .select("*")
       .single();
     if (error) throw new Error(`create live_host_sessions failed: ${error.message}`);
     session = toSession(data as SessionRow);
   } else {
-    await client.from("live_host_sessions").update({ last_heartbeat_at: now.toISOString(), worker_info: input.workerInfo ?? {} }).eq("id", session.id);
+    await client.from("live_host_sessions").update({ last_heartbeat_at: now.toISOString(), worker_info: workerInfo }).eq("id", session.id);
   }
 
   const base: TickResult = {
@@ -756,6 +761,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
     tiktok: { chatEnabled: settings.tiktokChatEnabled, username: settings.tiktokUsername },
     utterance: null,
     note: null,
+    costMode,
   };
 
   // Take in chat first, even while the host is mid-sentence, so nothing typed is lost.
@@ -990,7 +996,7 @@ async function runTick(client: SupabaseClient, input: TickInput, deps: TickDeps,
   const wordLimit = spokenWordLimit({ duo: input.duo === true, show: segment?.show === true, segment: segment !== null, joinWelcome });
 
   const fastModel = useFastModel({
-    mode: parseCostMode(input.costMode),
+    mode: costMode,
     segmentId: segment?.id ?? null,
     joinWelcome,
     duoReply: input.duo === true && batch.length > 0,
