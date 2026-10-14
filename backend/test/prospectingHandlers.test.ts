@@ -759,3 +759,45 @@ describe("mention budget (cold replies naming Fillbook too often, 2026-09-30)", 
     expect(updated.draftReply).toBe(plain.reply);
   });
 });
+
+describe("draftProspectingCandidateReply -- never pays for the same post twice (2026-10-14)", () => {
+  const fakeClient = {} as any;
+  const grounding = async () => ({ brandRulesSummary: "", verifiedKnowledgeSummary: "" });
+  const deps = (repo: InMemoryProspectingRepository) => ({
+    repo,
+    loadGrounding: grounding,
+    loadStyleExamples: async () => [],
+    loadRecovery: async () => ({ active: false, dailyCap: null, maxPostAgeHours: null, visibility: null }) as any,
+    drafter: vi.fn(async () => ({ isRelevant: true, reply: "A real, specific reply.", mentionsFillbook: false, usesLink: false, showcase: "none" })),
+    cheapRelevanceCheck: vi.fn(async () => true),
+  });
+
+  it("returns an existing ready draft without any relevance check or model call", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "r1", status: "ready", draftReply: "Existing draft." }));
+    const d = deps(repo);
+    const out = await draftProspectingCandidateReply(fakeClient, "r1", d);
+    expect(out.draftReply).toBe("Existing draft.");
+    expect(d.cheapRelevanceCheck).not.toHaveBeenCalled();
+    expect(d.drafter).not.toHaveBeenCalled();
+  });
+
+  it("refuses a candidate the owner already closed out, with no model call", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "s1", status: "skipped" }));
+    const d = deps(repo);
+    await expect(draftProspectingCandidateReply(fakeClient, "s1", d)).rejects.toBeInstanceOf(ProspectingActionError);
+    expect(d.cheapRelevanceCheck).not.toHaveBeenCalled();
+    expect(d.drafter).not.toHaveBeenCalled();
+  });
+
+  it("still drafts a shown card that has no draft yet, relevance check first", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "n1", status: "shown", postText: "does trailing drawdown reset daily on a funded account?" }));
+    const d = deps(repo);
+    const out = await draftProspectingCandidateReply(fakeClient, "n1", d);
+    expect(out.status).toBe("ready");
+    expect(d.cheapRelevanceCheck).toHaveBeenCalledTimes(1);
+    expect(d.drafter).toHaveBeenCalledTimes(1);
+  });
+});

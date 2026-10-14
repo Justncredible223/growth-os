@@ -202,3 +202,15 @@ and no credentials were ever obtained. Prospecting is X-only today.
 - `creator_candidate` is a follower-count heuristic only, not the six-axis
   vetting `MASTER_SOCIAL_STRATEGY.md` describes for real creator
   evaluation -- it's a "consider this" flag, not a verdict.
+
+## Update 2026-10-14 -- cost cut
+
+- The scheduled search counts how many candidates are already *selectable* (reply-worthy, under 12h old, past the quality
+  bar, one per author). 15 or more waiting: no X read at all. 8 to 14: one topic instead of two. Fewer than 8: unchanged.
+  The owner-triggered "search now" always searches the full slice.
+- `since_id` per query was considered and rejected: topics come round about every 8 days while discovery already asks X for
+  only the last 12 hours, so a per-topic cursor would never exclude anything.
+- Drafting is owner-tap only (`approvals?resource=prospecting`, action `draft`); nothing pre-drafts. A second draft call on a
+  card that already has a draft returns it without a relevance check or model call.
+- Results' own-tweets read (`x_own_posts`) now runs once a day and asks X only for the tweets whose views can still change.
+- Step summaries for `x_prospecting` and `x_own_posts` end with `X reads: n posts $x; LLM: n calls $y`.
