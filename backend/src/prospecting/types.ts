@@ -1,3 +1,5 @@
+import type { DraftOption, PostedStyle } from "./prospectingDraftOptions.js";
+
 export type ProspectingStatus =
   | "new"
   | "shown"
@@ -30,6 +32,13 @@ export interface ProspectingCandidate {
   shownAt: string | null;
   openedAt: string | null;
   draftReply: string | null;
+  /**
+   * Reply-style experiment: the drafted options (sharp / helpful). draftReply is always the first option's text, so older
+   * app builds keep working. Absent or null on drafts made before the experiment.
+   */
+  draftOptions?: DraftOption[] | null;
+  /** Which style the owner actually posted (set when marked replied). Absent or null before the experiment. */
+  postedStyle?: PostedStyle | null;
   finalReply: string | null;
   replyMentionsFillbook: boolean | null;
   replyUsedLink: boolean | null;
@@ -73,7 +82,7 @@ export interface ProspectingRepository {
     fields?: Partial<
       Pick<
         ProspectingCandidate,
-        "openedAt" | "draftReply" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
+        "openedAt" | "draftReply" | "draftOptions" | "postedStyle" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
       >
     >,
   ): Promise<void>;

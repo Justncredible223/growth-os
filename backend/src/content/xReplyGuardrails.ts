@@ -363,6 +363,8 @@ export interface DraftAssessment {
   hard: string | null;
   /** A style tell: worth one retry, never a reason to refuse. */
   soft: string | null;
+  /** The exact text the reason is about, when it is not draft.reply (e.g. one of two reply options). */
+  rejectedText?: string;
 }
 
 /**
@@ -381,7 +383,8 @@ export async function draftWithRetries<T extends { reply: string }>(options: {
   let hardReason: string | null = null;
   for (let attempt = 1; attempt <= MAX_DRAFT_ATTEMPTS; attempt++) {
     const draft = await options.generate(feedback);
-    const { hard, soft } = options.assess(draft);
+    const assessment = options.assess(draft);
+    const { hard, soft } = assessment;
     if (!hard) {
       if (!soft) return { draft, hardReason: null };
       acceptable = draft;
@@ -389,7 +392,7 @@ export async function draftWithRetries<T extends { reply: string }>(options: {
     } else {
       hardReason = hard;
     }
-    feedback = buildRetryFeedback(draft.reply, (hard ?? soft) as string);
+    feedback = buildRetryFeedback(assessment.rejectedText ?? draft.reply, (hard ?? soft) as string);
   }
   return { draft: acceptable, hardReason: acceptable ? null : hardReason };
 }

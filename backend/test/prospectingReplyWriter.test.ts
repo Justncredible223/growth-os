@@ -31,6 +31,11 @@ async function capturePrompt(platform: string, extra: Partial<Parameters<typeof 
   return { system: systemText(body.system), user: body.messages[0].content as string };
 }
 
+/** The single-style prompt (PROSPECTING_TWO_OPTION_DRAFTS off), which is what these assertions were written against. */
+function singleStyleSystem(platform: string): { system: string } {
+  return { system: buildProspectingSystemPrompt(prospectingPlatformProfile(platform)) };
+}
+
 describe("draftProspectingReply", () => {
   it("passes the real post text, author handle, and discovery topic into the prompt", async () => {
     const fetchMock = vi.fn().mockResolvedValue(replyResponse("Most firms reset at end of day, worth checking your rulebook.", false, false));
@@ -68,7 +73,7 @@ describe("draftProspectingReply", () => {
   });
 
   it("REFINED (2026-09-25): on X, a reply to a problem Fillbook answers shows what Fillbook would show them, as the point of the reply rather than an aside", async () => {
-    const { system } = await capturePrompt("x");
+    const { system } = singleStyleSystem("x");
 
     expect(system).not.toMatch(/90%\+/);
     expect(system).not.toContain("thoughtful trader or builder joining the conversation");
@@ -81,7 +86,7 @@ describe("draftProspectingReply", () => {
   });
 
   it("lists every verified Fillbook view with what it shows, so the reply can only describe real screens", async () => {
-    const { system } = await capturePrompt("x");
+    const { system } = singleStyleSystem("x");
 
     for (const view of FILLBOOK_SHOWCASE_VIEWS) {
       expect(system).toContain(`- ${view.id}: for ${view.problems}. Fillbook shows ${view.shows}.`);
@@ -101,7 +106,7 @@ describe("draftProspectingReply", () => {
   });
 
   it("an unrecognized platform also keeps the conservative default, never X's more structured one", async () => {
-    const { system } = await capturePrompt("mastodon");
+    const { system } = singleStyleSystem("mastodon");
     expect(system).toMatch(/90%\+/);
   });
 

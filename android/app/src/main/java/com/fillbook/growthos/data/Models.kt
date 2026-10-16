@@ -331,6 +331,9 @@ data class ProspectingSearchRunResult(
     val costUsd: Double,
 )
 
+/** One drafted reply option ("sharp" or "helpful") from the reply-style experiment. */
+data class DraftOption(val style: String, val text: String)
+
 data class ProspectingCandidate(
     val id: String,
     /** Lowercase platform key from the server ("x") -- drives which app "Copy + Open" launches and how the confirmation reads. */
@@ -356,6 +359,8 @@ data class ProspectingCandidate(
     val status: String,
     /** Only present once a draft has actually been generated -- never fabricated client-side. */
     val draftReply: String?,
+    /** Sharp + helpful options when the server drafted two (draftReply is the first one); empty for older drafts, which keep the single box. */
+    val draftOptions: List<DraftOption> = emptyList(),
     val replyMentionsFillbook: Boolean?,
     val replyUsedLink: Boolean?,
 )

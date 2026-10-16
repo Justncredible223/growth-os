@@ -1,0 +1,91 @@
+import { checkReplySoftStyle } from "../content/xReplyGuardrails.js";
+
+/**
+ * Reply-style experiment (owner direction 2026-10-16). The cold-reply drafter returns TWO options in one model
+ * call so the owner can pick, and which one was actually posted is recorded so the Monday review can compare
+ * views and likes per style. Nothing here posts anything; the owner still posts every reply by hand.
+ */
+export type DraftStyle = "sharp" | "helpful";
+
+export interface DraftOption {
+  style: DraftStyle;
+  text: string;
+}
+
+/** What gets recorded for a posted reply. "edited" = the posted text matched neither option; "legacy" = a single-style draft. */
+export type PostedStyle = DraftStyle | "edited" | "legacy";
+
+/**
+ * THE REVERT SWITCH. true = Prospecting cold replies are drafted as two options (sharp + helpful) with the style block
+ * in the prompt; false = exactly the previous single-draft behavior (old prompt, one reply). Nothing else needs to change.
+ */
+export const PROSPECTING_TWO_OPTION_DRAFTS = true;
+
+export const SHARP_MIN_WORDS = 8;
+export const SHARP_MAX_WORDS = 25;
+export const HELPFUL_MAX_SENTENCES = 2;
+
+/** Where the options live on the row: inside the existing score_breakdown JSON column, so no migration is needed. */
+export const DRAFT_OPTIONS_KEY = "draft_options";
+export const POSTED_STYLE_KEY = "posted_style";
+
+export function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function sentenceCount(text: string): number {
+  return text.split(/[.!?]+(?:\s|$)/).filter((part) => part.trim().length > 0).length;
+}
+
+const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
+
+/** True when the post itself brings up Fillbook, the only case where a cold reply may name it. */
+export function postMentionsFillbook(postText: string): boolean {
+  return /\bfillbook/i.test(postText);
+}
+
+/** Soft style problems for one option (a retry hint, never a reason to refuse). Null when it is fine. */
+export function optionSoftProblem(style: DraftStyle, text: string): string | null {
+  const base = checkReplySoftStyle(text)?.reason;
+  if (base) return base;
+  if (style === "sharp") {
+    const words = wordCount(text);
+    if (words < SHARP_MIN_WORDS || words > SHARP_MAX_WORDS) return `is ${words} words; the sharp option must be ${SHARP_MIN_WORDS} to ${SHARP_MAX_WORDS} words`;
+    if (sentenceCount(text) > 2) return "runs more than two short sentences; the sharp option is a single line";
+    return null;
+  }
+  const sentences = sentenceCount(text);
+  if (sentences > HELPFUL_MAX_SENTENCES) return `runs ${sentences} sentences; the helpful option is at most ${HELPFUL_MAX_SENTENCES}`;
+  return null;
+}
+
+/** Parses the stored JSON, tolerating anything malformed (returns null rather than throwing). */
+export function parseDraftOptions(raw: unknown): DraftOption[] | null {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(value)) return null;
+  const out: DraftOption[] = [];
+  for (const item of value) {
+    const style = (item as { style?: unknown })?.style;
+    const text = (item as { text?: unknown })?.text;
+    if ((style === "sharp" || style === "helpful") && typeof text === "string" && text.trim()) out.push({ style, text });
+  }
+  return out.length > 0 ? out : null;
+}
+
+/** Which style the posted text is. Whitespace-insensitive exact match to an option; anything else is "edited". */
+export function matchPostedStyle(postedText: string | null | undefined, options: DraftOption[] | null | undefined, draftReply: string | null | undefined): PostedStyle {
+  const posted = normalize(postedText ?? "");
+  if (!posted) return "edited";
+  if (options && options.length > 0) {
+    const hit = options.find((o) => normalize(o.text) === posted);
+    return hit ? hit.style : "edited";
+  }
+  return draftReply && normalize(draftReply) === posted ? "legacy" : "edited";
+}

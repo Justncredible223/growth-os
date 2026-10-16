@@ -2,6 +2,7 @@ import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
 import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
 import { SHOWCASE_IDS, SHOWCASE_REPLY_GUIDANCE } from "../content/fillbookShowcase.js";
 import { formatStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
+import { PROSPECTING_TWO_OPTION_DRAFTS, SHARP_MAX_WORDS, SHARP_MIN_WORDS } from "./prospectingDraftOptions.js";
 
 const CHEAP_RELEVANCE_SCHEMA = {
   type: "object",
@@ -15,8 +16,8 @@ const CHEAP_RELEVANCE_SCHEMA = {
   required: ["isRelevant"],
 };
 
-/** A reply is one to three sentences plus four flags; 600 output tokens is far above any valid answer and bounds a runaway one. */
-const REPLY_DRAFT_MAX_TOKENS = 600;
+/** Two short replies plus four flags; 800 output tokens is far above any valid answer and bounds a runaway one. */
+const REPLY_DRAFT_MAX_TOKENS = 800;
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -40,6 +41,60 @@ const DRAFT_SCHEMA = {
   },
   required: ["isRelevant", "reply", "mentionsFillbook", "usesLink", "showcase"],
 };
+
+/** The two-option schema: `reply` is the sharp option (so every consumer of `reply` keeps working) and `helpfulReply` is the second. */
+const TWO_OPTION_DRAFT_SCHEMA = {
+  type: "object",
+  properties: {
+    ...DRAFT_SCHEMA.properties,
+    reply: {
+      type: "string",
+      description: `OPTION A, "sharp": one line, ${SHARP_MIN_WORDS} to ${SHARP_MAX_WORDS} words, reacting to a specific detail in THEIR post. Empty string when isRelevant is false.`,
+    },
+    helpfulReply: {
+      type: "string",
+      description: 'OPTION B, "helpful": at most two sentences with one concrete thing (a number, rule or situation) tied to a specific detail in THEIR post. Empty string when isRelevant is false.',
+    },
+    mentionsFillbook: { type: "boolean", description: "True only if EITHER option actually names Fillbook (almost always false for a cold reply)." },
+    usesLink: { type: "boolean", description: "Always false for a cold reply: neither option may contain a link." },
+  },
+  required: ["isRelevant", "reply", "helpfulReply", "mentionsFillbook", "usesLink", "showcase"],
+};
+
+/**
+ * Prospecting-only style block for the two-option experiment (owner direction 2026-10-16, from the account's own Results:
+ * the replies that earned views were short and tied to one detail of the person's post; the tidy mechanic explainers and
+ * the ones naming Fillbook reached the fewest people). It is appended AFTER the shared HUMAN_REPLY_VOICE_RULES, which Inbound
+ * also uses and which are unchanged, and it overrides only the lines it names. Every hard rule above still applies.
+ */
+export const PROSPECTING_TWO_OPTION_STYLE_BLOCK = `COLD REPLY STYLE: TWO OPTIONS (this block applies only to this cold reply and overrides the lines it names; every
+other rule above still applies to BOTH options: no em or en dashes, no praise openers, no "it's not X, it's Y", no question
+tacked onto the end, nothing about "most traders", no invented first-person trading experience or results, no links, no
+promise of profit, no ask to follow or like, no giveaway, plan or price unless they asked, proper capitalization, under 280
+characters, no emoji or hashtags).
+Write TWO different replies to the SAME post in one answer and put them in "reply" and "helpfulReply":
+- OPTION A, "sharp" (the "reply" field): ONE line of ${SHARP_MIN_WORDS} to ${SHARP_MAX_WORDS} words that reacts to a specific detail in THEIR post.
+  It is a dry observation, a direct answer to what they asked, or the concrete consequence of their situation. No mechanic
+  lecture, no explainer, no product. Examples of the right shape (never copy them): "Two secured payouts in a day, both on a
+  Friday, both on tilt. Your brain knew the week was over and the rules stopped feeling real." / "The drawdown doesn't care
+  why you sized up. It just knows you did." For option A the "one thing a trader can keep" requirement does NOT apply: a
+  sharp, accurate reaction to their exact situation is enough.
+- OPTION B, "helpful" (the "helpfulReply" field): at most TWO sentences with one concrete thing (a number, a rule, or a
+  situation) that is still tied to a specific detail of THEIR post. This is where "one thing a trader can keep" applies. Keep it
+  to the one point; no tidy mini-explainer, no list.
+- The two options must differ in substance, not just wording.
+- Neither option names Fillbook, hints at it, or shows a Fillbook view, unless the person's post asked about Fillbook. Set
+  mentionsFillbook=false, usesLink=false and showcase="none" in every ordinary case. Lines above that ask you to add a Fillbook
+  view or sentence do not apply to this cold reply.
+- If you cannot write a genuinely specific option A or B for this post, set isRelevant=false rather than padding.`;
+
+/**
+ * Replaces the platform's no-pitch guidance in two-option mode: cold replies almost never name Fillbook (the account's own data
+ * shows the ones that do reach the fewest people).
+ */
+export const PROSPECTING_COLD_NO_PITCH_GUIDANCE = `For this cold reply Fillbook is NOT part of the answer. Do not name it in either option, set mentionsFillbook=false and
+usesLink=false and showcase="none". The only exception is a post that asks about Fillbook itself. The existing mention cap and
+recovery-mode rule (when stated in the notes below) still apply and always mean: leave it out.`;
 
 /**
  * Everything about a reply that legitimately differs by platform: what
@@ -141,7 +196,7 @@ export function prospectingPlatformProfile(platform: string): ProspectingPlatfor
  * platform-specific parts (what a reply looks like, when a link is ever
  * acceptable) come from the profile above.
  */
-export function buildProspectingSystemPrompt(profile: ProspectingPlatformProfile): string {
+export function buildProspectingSystemPrompt(profile: ProspectingPlatformProfile, twoOptions = false): string {
   return `You are considering ONE reply from the Fillbook account to someone else's ${profile.postNoun} on ${profile.displayName}. This
 person did NOT mention or reply to us -- their post matched an automated search for a trading-related
 topic, but that match can be imprecise (a search word used in an unrelated sense, a post that only
@@ -155,7 +210,7 @@ different sense -- set isRelevant=false, leave reply as an empty string, and do 
 connection to trading. A confident "this isn't relevant" is the correct, expected outcome for many
 candidates; it is never a failure. Only if isRelevant is true, continue below.
 
-${profile.noPitchGuidance}
+${twoOptions ? PROSPECTING_COLD_NO_PITCH_GUIDANCE : profile.noPitchGuidance}
 
 Link policy for ${profile.displayName}: ${profile.linkPolicy}
 
@@ -170,7 +225,9 @@ corporate SaaS language, no generic motivation, no AI clichés, no forced contro
 product/company and must never speak or be shown as if it personally trades -- no "I" statements about
 trades, no fabricated personal trading history.
 
-${HUMAN_REPLY_VOICE_RULES}
+${HUMAN_REPLY_VOICE_RULES}${twoOptions ? `
+
+${PROSPECTING_TWO_OPTION_STYLE_BLOCK}` : ""}
 
 Shape for ${profile.displayName}: ${profile.styleRules}
 
@@ -205,6 +262,8 @@ export interface ProspectingDraftResult {
   usesLink: boolean;
   /** The Fillbook view the reply shows (a fillbookShowcase.ts id), or "none". Absent from older drafts. */
   showcase?: string;
+  /** Option B ("helpful") of the two-option experiment; `reply` is then option A ("sharp"). Absent in single-style drafts. */
+  helpfulReply?: string;
 }
 
 /**
@@ -262,10 +321,10 @@ export async function draftProspectingReply(
   // thirds land within 5 minutes of the previous one, retries included), so cache it: a cache read
   // costs 10% of a normal input token. Undefined args keep the default timeout, token cap and model.
   return client.callTool<ProspectingDraftResult>(
-    buildProspectingSystemPrompt(profile),
+    buildProspectingSystemPrompt(profile, PROSPECTING_TWO_OPTION_DRAFTS),
     userMessage,
     "submit_reply",
-    DRAFT_SCHEMA,
+    PROSPECTING_TWO_OPTION_DRAFTS ? TWO_OPTION_DRAFT_SCHEMA : DRAFT_SCHEMA,
     undefined,
     REPLY_DRAFT_MAX_TOKENS,
     undefined,

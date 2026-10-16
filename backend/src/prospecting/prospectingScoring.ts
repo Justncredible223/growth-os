@@ -1,4 +1,5 @@
 import type { ProspectingTopic } from "./prospectingTopics.js";
+import { invitesReplies } from "./prospectingRelevance.js";
 
 // Real evidence this run's own results turned up (2026-09-03 live search):
 // a competitor prop-firm discount ad and a hashtag-stuffed forex-bot account
@@ -183,8 +184,11 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   // answer; very short posts rarely have enough context for a useful reply.
   const hasQuestion = input.postText.includes("?");
   const longEnough = input.postText.trim().length >= 40;
-  const opportunityPoints = (hasQuestion ? 8 : 0) + (longEnough ? 7 : 0);
-  breakdown.valueOpportunity = `${hasQuestion ? "asks a question" : "no question"}, ${longEnough ? "enough context" : "too short for context"} -> +${opportunityPoints}`;
+  // Reply-style experiment (2026-10-16): a post that invites replies ("what do you", "anyone else", "thoughts on") gets a
+  // small extra boost, since a reply to an open question is the shape that earns a response.
+  const invites = invitesReplies(input.postText);
+  const opportunityPoints = (hasQuestion ? 8 : 0) + (longEnough ? 7 : 0) + (invites ? 4 : 0);
+  breakdown.valueOpportunity = `${hasQuestion ? "asks a question" : "no question"}, ${longEnough ? "enough context" : "too short for context"}${invites ? ", invites replies" : ""} -> +${opportunityPoints}`;
 
   // Existing relationship -- a natural second touch beats a cold first one.
   const relationshipPoints = input.previouslyEngaged ? 10 : 0;

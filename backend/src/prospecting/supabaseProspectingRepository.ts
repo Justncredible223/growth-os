@@ -1,7 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { DRAFT_OPTIONS_KEY, POSTED_STYLE_KEY, parseDraftOptions, type PostedStyle } from "./prospectingDraftOptions.js";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "./types.js";
 
+/** The experiment's two fields live inside the existing score_breakdown JSON (no migration); this splits them back out. */
+function splitBreakdown(raw: unknown): { scoreBreakdown: Record<string, string>; draftOptions: ProspectingCandidate["draftOptions"]; postedStyle: PostedStyle | null } {
+  const all = (raw && typeof raw === "object" ? { ...(raw as Record<string, unknown>) } : {}) as Record<string, unknown>;
+  const draftOptions = parseDraftOptions(all[DRAFT_OPTIONS_KEY]);
+  const posted = all[POSTED_STYLE_KEY];
+  delete all[DRAFT_OPTIONS_KEY];
+  delete all[POSTED_STYLE_KEY];
+  const postedStyle = posted === "sharp" || posted === "helpful" || posted === "edited" || posted === "legacy" ? posted : null;
+  return { scoreBreakdown: all as Record<string, string>, draftOptions, postedStyle };
+}
+
 function fromRow(data: Record<string, any>): ProspectingCandidate {
+  const { scoreBreakdown, draftOptions, postedStyle } = splitBreakdown(data.score_breakdown);
   return {
     id: data.id,
     platform: data.platform,
@@ -17,7 +30,9 @@ function fromRow(data: Record<string, any>): ProspectingCandidate {
     postCreatedAt: data.post_created_at,
     publicMetrics: data.public_metrics ?? {},
     opportunityScore: Number(data.opportunity_score),
-    scoreBreakdown: data.score_breakdown ?? {},
+    scoreBreakdown,
+    draftOptions,
+    postedStyle,
     creatorCandidate: data.creator_candidate,
     status: data.status,
     shownAt: data.shown_at,
@@ -129,7 +144,7 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     fields?: Partial<
       Pick<
         ProspectingCandidate,
-        "openedAt" | "draftReply" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
+        "openedAt" | "draftReply" | "draftOptions" | "postedStyle" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
       >
     >,
   ): Promise<void> {
@@ -141,6 +156,15 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     if (fields?.replyUsedLink !== undefined) update.reply_used_link = fields.replyUsedLink;
     if (fields?.repliedAt !== undefined) update.replied_at = fields.repliedAt;
     if (fields?.skipReason !== undefined) update.skip_reason = fields.skipReason;
+    if (fields?.draftOptions !== undefined || fields?.postedStyle !== undefined) {
+      // Merge into the existing score_breakdown JSON so the scoring keys survive.
+      const { data: current, error: readError } = await this.client.from("prospecting_candidates").select("score_breakdown").eq("id", id).maybeSingle();
+      if (readError) throw new Error(`updateStatus breakdown read failed: ${readError.message}`);
+      const merged: Record<string, unknown> = { ...((current?.score_breakdown as Record<string, unknown> | null) ?? {}) };
+      if (fields.draftOptions !== undefined) merged[DRAFT_OPTIONS_KEY] = fields.draftOptions === null ? undefined : JSON.stringify(fields.draftOptions);
+      if (fields.postedStyle !== undefined) merged[POSTED_STYLE_KEY] = fields.postedStyle === null ? undefined : fields.postedStyle;
+      update.score_breakdown = merged;
+    }
     const { error } = await this.client.from("prospecting_candidates").update(update).eq("id", id);
     if (error) throw new Error(`updateStatus failed: ${error.message}`);
   }

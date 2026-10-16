@@ -126,6 +126,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     // Never sent anywhere until "Replied" is tapped; a draft the owner
     // never touches is copied exactly as the LLM wrote it.
     val editedDrafts = remember { mutableStateMapOf<String, String>() }
+    // Two-option drafts: which option (sharp / helpful) the owner last copied or edited, per candidate. "Replied" posts that one.
+    val chosenStyles = remember { mutableStateMapOf<String, String>() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -180,7 +182,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             try {
                 val updated = repo.draftProspectingReply(candidate.id)
                 items = items.map { if (it.id == updated.id) updated else it }
-                editedDrafts[updated.id] = updated.draftReply.orEmpty()
+                if (updated.draftOptions.isEmpty()) editedDrafts[updated.id] = updated.draftReply.orEmpty()
                 actionError = null
             } catch (e: DraftRejectedException) {
                 // A real, meaningful rejection (the reply guardrail catching a
@@ -200,8 +202,9 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     // confirmation worded to match. A failed launch
     // (no handler on the device) is reported, not swallowed; the timestamp
     // call is best-effort and never blocks the owner.
-    fun copyAndOpen(candidate: ProspectingCandidate) {
-        val text = editedDrafts[candidate.id] ?: candidate.draftReply
+    fun copyAndOpen(candidate: ProspectingCandidate, style: String? = null) {
+        if (style != null) chosenStyles[candidate.id] = style
+        val text = currentReplyText(candidate, editedDrafts, chosenStyles[candidate.id])
         if (text != null) copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", text)
         val opened = openExternalUrl(context, ProspectingPostLink.buildOpenUrl(candidate.platform, candidate.postUrl, candidate.authorHandle))
         scope.launch {
@@ -213,7 +216,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
 
     // Same as copyAndOpen, but the post opens in a web browser instead of the platform's app (see openInBrowser).
     fun copyAndOpenInBrowser(candidate: ProspectingCandidate) {
-        val text = editedDrafts[candidate.id] ?: candidate.draftReply
+        val text = currentReplyText(candidate, editedDrafts, chosenStyles[candidate.id])
         if (text != null) copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", text)
         val opened = openInBrowser(context, ProspectingPostLink.buildOpenUrl(candidate.platform, candidate.postUrl, candidate.authorHandle))
         scope.launch {
@@ -230,6 +233,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 action()
                 items = items.filterNot { it.id == candidate.id }
                 editedDrafts.remove(candidate.id)
+                editedDrafts.keys.filter { it.startsWith("${candidate.id}:") }.forEach { editedDrafts.remove(it) }
+                chosenStyles.remove(candidate.id)
                 actionError = null
                 afterSuccess()
             } catch (e: Exception) {
@@ -296,6 +301,21 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                     candidate = candidate,
                     editedText = editedDrafts[candidate.id],
                     onEditedTextChange = { editedDrafts[candidate.id] = it },
+                    editedDrafts = editedDrafts,
+                    chosenStyle = chosenStyles[candidate.id],
+                    onOptionEdit = { style, text ->
+                        editedDrafts[optionEditKey(candidate.id, style)] = text
+                        chosenStyles[candidate.id] = style
+                    },
+                    onCopyOption = { style, open ->
+                        if (open) {
+                            copyAndOpen(candidate, style)
+                        } else {
+                            chosenStyles[candidate.id] = style
+                            currentReplyText(candidate, editedDrafts, style)?.let { copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", it) }
+                            scope.launch { snackbarHostState.showSnackbar("Copied the ${styleLabel(style).lowercase()} reply.") }
+                        }
+                    },
                     drafting = draftingId == candidate.id,
                     busy = busyId == candidate.id,
                     replyHold = replyHold,
@@ -307,7 +327,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                         runOutcome(candidate, afterSuccess = { refresh() }) {
                             repo.markProspectingReplied(
                                 candidate.id,
-                                editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
+                                finalReplyToSend(candidate, editedDrafts, chosenStyles[candidate.id]),
                                 candidate.replyMentionsFillbook,
                                 candidate.replyUsedLink,
                             )
@@ -399,6 +419,10 @@ private fun ProspectingCard(
     candidate: ProspectingCandidate,
     editedText: String?,
     onEditedTextChange: (String) -> Unit,
+    editedDrafts: Map<String, String>,
+    chosenStyle: String?,
+    onOptionEdit: (style: String, text: String) -> Unit,
+    onCopyOption: (style: String, open: Boolean) -> Unit,
     drafting: Boolean,
     busy: Boolean,
     replyHold: String?,
@@ -464,7 +488,48 @@ private fun ProspectingCard(
         ) { Text("View original post", style = MaterialTheme.typography.labelMedium, color = Accent) }
 
         val draft = candidate.draftReply
-        if (draft != null) {
+        val twoOptions = hasTwoOptions(candidate)
+        if (draft != null && twoOptions) {
+            // Reply-style experiment: two short labelled blocks, each with its own Copy / Copy + Open. Compact on purpose.
+            candidate.draftOptions.forEach { option ->
+                val text = optionText(candidate, option.style, editedDrafts) ?: option.text
+                val active = activeStyle(candidate, chosenStyle) == option.style
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(styleLabel(option.style).uppercase(), style = MaterialTheme.typography.labelMedium, color = if (active) Accent else TextSecondary)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "${text.length} / 280",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (text.length > 280) Danger else TextTertiary,
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { onOptionEdit(option.style, it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = if (active) Accent else Border),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { onCopyOption(option.style, false) }, enabled = !busy) { Text("Copy", maxLines = 1) }
+                    TextButton(onClick = { onCopyOption(option.style, true) }, enabled = !busy && replyHold == null) {
+                        Text(PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            replyHold?.let {
+                Text(it, style = MaterialTheme.typography.labelMedium, color = Warning)
+            }
+            if (candidate.replyMentionsFillbook == true || candidate.replyUsedLink == true) {
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (candidate.replyMentionsFillbook == true) Pill("MENTIONS FILLBOOK", TextSecondary)
+                    if (candidate.replyUsedLink == true) Pill("INCLUDES LINK", TextSecondary)
+                }
+            }
+        } else if (draft != null) {
             Spacer(Modifier.height(8.dp))
             Text("DRAFT REPLY", style = MaterialTheme.typography.labelMedium, color = Accent)
             Spacer(Modifier.height(4.dp))
@@ -511,7 +576,7 @@ private fun ProspectingCard(
             )
         } else if (draft == null) {
             PrimaryButton(text = "Draft reply", onClick = onDraft, enabled = !drafting, busy = drafting, modifier = Modifier.fillMaxWidth())
-        } else {
+        } else if (!twoOptions) {
             PrimaryButton(
                 text = replyHold ?: PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true),
                 onClick = onCopyAndOpen,

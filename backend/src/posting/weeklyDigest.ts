@@ -19,6 +19,46 @@ export interface OwnPostRow {
   text: string;
   createdAt: string; // ISO
   impressions: number | null;
+  likes?: number | null;
+  /** x_own_posts.prospecting_candidate_id: the Prospecting candidate this reply answers, when matched. */
+  prospectingCandidateId?: string | null;
+}
+
+/** Reply-style experiment: candidate id -> the style tag recorded when the owner marked it replied (sharp / helpful / edited / legacy). */
+export type PostedStyleByCandidate = Map<string, string>;
+
+/** A style needs at least this many replies read back before its median is shown. */
+export const STYLE_MIN_SAMPLE = 3;
+const STYLE_ORDER = ["sharp", "helpful", "edited", "legacy"] as const;
+
+/**
+ * "Reply style results" (reply-style experiment, 2026-10-16): median views and likes per posted-style tag for replies that
+ * can be tied to a Prospecting candidate. Returns null until at least one experiment style (sharp or helpful) has
+ * STYLE_MIN_SAMPLE replies with views read back. Reports sizes and says small samples are noise; it never claims a cause.
+ */
+export function replyStyleSection(posts: OwnPostRow[], styles: PostedStyleByCandidate): string[] | null {
+  const groups = new Map<string, OwnPostRow[]>();
+  for (const p of posts) {
+    if (p.kind !== "reply" || p.impressions === null || !p.prospectingCandidateId) continue;
+    const tag = styles.get(p.prospectingCandidateId) ?? "legacy";
+    groups.set(tag, [...(groups.get(tag) ?? []), p]);
+  }
+  const enough = (tag: string) => (groups.get(tag)?.length ?? 0) >= STYLE_MIN_SAMPLE;
+  if (!enough("sharp") && !enough("helpful")) return null;
+  const lines = ["Reply style results (replies tied to a Prospecting post):"];
+  for (const tag of STYLE_ORDER) {
+    const rows = groups.get(tag);
+    if (!rows || rows.length === 0) continue;
+    if (rows.length < STYLE_MIN_SAMPLE) {
+      lines.push(`  ${tag}: ${rows.length} repl${rows.length === 1 ? "y" : "ies"}, too few for a median.`);
+      continue;
+    }
+    const views = median(rows.map((r) => r.impressions as number));
+    const likes = median(rows.map((r) => r.likes ?? 0));
+    lines.push(`  ${tag}: ${rows.length} replies, median ${views} views, median ${likes} likes.`);
+  }
+  lines.push("  Samples this small are mostly noise; read it as a hint to keep testing, not as proof that one style works.");
+  return lines;
 }
 
 export interface DigestResult {
@@ -80,6 +120,7 @@ export function buildWeeklyDigest(
   snapshots: FollowerSnapshotRow[],
   posts: OwnPostRow[],
   others: Partial<Record<FollowerPlatform, FollowerSnapshotRow[]>> = {},
+  styleByCandidate: PostedStyleByCandidate = new Map(),
 ): DigestResult {
   const start = addDays(todayDay, -7);
   const inWindow = (d: string) => d >= start && d < todayDay;
@@ -152,6 +193,10 @@ export function buildWeeklyDigest(
     }
   }
 
+  // 3b. Reply style experiment (only once a style has enough replies)
+  const styleLines = replyStyleSection(posts, styleByCandidate);
+  if (styleLines) lines.push(...styleLines);
+
   // 4. What did reach people
   const top = [...windowPosts].filter((p) => p.impressions !== null).sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))[0];
   if (top && (top.impressions ?? 0) > 0) lines.push(`Most seen: ${top.impressions} views, "${clip(top.text, 80)}" (${top.kind}).`);
@@ -179,8 +224,8 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
 
   const postRes = await client
     .from("x_own_posts")
-    .select("tweet_id, kind, text, created_at, impressions")
-    .gte("created_at", new Date(now.getTime() - 15 * DAY_MS).toISOString())
+    .select("tweet_id, kind, text, created_at, impressions, likes, prospecting_candidate_id")
+    .gte("created_at", new Date(now.getTime() - 30 * DAY_MS).toISOString())
     .order("created_at", { ascending: false });
   if (postRes.error) throw new Error(`weekly review: own-post read failed: ${postRes.error.message}`);
   const posts: OwnPostRow[] = (postRes.data ?? []).map((r) => ({
@@ -189,7 +234,26 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
     text: String(r.text ?? ""),
     createdAt: String(r.created_at),
     impressions: r.impressions === null || r.impressions === undefined ? null : Number(r.impressions),
+    likes: r.likes === null || r.likes === undefined ? null : Number(r.likes),
+    prospectingCandidateId: r.prospecting_candidate_id ? String(r.prospecting_candidate_id) : null,
   }));
+
+  // Reply-style tags recorded by Prospecting (score_breakdown.posted_style). Optional: any failure only drops the section.
+  const styleByCandidate: PostedStyleByCandidate = new Map();
+  try {
+    const candRes = await client
+      .from("prospecting_candidates")
+      .select("id, score_breakdown")
+      .eq("status", "replied")
+      .gte("replied_at", new Date(now.getTime() - 30 * DAY_MS).toISOString())
+      .order("replied_at", { ascending: false });
+    for (const r of candRes?.data ?? []) {
+      const tag = (r.score_breakdown as Record<string, unknown> | null)?.posted_style;
+      if (typeof tag === "string") styleByCandidate.set(String(r.id), tag);
+    }
+  } catch {
+    // no style section this week
+  }
 
   // Other platforms: optional. A missing table (migration 0054) or a failed read only drops these lines.
   const others: Partial<Record<FollowerPlatform, FollowerSnapshotRow[]>> = {};
@@ -206,7 +270,7 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
     }
   }
 
-  const digest = buildWeeklyDigest(today, snapshots, posts, others);
+  const digest = buildWeeklyDigest(today, snapshots, posts, others, styleByCandidate);
   const existing = await client.from("notifications").select("id").eq("related_id", digest.relatedId).limit(1);
   if (existing.error) throw new Error(`weekly review: notification lookup failed: ${existing.error.message}`);
   if ((existing.data ?? []).length > 0) return `already sent (${digest.relatedId})`;
