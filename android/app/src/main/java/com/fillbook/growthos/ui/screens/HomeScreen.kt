@@ -57,6 +57,7 @@ import com.fillbook.growthos.data.TodayXPost
 import com.fillbook.growthos.data.TodayXPostState
 import com.fillbook.growthos.data.TodaysVideo
 import com.fillbook.growthos.data.TodaysVideoState
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.HeroActionCard
 import com.fillbook.growthos.ui.components.InsetRow
@@ -115,6 +116,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     var editedXPostText by rememberSaveable(summary?.todayXPost?.campaignAssetId) {
         mutableStateOf(summary?.todayXPost?.previewText.orEmpty())
     }
+    val wide = LocalWindowLayout.current.twoPane
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -204,7 +206,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             contentPadding = PaddingValues(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { ScreenHeader("Fillbook Growth OS", "Mission Control", kicker = "Operator console") }
+            item { ScreenHeader("Fillbook Growth OS", "Mission Control", kicker = "Operator console", dense = true) }
 
             errorMessage?.let { message ->
                 item {
@@ -222,64 +224,103 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             summary?.let { s ->
                 val issueCount = health.count { it.status.name == "DOWN" || it.status.name == "DEGRADED" }
 
-                item { Box20 { NextBestActionCard(s, inbound, onNavigate) } }
-
-                s.video?.let { video -> item { Box20 { TodaysVideoCard(video, onNavigate) } } }
-
-                item {
-                    Box20 {
-                        Column {
-                            TodayXPostCard(
-                                post = s.todayXPost,
-                                busy = xPostActionBusy,
-                                onReview = { reviewingXPost = true },
-                                onRegenerate = { regenerateXPost() },
-                                // editedXPostText is the same state the owner edited before
-                                // handoff (survives it -- campaignAssetId doesn't change), so
-                                // a same-session Mark posted already carries any edit
-                                // correctly; do NOT prefer server text over it here, or an
-                                // owner's edit would be silently replaced by the original
-                                // generated draft (the backend never persists an edit -- see
-                                // handOffAsset's kdoc). Its own rememberSaveable initializer
-                                // (line ~110) is what fixes the cross-restart blank-text case,
-                                // now that todayXPost.previewText is populated for HANDED_OFF
-                                // too (see deriveTodayXPostView's kdoc).
-                                onMarkPosted = { s.todayXPost.campaignAssetId?.let { markXPostPosted(it, editedXPostText) } },
-                            )
-                            TextButton(onClick = { onNavigate("x_feed_post_history") }) { Text("Previous drafts") }
-                        }
+                val xPostCard: @Composable () -> Unit = {
+                    Column {
+                        TodayXPostCard(
+                            post = s.todayXPost,
+                            busy = xPostActionBusy,
+                            onReview = { reviewingXPost = true },
+                            onRegenerate = { regenerateXPost() },
+                            // editedXPostText is the same state the owner edited before
+                            // handoff (survives it -- campaignAssetId doesn't change), so
+                            // a same-session Mark posted already carries any edit
+                            // correctly; do NOT prefer server text over it here, or an
+                            // owner's edit would be silently replaced by the original
+                            // generated draft (the backend never persists an edit -- see
+                            // handOffAsset's kdoc). Its own rememberSaveable initializer
+                            // (line ~110) is what fixes the cross-restart blank-text case,
+                            // now that todayXPost.previewText is populated for HANDED_OFF
+                            // too (see deriveTodayXPostView's kdoc).
+                            onMarkPosted = { s.todayXPost.campaignAssetId?.let { markXPostPosted(it, editedXPostText) } },
+                        )
+                        TextButton(onClick = { onNavigate("x_feed_post_history") }) { Text("Previous drafts") }
                     }
                 }
+                val opportunityTile: @Composable (Modifier) -> Unit = { m ->
+                    MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, m)
+                }
+                val waitingTile: @Composable (Modifier) -> Unit = { m ->
+                    MetricTile(
+                        "Waiting on you",
+                        s.pendingReview.toString(),
+                        Icons.Filled.CheckCircle,
+                        m,
+                        valueColor = if (s.pendingReview > 0) Warning else TextPrimary,
+                        highlighted = s.pendingReview > 0,
+                        highlightColor = Warning,
+                    )
+                }
+                val spendTile: @Composable (Modifier) -> Unit = { m ->
+                    MetricTile("Today's spend", "$%.4f".format(s.analytics.todaySpendUsd), Icons.Filled.Bolt, m)
+                }
+                val healthTile: @Composable (Modifier) -> Unit = { m ->
+                    MetricTile(
+                        "System health",
+                        if (issueCount == 0) "All clear" else "$issueCount issue${if (issueCount == 1) "" else "s"}",
+                        Icons.Filled.PauseCircle,
+                        m,
+                        valueColor = if (issueCount == 0) Success else Warning,
+                        highlighted = issueCount > 0,
+                        highlightColor = Warning,
+                    )
+                }
 
-                item {
-                    Box20 {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, Modifier.weight(1f))
-                            MetricTile(
-                                "Waiting on you",
-                                s.pendingReview.toString(),
-                                Icons.Filled.CheckCircle,
-                                Modifier.weight(1f),
-                                valueColor = if (s.pendingReview > 0) Warning else TextPrimary,
-                                highlighted = s.pendingReview > 0,
-                                highlightColor = Warning,
+                if (wide) {
+                    // Open Fold inner screen / tablets: two columns. Next best action stays first (top-left).
+                    item {
+                        Box20 {
+                            TwoUp(
+                                left = { NextBestActionCard(s, inbound, onNavigate) },
+                                right = s.video?.let { video -> { TodaysVideoCard(video, onNavigate) } },
                             )
                         }
                     }
-                }
-                item {
-                    Box20 {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MetricTile("Today's spend", "$%.4f".format(s.analytics.todaySpendUsd), Icons.Filled.Bolt, Modifier.weight(1f))
-                            MetricTile(
-                                "System health",
-                                if (issueCount == 0) "All clear" else "$issueCount issue${if (issueCount == 1) "" else "s"}",
-                                Icons.Filled.PauseCircle,
-                                Modifier.weight(1f),
-                                valueColor = if (issueCount == 0) Success else Warning,
-                                highlighted = issueCount > 0,
-                                highlightColor = Warning,
+                    item {
+                        Box20 {
+                            TwoUp(
+                                left = xPostCard,
+                                right = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            opportunityTile(Modifier.weight(1f)); waitingTile(Modifier.weight(1f))
+                                        }
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            spendTile(Modifier.weight(1f)); healthTile(Modifier.weight(1f))
+                                        }
+                                    }
+                                },
                             )
+                        }
+                    }
+                } else {
+                    item { Box20 { NextBestActionCard(s, inbound, onNavigate) } }
+
+                    s.video?.let { video -> item { Box20 { TodaysVideoCard(video, onNavigate) } } }
+
+                    item { Box20 { xPostCard() } }
+
+                    item {
+                        Box20 {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                opportunityTile(Modifier.weight(1f)); waitingTile(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                    item {
+                        Box20 {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                spendTile(Modifier.weight(1f)); healthTile(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
@@ -305,11 +346,22 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                     }
                 }
 
-                item { Box20 { SectionHeader("Attribution") } }
-                item { Box20 { AttributionCard(s.attribution) } }
+                if (wide) {
+                    item {
+                        Box20 {
+                            TwoUp(
+                                left = { Column { SectionHeader("Attribution"); Spacer(Modifier.height(6.dp)); AttributionCard(s.attribution) } },
+                                right = { Column { SectionHeader("Recent activity"); Spacer(Modifier.height(6.dp)); RecentActivity(s, health) } },
+                            )
+                        }
+                    }
+                } else {
+                    item { Box20 { SectionHeader("Attribution") } }
+                    item { Box20 { AttributionCard(s.attribution) } }
 
-                item { Box20 { SectionHeader("Recent activity") } }
-                item { Box20 { RecentActivity(s, health) } }
+                    item { Box20 { SectionHeader("Recent activity") } }
+                    item { Box20 { RecentActivity(s, health) } }
+                }
             }
         }
     }
@@ -399,6 +451,19 @@ internal fun xPostCounter(text: String): Pair<String, Boolean> {
         "$length / $X_POST_NORMAL_LIMIT - past the fold, readers tap Show more to see the rest" to true
     } else {
         "$length / $X_POST_NORMAL_LIMIT" to false
+    }
+}
+
+/** Two equal columns for the wide layouts; [right] may be null, in which case [left] takes the full width. */
+@Composable
+private fun TwoUp(left: @Composable () -> Unit, right: (@Composable () -> Unit)?) {
+    if (right == null) {
+        left()
+    } else {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+            Box(modifier = Modifier.weight(1f)) { left() }
+            Box(modifier = Modifier.weight(1f)) { right() }
+        }
     }
 }
 

@@ -66,6 +66,12 @@ import com.fillbook.growthos.data.VideoRenderMetadata
 import com.fillbook.growthos.data.VideoRenderStatus
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.extractVideoScriptRequestErrorMessage
+import com.fillbook.growthos.ui.adaptive.DetailPlaceholder
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
+import com.fillbook.growthos.ui.adaptive.RowTitleSubtitle
+import com.fillbook.growthos.ui.adaptive.SelectableRow
+import com.fillbook.growthos.ui.adaptive.TwoPane
+import com.fillbook.growthos.ui.adaptive.resolveSelection
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
@@ -104,6 +110,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    // Wide layout only: the render (or the posting plan) shown in the detail pane. Saveable so it survives a fold/unfold.
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val twoPane = LocalWindowLayout.current.twoPane
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -451,9 +460,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 "Video Status",
                 "Approve a video script and it renders here — download it, then share it to TikTok, YouTube, or Instagram Reels yourself.",
                 kicker = if (loaded && renders.isNotEmpty()) "${renders.size} render${if (renders.size == 1) "" else "s"}" else null,
+                dense = true,
             )
 
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp)) {
                 SecondaryButton(
                     text = "+ Create Fillbook Video",
                     onClick = {
@@ -499,55 +509,107 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             if (!loaded) {
                 SkeletonListLoading()
             } else {
-                // Same nested-scroll fix as ProspectingScreen (2026-09-07):
-                // PullToRefreshBox only detects the pull gesture through a
-                // scrollable descendant's nested-scroll connection. The
-                // empty state used to sit entirely outside PullToRefreshBox
-                // (and even wrapped, a bare PolishedEmptyState -- a plain,
-                // non-scrollable Column -- would never dispatch drag deltas
-                // to it anyway). Fix: PullToRefreshBox now wraps both
-                // branches, and the empty branch uses a LazyColumn (the same
-                // genuine nested-scroll participant the populated branch
-                // already uses) instead of a bare Column.
-                PullToRefreshBox(
-                    isRefreshing = refreshing,
-                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    if (errorMessage == null && renders.isEmpty()) {
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            item {
-                                PolishedEmptyState(
-                                    icon = Icons.Filled.Movie,
-                                    headline = "No videos yet",
-                                    subtitle = "Approve a video script draft in Approvals and it'll start rendering here.",
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            postingPlan?.let { plan ->
-                                item(key = "posting-plan") {
-                                    PostingPlanCard(plan = plan, onAddLink = { video, platform -> linkTarget = video to platform })
+                // Same nested-scroll fix as ProspectingScreen (2026-09-07): PullToRefreshBox wraps both branches and
+                // the empty branch uses a LazyColumn, a genuine nested-scroll participant.
+                val planId = "posting-plan"
+                val selectableIds = renders.map { it.id } + listOfNotNull(planId.takeIf { postingPlan != null })
+                val validSelectedId = resolveSelection(selectedId, selectableIds)
+                val selectedRender = renders.firstOrNull { it.id == validSelectedId }
+
+                @Composable
+                fun renderCard(render: VideoRenderStatus) {
+                    VideoRenderCard(
+                        render = render,
+                        alreadyDownloaded = downloadedUris.containsKey(render.id),
+                        downloading = render.id in downloadingIds,
+                        onDownload = { download(render) },
+                        onShare = { share(render) },
+                        onDownloadThumbnail = { downloadThumbnail(render) },
+                        onDismiss = { if (needsDismissConfirm(render)) dismissTarget = render else dismiss(render) },
+                        onRetry = { retry(render) },
+                    )
+                }
+
+                @Composable
+                fun listPane() {
+                    PullToRefreshBox(
+                        isRefreshing = refreshing,
+                        onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        if (errorMessage == null && renders.isEmpty()) {
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                item {
+                                    PolishedEmptyState(
+                                        icon = Icons.Filled.Movie,
+                                        headline = "No videos yet",
+                                        subtitle = "Approve a video script draft in Approvals and it'll start rendering here.",
+                                    )
                                 }
                             }
-                            items(renders, key = { it.id }) { render ->
-                                VideoRenderCard(
-                                    render = render,
-                                    alreadyDownloaded = downloadedUris.containsKey(render.id),
-                                    downloading = render.id in downloadingIds,
-                                    onDownload = { download(render) },
-                                    onShare = { share(render) },
-                                    onDownloadThumbnail = { downloadThumbnail(render) },
-                                    onDismiss = { if (needsDismissConfirm(render)) dismissTarget = render else dismiss(render) },
-                                    onRetry = { retry(render) },
-                                )
+                        } else {
+                            LazyColumn(
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(if (twoPane) 8.dp else 12.dp),
+                            ) {
+                                if (twoPane) {
+                                    postingPlan?.let {
+                                        item(key = "posting-plan") {
+                                            SelectableRow(selected = validSelectedId == planId, onClick = { selectedId = planId }) {
+                                                RowTitleSubtitle("Today's posting plan", "Slots, links and what is due.")
+                                            }
+                                        }
+                                    }
+                                    items(renders, key = { it.id }) { render ->
+                                        SelectableRow(selected = render.id == validSelectedId, onClick = { selectedId = render.id }) {
+                                            RowTitleSubtitle(
+                                                title = render.conceptTitle?.let { videoCardHeading(render.conceptDay, it) } ?: "Video ${render.id.take(6)}",
+                                                subtitle = null,
+                                                trailing = relativeTime(render.updatedAt),
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            IconPill(statusLabel(render.status), Icons.Filled.Movie, statusToneColor(statusTone(render.status)))
+                                        }
+                                    }
+                                } else {
+                                    // Cover screen: the newest render (its status and Download / Share) comes first, then
+                                    // today's posting plan, then the rest -- nothing removed, only reordered.
+                                    renders.firstOrNull()?.let { first ->
+                                        item(key = first.id) { renderCard(first) }
+                                    }
+                                    postingPlan?.let { plan ->
+                                        item(key = "posting-plan") {
+                                            PostingPlanCard(plan = plan, onAddLink = { video, platform -> linkTarget = video to platform })
+                                        }
+                                    }
+                                    items(renders.drop(1), key = { it.id }) { render -> renderCard(render) }
+                                }
                             }
                         }
                     }
+                }
+
+                if (twoPane) {
+                    TwoPane(
+                        list = { listPane() },
+                        detail = {
+                            val plan = postingPlan
+                            when {
+                                selectedRender != null -> Column(
+                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
+                                ) { renderCard(selectedRender) }
+                                validSelectedId == planId && plan != null -> Column(
+                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
+                                ) { PostingPlanCard(plan = plan, onAddLink = { video, platform -> linkTarget = video to platform }) }
+                                else -> DetailPlaceholder(
+                                    title = if (renders.isEmpty() && plan == null) "No videos yet" else "Pick a video",
+                                    hint = if (renders.isEmpty() && plan == null) "Approve a video script in Approvals and it renders here." else "Its status, Download, Share and thumbnail show here.",
+                                )
+                            }
+                        },
+                    )
+                } else {
+                    listPane()
                 }
             }
         }

@@ -1,6 +1,8 @@
 package com.fillbook.growthos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -49,6 +52,12 @@ import com.fillbook.growthos.data.ProspectingDiagnostics
 import com.fillbook.growthos.data.ProspectingPacing
 import com.fillbook.growthos.data.ProspectingSearchRunResult
 import com.fillbook.growthos.ui.components.ExpandableText
+import com.fillbook.growthos.ui.adaptive.DetailPlaceholder
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
+import com.fillbook.growthos.ui.adaptive.RowTitleSubtitle
+import com.fillbook.growthos.ui.adaptive.SelectableRow
+import com.fillbook.growthos.ui.adaptive.TwoPane
+import com.fillbook.growthos.ui.adaptive.resolveSelection
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
@@ -109,6 +118,9 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     var lastSearchNowRun by remember { mutableStateOf<ProspectingSearchRunResult?>(null) }
     var draftingId by remember { mutableStateOf<String?>(null) }
     var busyId by remember { mutableStateOf<String?>(null) }
+    // Wide layout only: the candidate shown in the detail pane. Saveable so it survives a fold/unfold.
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val twoPane = LocalWindowLayout.current.twoPane
     // Edits the owner makes before copying -- keyed by candidate id so
     // switching cards (or a refresh) never mixes up whose edit is whose.
     // Never sent anywhere until "Replied" is tapped; a draft the owner
@@ -233,23 +245,28 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             "Prospecting",
             "Real conversations worth joining -- drafted for you, posted by you.",
             kicker = if (loaded && items.isNotEmpty()) "${items.size} opportunit${if (items.size == 1) "y" else "ies"} queued" else null,
+            dense = true,
         )
 
-        Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = { runSearchNow() }, enabled = !searchingNow, contentPadding = PaddingValues(0.dp)) {
-                Text(if (searchingNow) "Searching..." else "Search now", color = Accent)
+        // The pacing status line and "Search now" share one row so the first candidate starts higher on the cover screen.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val pacingLine = replyPacingLine(pacing, nowMillis)
+            Text(
+                pacingLine.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (replyHold != null) Warning else TextTertiary,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { runSearchNow() }, enabled = !searchingNow) {
+                Text(if (searchingNow) "Searching..." else "Search now", color = Accent, maxLines = 1)
             }
         }
         searchNowStatusLine(lastSearchNowRun)?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = TextTertiary, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
-        }
-        replyPacingLine(pacing, nowMillis)?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (replyHold != null) Warning else TextTertiary,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
-            )
         }
 
         (errorMessage ?: actionError)?.let { message ->
@@ -266,73 +283,109 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else {
-            // Real bug found on-device with an actual finger, twice
-            // (2026-09-07): first fix (wrapping the empty state in
-            // PullToRefreshBox) wasn't sufficient on its own.
-            // PullToRefreshBox detects the pull gesture via a NESTED SCROLL
-            // connection -- it only ever sees drag deltas that a scrollable
-            // descendant dispatches upward. PolishedEmptyState is a plain,
-            // non-scrollable Column (see GrowthComponents.kt), so it never
-            // participates in nested scroll at all -- no touch drag on it
-            // was ever reaching PullToRefreshBox's connection, no matter
-            // where in the tree it was nested. The same bug exists in
-            // VideoStatusScreen's and InboundScreen's own empty states
-            // (confirmed by inspection, not fixed here -- out of scope).
-            //
-            // Fix: give the empty state a real (if trivial) LazyColumn, the
-            // same scrollable container the populated case already uses --
-            // a LazyColumn participates in nested scroll regardless of
-            // whether its single item actually overflows the viewport, so
-            // PullToRefreshBox has something real to detect the drag against.
-            PullToRefreshBox(
-                isRefreshing = refreshing,
-                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                if (errorMessage == null && items.isEmpty()) {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        item {
-                            PolishedEmptyState(
-                                icon = Icons.Filled.TrendingUp,
-                                headline = "Queue is clear",
-                                subtitle = prospectingEmptyStateMessage(diagnostics),
+            // Real bug found on-device with an actual finger, twice (2026-09-07): PullToRefreshBox detects the pull
+            // gesture through a NESTED SCROLL connection, which a plain non-scrollable Column (PolishedEmptyState)
+            // never dispatches. The empty state therefore sits in a trivial LazyColumn, the same scrollable
+            // container the populated case uses.
+            val validSelectedId = resolveSelection(selectedId, items.map { it.id })
+            val selectedCandidate = items.firstOrNull { it.id == validSelectedId }
+
+            @Composable
+            fun cardFor(candidate: ProspectingCandidate) {
+                ProspectingCard(
+                    candidate = candidate,
+                    editedText = editedDrafts[candidate.id],
+                    onEditedTextChange = { editedDrafts[candidate.id] = it },
+                    drafting = draftingId == candidate.id,
+                    busy = busyId == candidate.id,
+                    replyHold = replyHold,
+                    onDraft = { startDraft(candidate) },
+                    onCopyAndOpen = { copyAndOpen(candidate) },
+                    onCopyAndOpenInBrowser = { copyAndOpenInBrowser(candidate) },
+                    onReplied = {
+                        // Refresh afterwards so the pacing line and the held button reflect this reply.
+                        runOutcome(candidate, afterSuccess = { refresh() }) {
+                            repo.markProspectingReplied(
+                                candidate.id,
+                                editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
+                                candidate.replyMentionsFillbook,
+                                candidate.replyUsedLink,
                             )
                         }
-                    }
-                } else {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(items, key = { it.id }) { candidate ->
-                            ProspectingCard(
-                                candidate = candidate,
-                                editedText = editedDrafts[candidate.id],
-                                onEditedTextChange = { editedDrafts[candidate.id] = it },
-                                drafting = draftingId == candidate.id,
-                                busy = busyId == candidate.id,
-                                replyHold = replyHold,
-                                onDraft = { startDraft(candidate) },
-                                onCopyAndOpen = { copyAndOpen(candidate) },
-                                onCopyAndOpenInBrowser = { copyAndOpenInBrowser(candidate) },
-                                onReplied = {
-                                    // Refresh afterwards so the pacing line and the held button reflect this reply.
-                                    runOutcome(candidate, afterSuccess = { refresh() }) {
-                                        repo.markProspectingReplied(
-                                            candidate.id,
-                                            editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
-                                            candidate.replyMentionsFillbook,
-                                            candidate.replyUsedLink,
+                    },
+                    onSkip = { runOutcome(candidate) { repo.markProspectingSkipped(candidate.id, null) } },
+                    onNotRelevant = { runOutcome(candidate) { repo.markProspectingNotRelevant(candidate.id) } },
+                    onAlreadyHandled = { runOutcome(candidate) { repo.markProspectingAlreadyHandled(candidate.id) } },
+                )
+            }
+
+            @Composable
+            fun listPane() {
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    if (errorMessage == null && items.isEmpty()) {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            item {
+                                PolishedEmptyState(
+                                    icon = Icons.Filled.TrendingUp,
+                                    headline = "Queue is clear",
+                                    subtitle = prospectingEmptyStateMessage(diagnostics),
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(if (twoPane) 8.dp else 12.dp),
+                        ) {
+                            items(items, key = { it.id }) { candidate ->
+                                if (twoPane) {
+                                    SelectableRow(selected = candidate.id == validSelectedId, onClick = { selectedId = candidate.id }) {
+                                        RowTitleSubtitle(
+                                            title = "@${candidate.authorHandle ?: "unknown"}",
+                                            subtitle = candidate.postText,
+                                            trailing = "${candidate.opportunityScore.toInt()}",
                                         )
+                                        Spacer(Modifier.height(4.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Pill(platformDisplayName(candidate.platform), TextSecondary)
+                                            if (candidate.draftReply != null) Pill("DRAFTED", Accent)
+                                        }
                                     }
-                                },
-                                onSkip = { runOutcome(candidate) { repo.markProspectingSkipped(candidate.id, null) } },
-                                onNotRelevant = { runOutcome(candidate) { repo.markProspectingNotRelevant(candidate.id) } },
-                                onAlreadyHandled = { runOutcome(candidate) { repo.markProspectingAlreadyHandled(candidate.id) } },
-                            )
+                                } else {
+                                    cardFor(candidate)
+                                }
+                            }
                         }
                     }
                 }
+            }
+
+            if (twoPane) {
+                TwoPane(
+                    list = { listPane() },
+                    detail = {
+                        if (selectedCandidate != null) {
+                            // The same card the phone shows inline, scrollable on its own in the detail pane.
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                            ) { cardFor(selectedCandidate) }
+                        } else {
+                            DetailPlaceholder(
+                                title = if (items.isEmpty()) "Nothing to reply to" else "Pick a candidate",
+                                hint = if (items.isEmpty()) "New opportunities are found on a schedule." else "Its post, draft reply and actions show here.",
+                            )
+                        }
+                    },
+                )
+            } else {
+                listPane()
             }
         }
     }

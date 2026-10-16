@@ -13,6 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -111,15 +116,20 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                         item { Text(errorMessage!!, color = Danger, modifier = Modifier.padding(20.dp)) }
                     }
                     r == null -> LoadingIndicator()
-                    else -> LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        item(key = "followers") {
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(if (LocalWindowLayout.current.twoPane) 2 else 1),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        item(key = "followers", span = { GridItemSpan(maxLineSpan) }) {
                             GrowthCard {
                                 Text("Follower counts", style = MaterialTheme.typography.titleMedium)
                                 Text("TikTok and Instagram can't be read automatically. Type today's number and it shows in Monday's review.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                                 TextButton(onClick = { showFollowers = true }) { Text("Log followers", color = Accent) }
                             }
                         }
-                        item(key = "visibility") {
+                        item(key = "visibility", span = { GridItemSpan(maxLineSpan) }) {
                             val (message, warning) = replyVisibilityMessage(r.replyVisibility)
                             GrowthCard(accentBar = when (warning) { true -> Danger; false -> Success; null -> null }) {
                                 Text("X reply views", style = MaterialTheme.typography.titleMedium)
@@ -129,7 +139,7 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                         }
                         val leaders = rankedVideos(r.videos)
                         if (leaders.size >= 2) {
-                            item(key = "leaderboard") {
+                            item(key = "leaderboard", span = { GridItemSpan(maxLineSpan) }) {
                                 GrowthCard(accentBar = Success) {
                                     Text("Best so far", style = MaterialTheme.typography.titleMedium)
                                     Text("Total views across the platforms with numbers, last 30 days.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
@@ -144,9 +154,9 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                                 }
                             }
                         }
-                        item(key = "videos-header") { SectionHeader("Videos, last 30 days") }
+                        item(key = "videos-header", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Videos, last 30 days") }
                         if (r.videos.isEmpty()) {
-                            item(key = "videos-empty") {
+                            item(key = "videos-empty", span = { GridItemSpan(maxLineSpan) }) {
                                 PolishedEmptyState(icon = Icons.Filled.QueryStats, headline = "No posted videos yet", subtitle = "Add each link in Video Status after you post, and the numbers show up here.")
                             }
                         }
@@ -176,18 +186,18 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                                 }
                             }
                         }
-                        item(key = "x-header") { SectionHeader("Recent X replies") }
+                        item(key = "x-header", span = { GridItemSpan(maxLineSpan) }) { SectionHeader("Recent X replies") }
                         if (r.xReplies.isEmpty()) {
-                            item(key = "x-empty") { Text("No replies tracked yet. They're read from X 3 times a day.", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
+                            item(key = "x-empty", span = { GridItemSpan(maxLineSpan) }) { Text("No replies tracked yet. They're read from X 3 times a day.", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
                         }
-                        items(r.xReplies, key = { it.tweetId }) { reply ->
+                        items(r.xReplies, key = { it.tweetId }, span = { GridItemSpan(maxLineSpan) }) { reply ->
                             Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
                                 Text(reply.text, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Spacer(Modifier.width(8.dp))
                                 Text("${formatCount(reply.impressions)} views", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                             }
                         }
-                        item(key = "bottom") { Spacer(Modifier.height(24.dp)) }
+                        item(key = "bottom", span = { GridItemSpan(maxLineSpan) }) { Spacer(Modifier.height(24.dp)) }
                     }
                 }
             }
