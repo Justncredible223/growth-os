@@ -122,3 +122,29 @@ describe("runWeeklyDigestStep", () => {
     expect(created).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("other platform counts in the weekly review", () => {
+  const today = "2026-10-19";
+  const x = [
+    { day: "2026-10-12", followers: 44 },
+    { day: "2026-10-18", followers: 46 },
+  ];
+
+  it("adds a line per platform with two readings and leaves out the rest", () => {
+    const d = buildWeeklyDigest(today, x, [], {
+      tiktok: [
+        { day: "2026-10-13", followers: 67 },
+        { day: "2026-10-18", followers: 71 },
+      ],
+      youtube: [{ day: "2026-10-18", followers: 9 }],
+    });
+    expect(d.body).toContain("TikTok followers: 67 -> 71 (+4) from 2026-10-13 to 2026-10-18.");
+    expect(d.body).not.toContain("YouTube");
+    expect(d.body).not.toContain("Instagram");
+  });
+
+  it("is unchanged when there are no other-platform readings", () => {
+    expect(buildWeeklyDigest(today, x, []).body).toBe(buildWeeklyDigest(today, x, [], {}).body);
+    expect(buildWeeklyDigest(today, x, []).body).not.toMatch(/TikTok|YouTube|Instagram/);
+  });
+});
