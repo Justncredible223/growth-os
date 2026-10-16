@@ -16,10 +16,14 @@ export const REPLY_COOLDOWN_MS = 20 * 60 * 1000;
 export const DAILY_REPLY_CAP = 10;
 /**
  * Recovery mode (2026-09-26): while X is limiting the account's replies (Results' reply-visibility check reads
- * "dropped"), cold replies are held to 2 a day, only on posts under 4 hours old, and drafts never name Fillbook.
- * It turns itself off when reply views recover. See prospectingRecovery.ts.
+ * "dropped"), cold replies are held to 4 a day (was 2 until 2026-10-16: the owner wants to keep growing the X following, and
+ * what got replies hidden was the burst, not the total), at least 90 minutes apart, only on posts under 4 hours old, and drafts
+ * never name Fillbook. It turns itself off when reply views recover. See prospectingRecovery.ts. Watch reply views for a week;
+ * if they fall, set the cap back to 2.
  */
-export const RECOVERY_DAILY_REPLY_CAP = 2;
+export const RECOVERY_DAILY_REPLY_CAP = 4;
+/** Minimum gap between two replies while recovery mode is on (the normal gap is REPLY_COOLDOWN_MS). */
+export const RECOVERY_REPLY_COOLDOWN_MS = 90 * 60 * 1000;
 export const RECOVERY_MAX_POST_AGE_MS = 4 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -36,7 +40,12 @@ export interface ReplyPacing {
 }
 
 /** Pure: pacing from the times replies were posted (any order; unparseable values are ignored). */
-export function computeReplyPacing(repliedAts: (string | null)[], now: Date = new Date(), dailyCap: number = DAILY_REPLY_CAP): ReplyPacing {
+export function computeReplyPacing(
+  repliedAts: (string | null)[],
+  now: Date = new Date(),
+  dailyCap: number = DAILY_REPLY_CAP,
+  cooldownMs: number = REPLY_COOLDOWN_MS,
+): ReplyPacing {
   const nowMs = now.getTime();
   const times = repliedAts
     .map((value) => (value ? new Date(value).getTime() : NaN))
@@ -47,8 +56,8 @@ export function computeReplyPacing(repliedAts: (string | null)[], now: Date = ne
 
   let nextMs = 0;
   let reason: ReplyPacing["reason"] = null;
-  if (lastMs !== undefined && lastMs + REPLY_COOLDOWN_MS > nowMs) {
-    nextMs = lastMs + REPLY_COOLDOWN_MS;
+  if (lastMs !== undefined && lastMs + cooldownMs > nowMs) {
+    nextMs = lastMs + cooldownMs;
     reason = "cooldown";
   }
   if (recent.length >= dailyCap) {
@@ -63,7 +72,7 @@ export function computeReplyPacing(repliedAts: (string | null)[], now: Date = ne
   return {
     repliedLast24h: recent.length,
     dailyCap,
-    cooldownMinutes: REPLY_COOLDOWN_MS / 60000,
+    cooldownMinutes: cooldownMs / 60000,
     lastRepliedAt: lastMs === undefined ? null : new Date(lastMs).toISOString(),
     nextReplyAt: reason ? new Date(nextMs).toISOString() : null,
     reason,

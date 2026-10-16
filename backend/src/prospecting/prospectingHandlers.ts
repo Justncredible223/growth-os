@@ -1,4 +1,4 @@
-import { computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
+import { RECOVERY_REPLY_COOLDOWN_MS, computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
 import { RECOVERY_DRAFT_NOTE, loadRecoveryState, namesFillbook, type RecoveryState } from "./prospectingRecovery.js";
 import { MENTION_BUDGET_DRAFT_NOTE, computeMentionBudget } from "./prospectingMentionBudget.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -138,7 +138,7 @@ export async function listProspectingQueue(
 
   // Two days back covers the rolling 24h cap plus the cooldown after the newest reply.
   const recentReplies = await repo.listRepliedSince(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000));
-  const pacing = computeReplyPacing(recentReplies.map((c) => c.repliedAt), now, recovery.dailyCap ?? undefined);
+  const pacing = computeReplyPacing(recentReplies.map((c) => c.repliedAt), now, recovery.dailyCap ?? undefined, recovery.active ? RECOVERY_REPLY_COOLDOWN_MS : undefined);
 
   return {
     candidates,
