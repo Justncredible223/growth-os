@@ -44,6 +44,14 @@ export interface XOwnTweet {
   reposts: number | null;
 }
 
+/** @FillbookHQ's own id and public numbers, from the one GET /users/me call (user.fields=public_metrics adds no read). */
+export interface XOwnProfile {
+  id: string;
+  followers: number | null;
+  following: number | null;
+  tweetCount: number | null;
+}
+
 /** One public post found by a recent-search query -- someone else's post, not @FillbookHQ's own. */
 export interface XSearchResult {
   id: string;
@@ -145,9 +153,22 @@ export class XSignalAdapter {
 
   /** Resolves @FillbookHQ's numeric user id, required by the mentions endpoint. */
   async resolveOwnUserId(now: Date = new Date()): Promise<string> {
-    const json = (await this.authedGet("/users/me", {}, now)) as { data?: { id: string } };
+    return (await this.resolveOwnProfile(now)).id;
+  }
+
+  /** The same /users/me call, keeping the public follower numbers it returns (they feed the daily follower snapshot). */
+  async resolveOwnProfile(now: Date = new Date()): Promise<XOwnProfile> {
+    const json = (await this.authedGet("/users/me", { "user.fields": "public_metrics" }, now)) as {
+      data?: { id: string; public_metrics?: { followers_count?: number; following_count?: number; tweet_count?: number } };
+    };
     if (!json.data?.id) throw new XApiError("X API /users/me returned no user id");
-    return json.data.id;
+    const m = json.data.public_metrics;
+    return {
+      id: json.data.id,
+      followers: m?.followers_count ?? null,
+      following: m?.following_count ?? null,
+      tweetCount: m?.tweet_count ?? null,
+    };
   }
 
   /**

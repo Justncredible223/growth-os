@@ -30,6 +30,7 @@ import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
 import { isMissingPostingTables, saveOwnTweets, syncYoutubeStats } from "../src/posting/postingRepository.js";
 import { recordXOwnedReadCostEvent } from "../src/cost/costTracking.js";
 import { loadOwnPostsSyncState, runOwnPostsStep } from "../src/posting/ownPostsRefresh.js";
+import { runFollowerSnapshotStep } from "../src/posting/followerSnapshots.js";
 import { runEngagementAutoFill } from "../src/engagement/engagementAutoFill.js";
 import { AUTOFILL_HEALTH_KEY } from "../src/engagement/engagementHandlers.js";
 
@@ -430,6 +431,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           save: (tweets) => saveOwnTweets(client, tweets, now),
         });
       }),
+    );
+    results.push(
+      await runStep("x_followers", async () =>
+        // Daily follower count (migration 0053). The numbers ride on the /users/me call other steps already make, and a
+        // day that already has a row makes no X call at all.
+        runFollowerSnapshotStep({
+          client,
+          now,
+          fetchProfile: async () => {
+            const reads = getXReads();
+            const p = await reads.resolveOwnProfile(now);
+            return { followers: p.followers, following: p.following, tweetCount: p.tweetCount };
+          },
+        }),
+      ),
     );
   }
 

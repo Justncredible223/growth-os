@@ -10,8 +10,13 @@ import type { ProspectingCandidate } from "./types.js";
  * The showcase rule is unchanged for the replies that do get a Fillbook sentence. This only decides, from what was
  * actually posted recently, whether the next draft is allowed one: once more than MAX_MENTION_SHARE of the last
  * MENTION_WINDOW posted replies named Fillbook, the next draft must leave it out, same mechanism as recovery mode.
+ *
+ * 2026-10-15: lowered from 1/3 to 1/5 (the owner's account keeps losing followers and a feed of replies that is a third
+ * product talk is a poor reason to follow). Over the last 12 replies that allows 2 naming Fillbook; a third is held back
+ * until one ages out. Follower numbers are now recorded daily (src/posting/followerSnapshots.ts) so this can be tuned
+ * against what actually happened instead of a guess.
  */
-export const MAX_MENTION_SHARE = 1 / 3;
+export const MAX_MENTION_SHARE = 1 / 5;
 export const MENTION_WINDOW = 12;
 /** Too few posted replies to call a rate -- don't suppress on a tiny sample. */
 export const MENTION_MIN_SAMPLE = 5;
