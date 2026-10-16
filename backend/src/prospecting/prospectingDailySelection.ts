@@ -23,7 +23,9 @@ export const DAILY_SET_MAX = 15;
  * day they might rank better on, not discarded) without needing an
  * invented number.
  */
-export const MIN_DAILY_SET_SCORE = 40;
+// 2026-10-15: 40 -> 45. "Fewer, better replies" is a voice rule the writer cannot enforce; a higher bar before a post is
+// even offered is where it actually gets enforced. Tune it from the follower data.
+export const MIN_DAILY_SET_SCORE = 45;
 
 export interface DailySelectionResult {
   selected: ProspectingCandidate[];

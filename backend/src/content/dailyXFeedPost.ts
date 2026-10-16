@@ -83,11 +83,14 @@ export type FeedPostContentCategory = "education" | "psychology" | "product_demo
 
 /** The guideline itself, machine-readable -- mirrors docs/SEED_DATA_SOURCES.md's "Content mix guideline" line exactly. A target, not a hard cap. */
 export const FEED_POST_CATEGORY_TARGETS: Record<FeedPostContentCategory, number> = {
-  education: 0.2,
-  psychology: 0.15,
-  product_demo: 0.35,
-  conversation_starter: 0.1,
-  cta: 0.2,
+  // 2026-10-15 (owner goal: stop losing followers): product_demo + cta lowered from 55% to 35%. A feed where more than half
+  // the posts are product pitches is a poor reason to follow a 44-follower account; education/psychology and
+  // conversation starters take the difference. Still a target, still self-correcting; tune it from the follower data.
+  education: 0.25,
+  psychology: 0.25,
+  product_demo: 0.25,
+  conversation_starter: 0.15,
+  cta: 0.1,
 };
 
 export interface FeedPostTopic {
