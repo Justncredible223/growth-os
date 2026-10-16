@@ -40,10 +40,12 @@ status) before relying on it later.
 | disclosure_rule | Never assert an account is "shadowbanned" without evidence. | docs/social/MASTER_SOCIAL_STRATEGY.md |
 | financial_claim_restriction | Every claim classified VERIFIED FACT / EVIDENCE-SUPPORTED OBSERVATION / REASONABLE HYPOTHESIS / OPINION; never promote hypothesis/opinion into fact. | docs/social/MASTER_SOCIAL_STRATEGY.md |
 
-Content mix guideline (not a hard rule, a target): 20% useful education, 15%
-relatable trader psychology, 35% product functionality/demos, 10%
-conversation starters, 20% direct promo/CTA -- product_demo + cta is the
-majority share on purpose. (Raised twice 2026-09-21: first from 20%/5% to
+Content mix guideline (not a hard rule, a target; revised 2026-10-15 because the
+account keeps losing followers): 25% useful education, 25% relatable trader
+psychology, 25% product functionality/demos, 15% conversation starters, 10%
+direct promo/CTA -- product_demo + cta is 35% (it was 55%). Education,
+psychology and conversation posts do not need a Fillbook clause. History: the
+mix below was the majority-product share on purpose. (Raised twice 2026-09-21: first from 20%/5% to
 25%/10% product-demo/CTA -- the business is actively growing, not just
 building audience goodwill, and the writer's own voice rules were found to
 structurally cancel out the CTA category regardless of this target; see

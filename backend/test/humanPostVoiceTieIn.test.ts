@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import { HUMAN_POST_VOICE_RULES } from "../src/content/humanReplyVoice";
 
 describe("HUMAN_POST_VOICE_RULES product tie-in", () => {
-  // The growth_strategist review fails a post that is pure trader education or psychology with no product connection
-  // (owner rule 2026-09-21). The writer must therefore be told to tie every post to Fillbook, not merely welcomed to.
-  it("requires every post to tie back to a verified Fillbook capability, as a clause and not a pitch", () => {
-    expect(HUMAN_POST_VOICE_RULES).toMatch(/Every post ties back to Fillbook/);
+  // 2026-10-15 (owner goal: stop losing followers): a product_demo or cta post ties back to Fillbook; education, psychology
+  // and conversation_starter posts do not have to, and the growth_strategist review no longer fails them for it. When a
+  // tie-in IS used it is still a clause tied to a verified capability, never a pitch.
+  it("ties product and cta posts back to a verified Fillbook capability, as a clause and not a pitch, and frees the rest", () => {
+    expect(HUMAN_POST_VOICE_RULES).toMatch(/A product_demo or cta post ties back to Fillbook/);
+    expect(HUMAN_POST_VOICE_RULES).toMatch(/does\s+not have to/);
     expect(HUMAN_POST_VOICE_RULES).toMatch(/ONE short, plain clause/);
     expect(HUMAN_POST_VOICE_RULES).toMatch(/verified knowledge/);
     expect(HUMAN_POST_VOICE_RULES).toMatch(/no\s+feature list/);

@@ -124,8 +124,10 @@ describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
   it("still selects a post at exactly the 12h boundary -- 'older than 12 hours' is strictly greater, not equal", () => {
     const pool = [candidate({ id: "boundary", opportunityScore: 90, postCreatedAt: hoursAgo(12), authorExternalId: "a" })];
     const result = selectDailyWorkingSet(pool, NOW);
+    // Not hard-cut as too old. (Since 2026-10-15 the quality bar is 45, so a post this old only makes the set if its
+    // frozen score is near the maximum; either way it is judged on score, not discarded by age.)
     expect(result.tooOldForToday).toHaveLength(0);
-    expect(result.selected.map((c) => c.id)).toEqual(["boundary"]);
+    expect([...result.selected, ...result.belowQualityBar].map((c) => c.id)).toEqual(["boundary"]);
   });
 
   it("a fresh, relevant candidate outranks an older candidate that has a higher FROZEN score -- proves ranking now uses today's effective score, not the stored one", () => {
@@ -134,7 +136,7 @@ describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
       // -- heavily decayed today, and should no longer beat a fresh candidate scored much lower at discovery.
       candidate({ id: "old-but-was-high-scoring", opportunityScore: 68, postCreatedAt: hoursAgo(11.7), authorExternalId: "a" }),
       // Discovered just now, frozen score lower, but nothing to decay -- keeps its full value.
-      candidate({ id: "fresh", opportunityScore: 42, postCreatedAt: hoursAgo(1), authorExternalId: "b" }),
+      candidate({ id: "fresh", opportunityScore: 55, postCreatedAt: hoursAgo(1), authorExternalId: "b" }),
     ];
     const result = selectDailyWorkingSet(pool, NOW);
     expect(result.selected.map((c) => c.id)).toEqual(["fresh"]);

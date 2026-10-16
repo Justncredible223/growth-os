@@ -141,6 +141,10 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const followers = input.authorFollowerCount ?? 0;
   const reachPoints = Math.min(Math.log10(followers + 1) * 6, 35);
   breakdown.authorReach = `${followers} followers -> +${reachPoints.toFixed(1)} (capped at 35)`;
+  // Mid-sized accounts (1k-30k) are the ones likely to read and answer a reply from a small account, which is where a
+  // follow comes from; a bare reach ranking sends every reply under accounts that will never notice it.
+  const midSizedBonus = followers >= 1_000 && followers <= 30_000 ? 6 : 0;
+  if (midSizedBonus > 0) breakdown.midSizedAccount = `${followers} followers is a size that tends to notice replies -> +${midSizedBonus}`;
 
   // Recency -- hour-scale, not a 7-day slope (2026-09-21 reach review): on X
   // a reply lands near the top of a thread only if it is among the first
@@ -160,9 +164,13 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   // replies is buried no matter how large the author is. Only the reply
   // count matters here; a big account with a fresh, quiet post is still
   // the best case (see the reach revision above).
+  // 2026-10-15 (growth audit): the penalty started at 100 replies, so a top-reach account with 90 replies still scored
+  // well and our reply sat far below the fold. It now starts at 25 and steps up, so a fresh, quiet thread wins.
   let crowdedPenalty = 0;
-  if (replyCount > 300) crowdedPenalty = 20;
-  else if (replyCount > 100) crowdedPenalty = 12;
+  if (replyCount > 300) crowdedPenalty = 25;
+  else if (replyCount > 100) crowdedPenalty = 18;
+  else if (replyCount > 50) crowdedPenalty = 10;
+  else if (replyCount > 25) crowdedPenalty = 5;
   if (crowdedPenalty > 0) breakdown.crowdedThread = `${replyCount} replies already -> -${crowdedPenalty} (a reply would be buried)`;
 
   // Authenticity -- verified is a mild positive signal; nothing here can
@@ -184,7 +192,7 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
     ? "already replied to this author before -> +10"
     : "no prior Prospecting contact -> +0";
 
-  const total = topicPoints + discussionPoints + reachPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints - crowdedPenalty;
+  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints - crowdedPenalty;
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 
   return { score, breakdown, excluded: false, exclusionReason: null };

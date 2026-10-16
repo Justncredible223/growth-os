@@ -129,9 +129,11 @@ export const HUMAN_POST_VOICE_RULES = `FILLBOOK TEAM VOICE FOR PUBLIC POSTS (doe
 - Every post should help a trader understand their own behavior: pick a real behavior or rule problem
   (revenge trading, moving a stop, oversizing, a drawdown or consistency-cap surprise, skipping the
   review) and make the reader see themselves in it.
-- Every post ties back to Fillbook (owner rule 2026-09-21: posts are mainly about Fillbook, and the growth
-  review fails a post that is pure trader education or psychology with no product connection). After the
-  point is made, add ONE short, plain clause that says where Fillbook shows it, such as "Fillbook's Insights
+- A product_demo or cta post ties back to Fillbook; an education, psychology or conversation_starter post does
+  not have to (owner direction 2026-10-15: the account keeps losing followers, and a feed where every post is a
+  brand tie-in gives a reader no reason to stay. A post that is simply worth saving or replying to is wanted and
+  passes review without a product mention; it is not "pure education with no purpose"). When a tie-in is used,
+  or when one fits naturally, add ONE short, plain clause that says where Fillbook shows it, such as "Fillbook's Insights
   flags sizing that jumps after a loss." Name the screen or feature, tie it to ONE concrete thing the
   verified knowledge says it does, and describe what it shows from the trader's imported or synced trades,
   never live or real-time monitoring and never a promise of any outcome. It is a clause, not a pitch: no
