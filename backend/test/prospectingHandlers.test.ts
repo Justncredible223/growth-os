@@ -169,7 +169,7 @@ describe("recovery mode (X limiting the account's replies, 2026-09-26)", () => {
     expect(recoveryFromVisibility({ status: "not_enough_data", recentMedian: null, recentCount: 0, baselineMedian: null, baselineCount: 0 }).active).toBe(false);
   });
 
-  it("while on, the queue offers only posts under 4 hours old and the daily cap drops to 2", async () => {
+  it("while on, the queue offers only posts under 4 hours old, the daily cap drops to 4 and replies are 90 minutes apart", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
     repo.seed(candidate({ id: "older", status: "new", opportunityScore: 90, postCreatedAt: hoursAgo(6), authorExternalId: "b" }));
@@ -180,7 +180,22 @@ describe("recovery mode (X limiting the account's replies, 2026-09-26)", () => {
 
     expect(result.candidates.map((c) => c.id)).toEqual(["fresh"]);
     expect(result.recovery.active).toBe(true);
-    expect(result.pacing).toMatchObject({ dailyCap: 2, repliedLast24h: 2, reason: "daily_cap" });
+    // 2 replies in 24h is under the recovery cap of 4, the last one was 2h ago (> 90 min), so replying is fine.
+    expect(result.pacing).toMatchObject({ dailyCap: 4, repliedLast24h: 2, cooldownMinutes: 90, reason: null });
+  });
+
+  it("while on, a reply 30 minutes ago holds the next one for the 90-minute gap, and 4 in 24h hit the cap", async () => {
+    const gap = new InMemoryProspectingRepository();
+    gap.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
+    gap.seed(candidate({ id: "r1", status: "replied", repliedAt: new Date(NOW.getTime() - 30 * 60 * 1000).toISOString(), authorExternalId: "c" }));
+    const held = await listProspectingQueue(fakeClient, NOW, { repo: gap, loadRecovery: on });
+    expect(held.pacing).toMatchObject({ reason: "cooldown", cooldownMinutes: 90 });
+
+    const full = new InMemoryProspectingRepository();
+    full.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
+    [3, 6, 9, 12].forEach((h, i) => full.seed(candidate({ id: `r${i}`, status: "replied", repliedAt: hoursAgo(h), authorExternalId: `z${i}` })));
+    const capped = await listProspectingQueue(fakeClient, NOW, { repo: full, loadRecovery: on });
+    expect(capped.pacing).toMatchObject({ dailyCap: 4, repliedLast24h: 4, reason: "daily_cap" });
   });
 
   it("while off, the normal 12h window and cap of 10 apply", async () => {
