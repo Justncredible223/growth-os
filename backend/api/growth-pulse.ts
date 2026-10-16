@@ -415,8 +415,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Checked first so a missing table never spends an X read.
         const { error: tableError } = await client.from("x_own_posts").select("tweet_id").limit(1);
         if (tableError && isMissingPostingTables(new Error(`x_own_posts: ${tableError.message} ${tableError.code ?? ""}`))) return "skipped -- migration 0043 not applied yet";
-        // Once a day, sized to the tweets whose views can still change (src/posting/ownPostsRefresh.ts). A manual
-        // run can pass ?forceOwnPosts=1 to read regardless of the cadence.
+        // Every pulse slot (3 a day) at the full read since 2026-10-16 (src/posting/ownPostsRefresh.ts: the cadence and
+        // size are settings there). A manual run can pass ?forceOwnPosts=1 to read regardless of the cadence.
         const force = req.query.forceOwnPosts === "1" || req.query.forceOwnPosts === "true";
         const state = await loadOwnPostsSyncState(client, now);
         return runOwnPostsStep({
