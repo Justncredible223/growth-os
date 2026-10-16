@@ -86,6 +86,7 @@ fun ResultsScreen(repo: GrowthOsRepository) {
     var refreshing by remember { mutableStateOf(false) }
     var statsTarget by remember { mutableStateOf<Pair<VideoResult, PostResult>?>(null) }
     var savingStats by remember { mutableStateOf(false) }
+    var showFollowers by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -111,6 +112,13 @@ fun ResultsScreen(repo: GrowthOsRepository) {
                     }
                     r == null -> LoadingIndicator()
                     else -> LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        item(key = "followers") {
+                            GrowthCard {
+                                Text("Follower counts", style = MaterialTheme.typography.titleMedium)
+                                Text("TikTok and Instagram can't be read automatically. Type today's number and it shows in Monday's review.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                TextButton(onClick = { showFollowers = true }) { Text("Log followers", color = Accent) }
+                            }
+                        }
                         item(key = "visibility") {
                             val (message, warning) = replyVisibilityMessage(r.replyVisibility)
                             GrowthCard(accentBar = when (warning) { true -> Danger; false -> Success; null -> null }) {
@@ -187,6 +195,26 @@ fun ResultsScreen(repo: GrowthOsRepository) {
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
+    if (showFollowers) {
+        LogFollowersDialog(
+            saving = savingStats,
+            onSave = { platform, count ->
+                scope.launch {
+                    savingStats = true
+                    try {
+                        val line = repo.recordFollowers(platform, count)
+                        showFollowers = false
+                        snackbarHostState.showSnackbar(line)
+                    } catch (e: Exception) {
+                        snackbarHostState.showSnackbar(authErrorMessage(e) ?: e.message?.takeIf { it.isNotBlank() } ?: "Couldn't save the count. Try again.")
+                    }
+                    savingStats = false
+                }
+            },
+            onDismiss = { if (!savingStats) showFollowers = false },
+        )
+    }
+
     statsTarget?.let { (video, post) ->
         ManualStatsDialog(
             title = "${post.platform.label}: ${video.title}",
@@ -222,6 +250,41 @@ internal fun statsButtonLabel(post: PostResult): String = when {
     post.needsManualStats -> "Add stats"
     post.needsDay7Stats -> "Add day-7 stats"
     else -> "Update"
+}
+
+/** Today's follower count for TikTok or Instagram, as shown on the profile. */
+@Composable
+private fun LogFollowersDialog(saving: Boolean, onSave: (String, Int) -> Unit, onDismiss: () -> Unit) {
+    var platform by remember { mutableStateOf("tiktok") }
+    var count by remember { mutableStateOf("") }
+    val parsed = count.filter { it.isDigit() }.takeIf { it.isNotEmpty() }?.toIntOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log followers") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("tiktok" to "TikTok", "instagram" to "Instagram").forEach { (key, label) ->
+                        TextButton(onClick = { platform = key }) {
+                            Text(label, color = if (platform == key) Accent else TextTertiary, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = count,
+                    onValueChange = { count = it },
+                    label = { Text("Followers today") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { parsed?.let { onSave(platform, it) } }, enabled = parsed != null && !saving) { Text(if (saving) "Saving..." else "Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** Views, likes, comments and shares for one TikTok or Instagram post, as shown in that app's insights. */

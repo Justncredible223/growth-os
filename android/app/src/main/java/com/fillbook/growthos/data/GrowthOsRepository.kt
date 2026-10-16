@@ -228,4 +228,7 @@ interface GrowthOsRepository {
 
     /** Records numbers typed in for a TikTok or Instagram post. */
     suspend fun recordPostStats(videoPostId: String, views: Int?, likes: Int?, comments: Int?, shares: Int?)
+
+    /** Records today's follower count for [platform] ("tiktok", "instagram" or "youtube"); returns the change line, e.g. "67 followers (+2 vs yesterday)". */
+    suspend fun recordFollowers(platform: String, followers: Int): String
 }
