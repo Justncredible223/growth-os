@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { FollowerInputError, isFollowerPlatform, parseFollowerCount, recordPlatformFollowers } from "../src/posting/platformFollowers.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
@@ -576,8 +577,21 @@ async function handlePosting(req: VercelRequest, res: VercelResponse): Promise<v
       res.status(200).json({ saved: true });
       return;
     }
-    res.status(400).json({ error: "Unknown action. Use 'record-post' or 'record-stats'." });
+    if (body.action === "record-followers") {
+      if (!isFollowerPlatform(body.platform)) {
+        res.status(400).json({ error: "Body must be { action: 'record-followers', platform: 'tiktok'|'instagram'|'youtube', followers: number }" });
+        return;
+      }
+      const summary = await recordPlatformFollowers(client, body.platform, parseFollowerCount(body.followers), new Date(), "manual");
+      res.status(200).json({ saved: !summary.startsWith("skipped"), summary });
+      return;
+    }
+    res.status(400).json({ error: "Unknown action. Use 'record-post', 'record-stats' or 'record-followers'." });
   } catch (err) {
+    if (err instanceof FollowerInputError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     if (err instanceof PostingActionError) {
       res.status(400).json({ error: err.message });
       return;
