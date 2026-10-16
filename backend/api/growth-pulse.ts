@@ -31,6 +31,7 @@ import { isMissingPostingTables, saveOwnTweets, syncYoutubeStats } from "../src/
 import { recordXOwnedReadCostEvent } from "../src/cost/costTracking.js";
 import { loadOwnPostsSyncState, runOwnPostsStep } from "../src/posting/ownPostsRefresh.js";
 import { runFollowerSnapshotStep } from "../src/posting/followerSnapshots.js";
+import { runWeeklyDigestStep } from "../src/posting/weeklyDigest.js";
 import { runEngagementAutoFill } from "../src/engagement/engagementAutoFill.js";
 import { AUTOFILL_HEALTH_KEY } from "../src/engagement/engagementHandlers.js";
 
@@ -446,6 +447,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
         }),
       ),
+    );
+    results.push(
+      // Mondays only: lines the daily follower counts up against what was posted and writes ONE plain-language note to
+      // Notifications (src/posting/weeklyDigest.ts). Reads only tables this run already filled; makes no X call.
+      await runStep("x_weekly_review", async () => runWeeklyDigestStep(client, now)),
     );
   }
 
