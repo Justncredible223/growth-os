@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { arizonaDayKey } from "../engagement/policy.js";
 import { FOLLOWER_TABLE, isMissingFollowerTable, type FollowerSnapshotRow } from "./followerSnapshots.js";
 import { SupabaseNotificationRepository } from "../notifications/supabaseNotificationRepository.js";
+import { FOLLOWER_PLATFORMS, PLATFORM_FOLLOWER_TABLE, isMissingPlatformFollowerTable, type FollowerPlatform } from "./platformFollowers.js";
 
 /**
  * The weekly "what worked / what to stop" note for the X account (2026-10-15 growth audit). Until now every measured number was
@@ -58,7 +59,28 @@ function azDay(iso: string): string {
   return arizonaDayKey(new Date(iso));
 }
 
-export function buildWeeklyDigest(todayDay: string, snapshots: FollowerSnapshotRow[], posts: OwnPostRow[]): DigestResult {
+const PLATFORM_LABEL: Record<FollowerPlatform, string> = { youtube: "YouTube subscribers", tiktok: "TikTok followers", instagram: "Instagram followers" };
+
+/** One line per platform that has two or more readings in the window; a platform with fewer is left out, never guessed. */
+export function otherPlatformLines(todayDay: string, others: Partial<Record<FollowerPlatform, FollowerSnapshotRow[]>>): string[] {
+  const start = addDays(todayDay, -7);
+  const lines: string[] = [];
+  for (const platform of FOLLOWER_PLATFORMS) {
+    const snaps = [...(others[platform] ?? [])].sort((a, b) => a.day.localeCompare(b.day));
+    const first = snaps.find((s) => s.day >= start && s.day < todayDay) ?? snaps.find((s) => s.day <= start);
+    const last = [...snaps].reverse().find((s) => s.day <= todayDay);
+    if (!first || !last || last.day <= first.day) continue;
+    lines.push(`${PLATFORM_LABEL[platform]}: ${first.followers} -> ${last.followers} (${signed(last.followers - first.followers)}) from ${first.day} to ${last.day}.`);
+  }
+  return lines;
+}
+
+export function buildWeeklyDigest(
+  todayDay: string,
+  snapshots: FollowerSnapshotRow[],
+  posts: OwnPostRow[],
+  others: Partial<Record<FollowerPlatform, FollowerSnapshotRow[]>> = {},
+): DigestResult {
   const start = addDays(todayDay, -7);
   const inWindow = (d: string) => d >= start && d < todayDay;
   const snaps = [...snapshots].sort((a, b) => a.day.localeCompare(b.day));
@@ -77,6 +99,8 @@ export function buildWeeklyDigest(todayDay: string, snapshots: FollowerSnapshotR
   } else {
     lines.push("Followers: not enough daily readings yet to compare (the snapshot needs at least two days).");
   }
+
+  lines.push(...otherPlatformLines(todayDay, others));
 
   // 2. The days that moved most, lined up with what was posted
   const byDay = new Map<string, { replies: number; posts: number; named: number }>();
@@ -167,7 +191,22 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
     impressions: r.impressions === null || r.impressions === undefined ? null : Number(r.impressions),
   }));
 
-  const digest = buildWeeklyDigest(today, snapshots, posts);
+  // Other platforms: optional. A missing table (migration 0054) or a failed read only drops these lines.
+  const others: Partial<Record<FollowerPlatform, FollowerSnapshotRow[]>> = {};
+  const otherRes = await client.from(PLATFORM_FOLLOWER_TABLE).select("platform, day, followers").gte("day", since).order("day", { ascending: true });
+  if (otherRes.error) {
+    if (!isMissingPlatformFollowerTable(`${otherRes.error.message} ${otherRes.error.code ?? ""}`)) {
+      throw new Error(`weekly review: platform follower read failed: ${otherRes.error.message}`);
+    }
+  } else {
+    for (const r of otherRes.data ?? []) {
+      const p = r.platform as FollowerPlatform;
+      if (!FOLLOWER_PLATFORMS.includes(p)) continue;
+      (others[p] ??= []).push({ day: String(r.day), followers: Number(r.followers) });
+    }
+  }
+
+  const digest = buildWeeklyDigest(today, snapshots, posts, others);
   const existing = await client.from("notifications").select("id").eq("related_id", digest.relatedId).limit(1);
   if (existing.error) throw new Error(`weekly review: notification lookup failed: ${existing.error.message}`);
   if ((existing.data ?? []).length > 0) return `already sent (${digest.relatedId})`;
