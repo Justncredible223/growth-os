@@ -11,13 +11,18 @@ import type { XOwnTweet } from "../signals/adapters/xAdapter.js";
  * once-a-day refresh still sees every reply at the 12h+ age the alert judges it at.
  */
 
-/** Minimum gap between own-tweet reads. 20h (not 24h) so a slot that fires a little early still runs instead of slipping a whole day. */
-export const OWN_POSTS_MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+/**
+ * Minimum gap between own-tweet reads. 0 (every pulse slot, 3 a day) since 2026-10-16: the once-a-day gate (20h) was in place from
+ * 2026-10-14 and recovery mode (2 replies a day) switched on while it was; a fresher read keeps the 12h-3d reply bucket's views
+ * current, which the reply-visibility alert compares against older replies, so the gate may have biased the alert toward "dropped".
+ * Raise it again (20 * 60 * 60 * 1000 = once a day, about $0.12/day saved) once recovery behaviour is understood.
+ */
+export const OWN_POSTS_MIN_INTERVAL_MS = 0;
 /** Tweets this old or older have settled views and are never re-read. */
 export const OWN_POSTS_REFRESH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 /** Room for tweets posted since the last read (reply cap is 15/day, plus own posts). */
 export const OWN_POSTS_NEW_TWEET_MARGIN = 20;
-export const OWN_POSTS_MIN_READ = 20;
+export const OWN_POSTS_MIN_READ = 60;
 export const OWN_POSTS_MAX_READ = 60;
 export const OWN_POSTS_COST_PER_TWEET_USD = 0.001;
 
@@ -31,15 +36,21 @@ export interface OwnPostsSyncState {
 export type OwnPostsReadPlan = { skip: true; reason: string } | { skip: false; maxResults: number };
 
 /** Pure: whether this pulse slot should read own tweets at all, and how many. */
-export function planOwnPostsRead(state: OwnPostsSyncState, now: Date, force = false): OwnPostsReadPlan {
-  if (!force && state.lastSyncedAt) {
+export interface OwnPostsReadConfig {
+  minIntervalMs: number;
+  minRead: number;
+}
+export const DEFAULT_OWN_POSTS_CONFIG: OwnPostsReadConfig = { minIntervalMs: OWN_POSTS_MIN_INTERVAL_MS, minRead: OWN_POSTS_MIN_READ };
+
+export function planOwnPostsRead(state: OwnPostsSyncState, now: Date, force = false, config: OwnPostsReadConfig = DEFAULT_OWN_POSTS_CONFIG): OwnPostsReadPlan {
+  if (!force && state.lastSyncedAt && config.minIntervalMs > 0) {
     const ageMs = now.getTime() - state.lastSyncedAt.getTime();
-    if (ageMs < OWN_POSTS_MIN_INTERVAL_MS) {
+    if (ageMs < config.minIntervalMs) {
       return { skip: true, reason: `skipped -- own tweets refreshed ${(ageMs / 3600000).toFixed(1)}h ago (once a day)` };
     }
   }
   const wanted = state.recentCount + OWN_POSTS_NEW_TWEET_MARGIN;
-  return { skip: false, maxResults: Math.min(OWN_POSTS_MAX_READ, Math.max(OWN_POSTS_MIN_READ, wanted)) };
+  return { skip: false, maxResults: Math.min(OWN_POSTS_MAX_READ, Math.max(config.minRead, wanted)) };
 }
 
 export async function loadOwnPostsSyncState(client: SupabaseClient, now: Date): Promise<OwnPostsSyncState> {
@@ -56,6 +67,7 @@ export interface OwnPostsStepDeps {
   state: OwnPostsSyncState;
   now: Date;
   force?: boolean;
+  config?: OwnPostsReadConfig;
   fetchOwnTweets: (maxResults: number) => Promise<XOwnTweet[]>;
   recordCost: (tweetsRead: number) => Promise<number>;
   save: (tweets: XOwnTweet[]) => Promise<{ saved: number; replies: number; matched: number }>;
@@ -63,7 +75,7 @@ export interface OwnPostsStepDeps {
 
 /** The step body, with its collaborators injected so the cadence and sizing are unit-testable. Returns the step summary line. */
 export async function runOwnPostsStep(deps: OwnPostsStepDeps): Promise<string> {
-  const plan = planOwnPostsRead(deps.state, deps.now, deps.force);
+  const plan = planOwnPostsRead(deps.state, deps.now, deps.force, deps.config);
   if (plan.skip) return `${plan.reason}; X reads: 0 tweets $0.000; LLM: 0 calls $0.0000`;
   const tweets = await deps.fetchOwnTweets(plan.maxResults);
   const cost = await deps.recordCost(tweets.length);

@@ -1,29 +1,36 @@
 import { describe, it, expect, vi } from "vitest";
-import { OWN_POSTS_MAX_READ, OWN_POSTS_MIN_INTERVAL_MS, OWN_POSTS_MIN_READ, planOwnPostsRead, runOwnPostsStep } from "../src/posting/ownPostsRefresh";
+import { DEFAULT_OWN_POSTS_CONFIG, OWN_POSTS_MAX_READ, planOwnPostsRead, runOwnPostsStep } from "../src/posting/ownPostsRefresh";
 import type { XOwnTweet } from "../src/signals/adapters/xAdapter";
 
 const now = new Date("2026-10-14T20:00:00Z");
 const ago = (ms: number) => new Date(now.getTime() - ms);
 const HOUR = 3600 * 1000;
+// The once-a-day settings used from 2026-10-14 to 2026-10-16 (and the way to go back to them): the gating logic stays tested.
+const DAILY = { minIntervalMs: 20 * HOUR, minRead: 20 };
 
 describe("planOwnPostsRead", () => {
+  it("DEFAULT: reads on every pulse slot (3 a day) at the full 60, since 2026-10-16", () => {
+    expect(DEFAULT_OWN_POSTS_CONFIG.minIntervalMs).toBe(0);
+    expect(planOwnPostsRead({ lastSyncedAt: ago(HOUR), recentCount: 5 }, now)).toEqual({ skip: false, maxResults: OWN_POSTS_MAX_READ });
+    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 0 }, now)).toEqual({ skip: false, maxResults: OWN_POSTS_MAX_READ });
+  });
   it("reads when nothing was ever synced", () => {
-    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 0 }, now)).toEqual({ skip: false, maxResults: OWN_POSTS_MIN_READ });
+    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 0 }, now, false, DAILY)).toEqual({ skip: false, maxResults: 20 });
   });
   it("skips the later slots of the same day", () => {
-    const plan = planOwnPostsRead({ lastSyncedAt: ago(5 * HOUR), recentCount: 30 }, now);
+    const plan = planOwnPostsRead({ lastSyncedAt: ago(5 * HOUR), recentCount: 30 }, now, false, DAILY);
     expect(plan.skip).toBe(true);
   });
   it("runs again once the interval has passed, even a little early in the day", () => {
-    expect(planOwnPostsRead({ lastSyncedAt: ago(OWN_POSTS_MIN_INTERVAL_MS + 1), recentCount: 10 }, now).skip).toBe(false);
-    expect(planOwnPostsRead({ lastSyncedAt: ago(19 * HOUR), recentCount: 10 }, now).skip).toBe(true);
+    expect(planOwnPostsRead({ lastSyncedAt: ago(DAILY.minIntervalMs + 1), recentCount: 10 }, now, false, DAILY).skip).toBe(false);
+    expect(planOwnPostsRead({ lastSyncedAt: ago(19 * HOUR), recentCount: 10 }, now, false, DAILY).skip).toBe(true);
   });
   it("force overrides the cadence", () => {
-    expect(planOwnPostsRead({ lastSyncedAt: ago(HOUR), recentCount: 10 }, now, true).skip).toBe(false);
+    expect(planOwnPostsRead({ lastSyncedAt: ago(HOUR), recentCount: 10 }, now, true, DAILY).skip).toBe(false);
   });
   it("sizes the read to recent tweets plus a margin, clamped to 20..60", () => {
-    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 25 }, now)).toEqual({ skip: false, maxResults: 45 });
-    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 500 }, now)).toEqual({ skip: false, maxResults: OWN_POSTS_MAX_READ });
+    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 25 }, now, false, DAILY)).toEqual({ skip: false, maxResults: 45 });
+    expect(planOwnPostsRead({ lastSyncedAt: null, recentCount: 500 }, now, false, DAILY)).toEqual({ skip: false, maxResults: OWN_POSTS_MAX_READ });
   });
 });
 
@@ -34,7 +41,7 @@ describe("runOwnPostsStep", () => {
     const fetchOwnTweets = vi.fn();
     const recordCost = vi.fn();
     const save = vi.fn();
-    const out = await runOwnPostsStep({ state: { lastSyncedAt: ago(HOUR), recentCount: 5 }, now, fetchOwnTweets, recordCost, save });
+    const out = await runOwnPostsStep({ state: { lastSyncedAt: ago(HOUR), recentCount: 5 }, now, config: DAILY, fetchOwnTweets, recordCost, save });
     expect(fetchOwnTweets).not.toHaveBeenCalled();
     expect(recordCost).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
@@ -46,6 +53,7 @@ describe("runOwnPostsStep", () => {
     const out = await runOwnPostsStep({
       state: { lastSyncedAt: null, recentCount: 10 },
       now,
+      config: DAILY,
       fetchOwnTweets,
       recordCost: async (n) => n * 0.001,
       save: async (t) => ({ saved: t.length, replies: 1, matched: 0 }),
