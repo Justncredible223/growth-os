@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +53,12 @@ import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GhostButton
+import com.fillbook.growthos.ui.adaptive.DetailPlaceholder
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
+import com.fillbook.growthos.ui.adaptive.RowTitleSubtitle
+import com.fillbook.growthos.ui.adaptive.SelectableRow
+import com.fillbook.growthos.ui.adaptive.TwoPane
+import com.fillbook.growthos.ui.adaptive.resolveSelection
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.InsetRow
@@ -105,6 +113,9 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var rejectReason by remember { mutableStateOf<String?>(null) }
     var pendingRenderConfirm by remember { mutableStateOf<ApprovalAsset?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
+    // Wide layout only: the draft shown in the detail pane. Saveable so it survives a fold/unfold.
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val twoPane = LocalWindowLayout.current.twoPane
     // Guards against a fast double-tap firing decideApproval twice for the
     // same asset before the first call's refresh() completes -- every other
     // screen with an in-flight mutating action (Inbound, Prospecting,
@@ -180,6 +191,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                 "Approvals",
                 "You always press publish — this app only ever hands off a draft.",
                 kicker = if (loaded && assets.isNotEmpty()) "${assets.size} waiting on you" else null,
+                dense = true,
             )
 
             (errorMessage ?: actionError)?.let { message ->
@@ -214,47 +226,100 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                     }
                 }
             } else {
-                SearchField(query, { query = it }, "Search drafts", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                PullToRefreshBox(
-                    isRefreshing = refreshing,
-                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        // "No matches" state for a search that returns zero
-                        // results (2026-09-07 release audit finding) --
-                        // previously this silently rendered an empty list
-                        // with no indication the search itself was the reason.
-                        if (filtered.isEmpty()) {
-                            item {
-                                PolishedEmptyState(
-                                    icon = Icons.Filled.CheckCircle,
-                                    headline = "No matches",
-                                    subtitle = "No drafts match \"$query\".",
-                                )
+                val validSelectedId = resolveSelection(selectedId, filtered.map { it.id })
+                val selectedAsset = filtered.firstOrNull { it.id == validSelectedId }
+
+                @Composable
+                fun cardFor(asset: ApprovalAsset) {
+                    ApprovalCard(
+                        asset = asset,
+                        busy = busyId == asset.id,
+                        onApprove = {
+                            // Approving a video_script asset triggers a REAL server-side
+                            // render (see enqueue_video_render in approvals.ts) -- unlike
+                            // every other asset type, this isn't reversible from here once
+                            // it starts, so it gets its own explicit confirmation instead
+                            // of firing immediately like a plain text-post approval does.
+                            if (asset.assetType == "video_script") pendingRenderConfirm = asset
+                            else decide(asset, approve = true)
+                        },
+                        onReject = { pendingReject = asset },
+                        onCopyAndShare = { copyAndShare(asset) },
+                    )
+                }
+
+                @Composable
+                fun listPane() {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        SearchField(query, { query = it }, "Search drafts", modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                        PullToRefreshBox(
+                            isRefreshing = refreshing,
+                            onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            LazyColumn(
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(if (twoPane) 8.dp else 12.dp),
+                            ) {
+                                // "No matches" state for a search that returns zero
+                                // results (2026-09-07 release audit finding) --
+                                // previously this silently rendered an empty list
+                                // with no indication the search itself was the reason.
+                                if (filtered.isEmpty()) {
+                                    item {
+                                        PolishedEmptyState(
+                                            icon = Icons.Filled.CheckCircle,
+                                            headline = "No matches",
+                                            subtitle = "No drafts match \"$query\".",
+                                        )
+                                    }
+                                }
+                                items(filtered, key = { it.id }) { asset ->
+                                    if (twoPane) {
+                                        val total = asset.reviewPassCount + asset.reviewFailCount
+                                        SelectableRow(selected = asset.id == validSelectedId, onClick = { selectedId = asset.id }) {
+                                            RowTitleSubtitle(
+                                                title = approvalHeading(asset),
+                                                subtitle = asset.previewText,
+                                                trailing = if (total > 0) "${(asset.reviewPassCount * 100) / total}" else null,
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Pill(platformDisplayName(asset.platform), TextSecondary)
+                                                Pill(assetTypeDisplayName(asset.assetType), TextSecondary)
+                                                if (asset.reviewFailCount > 0) Pill("FLAGGED", Warning)
+                                            }
+                                        }
+                                    } else {
+                                        cardFor(asset)
+                                    }
+                                }
                             }
                         }
-                        items(filtered, key = { it.id }) { asset ->
-                            ApprovalCard(
-                                asset = asset,
-                                busy = busyId == asset.id,
-                                onApprove = {
-                                    // Approving a video_script asset triggers a REAL server-side
-                                    // render (see enqueue_video_render in approvals.ts) -- unlike
-                                    // every other asset type, this isn't reversible from here once
-                                    // it starts, so it gets its own explicit confirmation instead
-                                    // of firing immediately like a plain text-post approval does.
-                                    if (asset.assetType == "video_script") pendingRenderConfirm = asset
-                                    else decide(asset, approve = true)
-                                },
-                                onReject = { pendingReject = asset },
-                                onCopyAndShare = { copyAndShare(asset) },
-                            )
-                        }
                     }
+                }
+
+                if (twoPane) {
+                    TwoPane(
+                        list = { listPane() },
+                        detail = {
+                            if (selectedAsset != null) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                                ) { cardFor(selectedAsset) }
+                            } else {
+                                DetailPlaceholder(
+                                    title = "Pick a draft",
+                                    hint = "Its full text, review result and Approve / Reject show here.",
+                                )
+                            }
+                        },
+                    )
+                } else {
+                    listPane()
                 }
             }
         }

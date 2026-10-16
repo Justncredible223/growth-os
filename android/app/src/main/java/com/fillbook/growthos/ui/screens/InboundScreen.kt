@@ -1,6 +1,8 @@
 package com.fillbook.growthos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +51,12 @@ import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.InboundEngagement
 import com.fillbook.growthos.data.InboundSummary
 import com.fillbook.growthos.ui.components.ExpandableText
+import com.fillbook.growthos.ui.adaptive.DetailPlaceholder
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
+import com.fillbook.growthos.ui.adaptive.RowTitleSubtitle
+import com.fillbook.growthos.ui.adaptive.SelectableRow
+import com.fillbook.growthos.ui.adaptive.TwoPane
+import com.fillbook.growthos.ui.adaptive.resolveSelection
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.InboundFilter
@@ -119,6 +127,9 @@ fun InboundScreen(repo: GrowthOsRepository) {
     // the live list after every refresh (see InboundFilter.reconcile) so it
     // can never point at a status with no remaining items.
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    // Wide layout only: the item shown in the detail pane. Saveable so it survives a fold/unfold.
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val twoPane = LocalWindowLayout.current.twoPane
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -227,6 +238,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
             "Inbound",
             "People who engaged with Fillbook on X -- nothing here ever sends itself.",
             kicker = summary?.takeIf { it.needsResponse > 0 }?.let { "${it.needsResponse} need${if (it.needsResponse == 1) "s" else ""} a response" },
+            dense = true,
         )
 
         (errorMessage ?: actionError)?.let { message ->
@@ -243,62 +255,66 @@ fun InboundScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else {
+            // One status line up top; the four metric tiles and "Check for missed replies" sit at the end of the list
+            // (below the fold on the cover screen, nothing removed) so the first item's primary action is on screen.
             summary?.let { s ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    MetricTile(
-                        "Need response",
-                        s.needsResponse.toString(),
-                        Icons.Filled.Forum,
-                        Modifier.weight(1f),
-                        valueColor = if (s.needsResponse > 0) Warning else TextPrimary,
-                        highlighted = s.needsResponse > 0,
-                        highlightColor = Warning,
-                    )
-                    MetricTile(
-                        "Overdue",
-                        s.overdue.toString(),
-                        Icons.Filled.Forum,
-                        Modifier.weight(1f),
-                        valueColor = if (s.overdue > 0) Danger else TextPrimary,
-                        highlighted = s.overdue > 0,
-                        highlightColor = Danger,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    MetricTile("Follow-ups", s.followUp.toString(), Icons.Filled.Repeat, Modifier.weight(1f))
-                    MetricTile("Repeat engagers", s.repeatEngagers.toString(), Icons.Filled.Repeat, Modifier.weight(1f))
-                }
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-                    OutlinedButton(
-                        onClick = { runBacklogRecovery() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !recovering,
-                    ) {
-                        Text(if (recovering) "Checking..." else "Check for missed replies", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${s.needsResponse} need response · ${s.overdue} overdue · ${s.followUp} follow-up${if (s.followUp == 1) "" else "s"} · ${s.repeatEngagers} repeat",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (s.overdue > 0) Danger else TextTertiary,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                )
+            }
+
+            @Composable
+            fun SummaryBlock() {
+                summary?.let { s ->
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            MetricTile(
+                                "Need response",
+                                s.needsResponse.toString(),
+                                Icons.Filled.Forum,
+                                Modifier.weight(1f),
+                                valueColor = if (s.needsResponse > 0) Warning else TextPrimary,
+                                highlighted = s.needsResponse > 0,
+                                highlightColor = Warning,
+                            )
+                            MetricTile(
+                                "Overdue",
+                                s.overdue.toString(),
+                                Icons.Filled.Forum,
+                                Modifier.weight(1f),
+                                valueColor = if (s.overdue > 0) Danger else TextPrimary,
+                                highlighted = s.overdue > 0,
+                                highlightColor = Danger,
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            MetricTile("Follow-ups", s.followUp.toString(), Icons.Filled.Repeat, Modifier.weight(1f))
+                            MetricTile("Repeat engagers", s.repeatEngagers.toString(), Icons.Filled.Repeat, Modifier.weight(1f))
+                        }
+                        OutlinedButton(
+                            onClick = { runBacklogRecovery() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !recovering,
+                        ) {
+                            Text(if (recovering) "Checking..." else "Check for missed replies", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Spacer(Modifier.height(12.dp))
                     }
                 }
             }
 
             if (errorMessage == null && items.isEmpty()) {
-                // Same nested-scroll fix as ProspectingScreen/VideoStatusScreen
-                // (2026-09-07): a genuinely empty queue used to sit entirely
-                // outside PullToRefreshBox, and even wrapped, a bare
-                // PolishedEmptyState (a plain, non-scrollable Column) never
-                // dispatches drag deltas to it. Fix: wrap in PullToRefreshBox
-                // with a LazyColumn -- a genuine nested-scroll participant --
-                // the same fix already proven on Prospecting.
+                // Same nested-scroll fix as ProspectingScreen/VideoStatusScreen (2026-09-07): a genuinely empty queue
+                // needs a LazyColumn inside PullToRefreshBox for pull-to-refresh to work at all.
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp)) {
                         item {
                             PolishedEmptyState(
                                 icon = Icons.Filled.Forum,
@@ -306,73 +322,121 @@ fun InboundScreen(repo: GrowthOsRepository) {
                                 subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X show up here.",
                             )
                         }
+                        item { SummaryBlock() }
                     }
                 }
             } else {
                 val availableStatuses = remember(items) { items.map { it.status }.distinct() }
-                if (availableStatuses.size > 1) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        item { InboundFilterChip("All", statusFilter == null) { statusFilter = null } }
-                        items(availableStatuses) { status ->
-                            InboundFilterChip(inboundStatusLabel(status), statusFilter == status) { statusFilter = status }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
                 val filteredItems = remember(items, statusFilter) {
                     statusFilter?.let { s -> items.filter { it.status == s } } ?: items
                 }
-                PullToRefreshBox(
-                    isRefreshing = refreshing,
-                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    if (filteredItems.isEmpty()) {
-                        // Defensive: reconcile() clears a stale filter on
-                        // refresh, but a status can still empty out between
-                        // renders. Never show a blank queue without a way back.
-                        // Uses a LazyColumn (not a bare Column) for the same
-                        // nested-scroll reason documented on the genuinely-
-                        // empty branch above -- a plain Column here would make
-                        // pull-to-refresh silently inert while a filter is
-                        // narrowed down to nothing.
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            item {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    PolishedEmptyState(
-                                        icon = Icons.Filled.Forum,
-                                        headline = "No items in this filter",
-                                        subtitle = "Other items are still waiting -- switch back to All to see them.",
-                                    )
-                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.Center) {
-                                        TextButton(onClick = { statusFilter = null }) { Text("Show all") }
+                val validSelectedId = resolveSelection(selectedId, filteredItems.map { it.id })
+                val selectedItem = filteredItems.firstOrNull { it.id == validSelectedId }
+
+                @Composable
+                fun cardFor(item: InboundEngagement) {
+                    InboundCard(
+                        item = item,
+                        busy = busyId == item.id,
+                        onDraft = { runAction(item.id, "Couldn't draft a response. Check your connection and try again.") { editedDrafts.remove(item.id); repo.draftInboundResponse(item.id) } },
+                        onMarkResponded = { runAction(item.id, "Couldn't mark that as responded. Check your connection and try again.") { repo.markInboundResponded(item.id, null, editedDrafts[item.id]?.takeIf { it != item.draftResponse }); editedDrafts.remove(item.id) } },
+                        onFollowUp = { runAction(item.id, "Couldn't flag that for follow-up. Check your connection and try again.") { repo.markInboundFollowUp(item.id) } },
+                        onClose = { runAction(item.id, "Couldn't close that. Check your connection and try again.") { repo.closeInbound(item.id) } },
+                        onCopyAndOpen = { copyAndOpen(item) },
+                        editedText = editedDrafts[item.id],
+                        onEditedTextChange = { editedDrafts[item.id] = it },
+                    )
+                }
+
+                @Composable
+                fun listPane() {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (availableStatuses.size > 1) {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                item { InboundFilterChip("All", statusFilter == null) { statusFilter = null } }
+                                items(availableStatuses) { status ->
+                                    InboundFilterChip(inboundStatusLabel(status), statusFilter == status) { statusFilter = status }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        PullToRefreshBox(
+                            isRefreshing = refreshing,
+                            onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            if (filteredItems.isEmpty()) {
+                                // Defensive: reconcile() clears a stale filter on refresh, but a status can still empty
+                                // out between renders. Never show a blank queue without a way back. A LazyColumn (not a
+                                // bare Column) so pull-to-refresh stays alive while a filter is narrowed to nothing.
+                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                    item {
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            PolishedEmptyState(
+                                                icon = Icons.Filled.Forum,
+                                                headline = "No items in this filter",
+                                                subtitle = "Other items are still waiting -- switch back to All to see them.",
+                                            )
+                                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.Center) {
+                                                TextButton(onClick = { statusFilter = null }) { Text("Show all") }
+                                            }
+                                        }
                                     }
+                                }
+                            } else {
+                                LazyColumn(
+                                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(if (twoPane) 8.dp else 12.dp),
+                                ) {
+                                    items(filteredItems, key = { it.id }) { item ->
+                                        if (twoPane) {
+                                            SelectableRow(selected = item.id == validSelectedId, onClick = { selectedId = item.id }) {
+                                                RowTitleSubtitle(
+                                                    title = "@${item.authorHandle ?: "unknown"}",
+                                                    subtitle = item.body,
+                                                    trailing = relativeTime(item.observedAt),
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Pill(inboundPriorityLabel(item.priority), inboundPriorityColor(item.priority))
+                                                    Pill(inboundStatusLabel(item.status).uppercase(), TextSecondary)
+                                                }
+                                            }
+                                        } else {
+                                            cardFor(item)
+                                        }
+                                    }
+                                    item { SummaryBlock() }
                                 }
                             }
                         }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(filteredItems, key = { it.id }) { item ->
-                                InboundCard(
-                                    item = item,
-                                    busy = busyId == item.id,
-                                    onDraft = { runAction(item.id, "Couldn't draft a response. Check your connection and try again.") { editedDrafts.remove(item.id); repo.draftInboundResponse(item.id) } },
-                                    onMarkResponded = { runAction(item.id, "Couldn't mark that as responded. Check your connection and try again.") { repo.markInboundResponded(item.id, null, editedDrafts[item.id]?.takeIf { it != item.draftResponse }); editedDrafts.remove(item.id) } },
-                                    onFollowUp = { runAction(item.id, "Couldn't flag that for follow-up. Check your connection and try again.") { repo.markInboundFollowUp(item.id) } },
-                                    onClose = { runAction(item.id, "Couldn't close that. Check your connection and try again.") { repo.closeInbound(item.id) } },
-                                    onCopyAndOpen = { copyAndOpen(item) },
-                                    editedText = editedDrafts[item.id],
-                                    onEditedTextChange = { editedDrafts[item.id] = it },
+                    }
+                }
+
+                if (twoPane) {
+                    TwoPane(
+                        list = { listPane() },
+                        detail = {
+                            if (selectedItem != null) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                                ) { cardFor(selectedItem) }
+                            } else {
+                                DetailPlaceholder(
+                                    title = "Pick a conversation",
+                                    hint = "What they said, your draft reply and the actions show here.",
                                 )
                             }
-                        }
-                    }
+                        },
+                    )
+                } else {
+                    listPane()
                 }
             }
         }

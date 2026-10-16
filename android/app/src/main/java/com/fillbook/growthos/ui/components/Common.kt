@@ -275,8 +275,10 @@ fun relativeTime(isoTimestamp: String?): String? {
  * enough wayfinding without adding another line across every screen.
  */
 @Composable
-fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier, kicker: String? = null) {
-    Column(modifier = modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
+fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier, kicker: String? = null, dense: Boolean = false) {
+    // dense: the working screens (Engage, Prospecting, Inbound, Approvals, Video Status) trade the roomy masthead for a
+    // tighter one so the status line and first card's primary action sit above the fold on the 360 x 840 dp cover screen.
+    Column(modifier = modifier.padding(start = 20.dp, end = 20.dp, top = if (dense) 8.dp else 22.dp, bottom = if (dense) 6.dp else 22.dp)) {
         if (kicker != null) {
             // A live region here (not the whole screen) means TalkBack
             // announces "N items" once when loading finishes -- because
@@ -289,11 +291,21 @@ fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier,
                 color = com.fillbook.growthos.ui.theme.Accent,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(if (dense) 2.dp else 6.dp))
         }
-        Text(title, style = com.fillbook.growthos.ui.theme.AppTypography.displayLarge, color = com.fillbook.growthos.ui.theme.TextPrimary)
-        Spacer(Modifier.height(4.dp))
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        Text(
+            title,
+            style = if (dense) com.fillbook.growthos.ui.theme.AppTypography.headlineLarge else com.fillbook.growthos.ui.theme.AppTypography.displayLarge,
+            color = com.fillbook.growthos.ui.theme.TextPrimary,
+        )
+        Spacer(Modifier.height(if (dense) 2.dp else 4.dp))
+        Text(
+            subtitle,
+            style = if (dense) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+            color = TextSecondary,
+            maxLines = if (dense) 2 else Int.MAX_VALUE,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
     }
 }
 

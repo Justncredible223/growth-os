@@ -11,6 +11,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
+import com.fillbook.growthos.ui.adaptive.AdaptiveLayout
+import com.fillbook.growthos.ui.adaptive.CONTENT_MAX_WIDTH_DP
+import com.fillbook.growthos.ui.adaptive.ConstrainedContent
+import com.fillbook.growthos.ui.adaptive.GRID_CONTENT_MAX_WIDTH_DP
+import com.fillbook.growthos.ui.adaptive.LocalWindowLayout
+import com.fillbook.growthos.ui.adaptive.RAIL_WIDTH_DP
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -207,7 +220,9 @@ class MainActivity : FragmentActivity() {
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    GrowthOsRoot(this, pendingDeepLinkRoute)
+                    AdaptiveLayout {
+                        GrowthOsRoot(this, pendingDeepLinkRoute)
+                    }
                 }
             }
         }
@@ -340,42 +355,75 @@ private fun GrowthOsApp(
         }
     }
 
-    Scaffold(
-        bottomBar = {
-            val onMoreScreen = moreDestinations.any { d -> currentDestination?.hierarchy?.any { it.route == d.route } == true }
-            GrowthBottomNav(
-                items = primaryDestinations,
-                currentDestination = currentDestination,
-                onMoreScreen = onMoreScreen,
-                onSelect = ::navigate,
-                onMore = { showMore = true },
-            )
-        },
-    ) { innerPadding ->
+    val windowLayout = LocalWindowLayout.current
+    val onMoreScreen = moreDestinations.any { d -> currentDestination?.hierarchy?.any { it.route == d.route } == true }
+
+    // One NavHost definition hosted either by the bottom-bar shell (COMPACT) or beside the rail (wide).
+    val navHost: @Composable (Modifier) -> Unit = { modifier ->
         NavHost(
             navController = navController,
             startDestination = Destination.Home.route,
-            modifier = Modifier.padding(innerPadding),
+            modifier = modifier,
         ) {
-            composable(Destination.Home.route) { HomeScreen(repo, onNavigate = ::navigate) }
+            composable(Destination.Home.route) { WideContent(GRID_CONTENT_MAX_WIDTH_DP) { HomeScreen(repo, onNavigate = ::navigate) } }
             composable(Destination.Prospecting.route) { ProspectingScreen(repo) }
             composable(Destination.Approvals.route) { ApprovalsScreen(repo) }
             composable(Destination.Inbound.route) { InboundScreen(repo) }
-            composable(Destination.Analytics.route) { AnalyticsScreen(repo) }
-            composable(Destination.ContentLibrary.route) { ContentLibraryScreen(repo) }
-            composable(Destination.Experiments.route) { ExperimentsScreen(repo) }
-            composable(Destination.Notifications.route) { NotificationsScreen(repo, onNavigate = ::navigate) }
-            composable(Destination.MorningBrief.route) { MorningBriefScreen(repo, onNavigate = ::navigate) }
-            composable(Destination.EveningReport.route) { EveningReportScreen(repo, onNavigate = ::navigate) }
-            composable(Destination.System.route) { SystemScreen(repo) }
-            composable(Destination.Settings.route) { SettingsScreen(repo) }
-            composable(Destination.XFeedPostHistory.route) { XFeedPostHistoryScreen(repo) }
-            composable(Destination.Partnerships.route) { PartnershipsScreen(repo) }
+            composable(Destination.Analytics.route) { WideContent { AnalyticsScreen(repo) } }
+            composable(Destination.ContentLibrary.route) { WideContent { ContentLibraryScreen(repo) } }
+            composable(Destination.Experiments.route) { WideContent { ExperimentsScreen(repo) } }
+            composable(Destination.Notifications.route) { WideContent { NotificationsScreen(repo, onNavigate = ::navigate) } }
+            composable(Destination.MorningBrief.route) { WideContent { MorningBriefScreen(repo, onNavigate = ::navigate) } }
+            composable(Destination.EveningReport.route) { WideContent { EveningReportScreen(repo, onNavigate = ::navigate) } }
+            composable(Destination.System.route) { WideContent { SystemScreen(repo) } }
+            composable(Destination.Settings.route) { WideContent { SettingsScreen(repo) } }
+            composable(Destination.XFeedPostHistory.route) { WideContent { XFeedPostHistoryScreen(repo) } }
+            composable(Destination.Partnerships.route) { WideContent { PartnershipsScreen(repo) } }
             composable(Destination.VideoStatus.route) { VideoStatusScreen(repo) }
-            composable(Destination.FillbookStats.route) { FillbookStatsScreen(fillbookAdminRepo) }
-            composable(Destination.Results.route) { ResultsScreen(repo) }
-            composable(Destination.LiveHost.route) { LiveHostScreen(repo) }
+            composable(Destination.FillbookStats.route) { WideContent { FillbookStatsScreen(fillbookAdminRepo) } }
+            composable(Destination.Results.route) { WideContent(GRID_CONTENT_MAX_WIDTH_DP) { ResultsScreen(repo) } }
+            composable(Destination.LiveHost.route) { WideContent { LiveHostScreen(repo) } }
             composable(Destination.Engage.route) { EngagementScreen(repo) }
+        }
+    }
+
+    // One Scaffold/Row/NavHost tree for every width, with only the rail and bottom bar conditional, so folding or
+    // unfolding recomposes in place and every screen keeps its state (a second shell would dispose the NavHost).
+    val direction = androidx.compose.ui.platform.LocalLayoutDirection.current
+    Scaffold(
+        bottomBar = {
+            if (!windowLayout.useRail) {
+                GrowthBottomNav(
+                    items = primaryDestinations,
+                    currentDestination = currentDestination,
+                    onMoreScreen = onMoreScreen,
+                    onSelect = ::navigate,
+                    onMore = { showMore = true },
+                )
+            }
+        },
+    ) { innerPadding ->
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (windowLayout.useRail) {
+                GrowthNavRail(
+                    items = primaryDestinations,
+                    currentDestination = currentDestination,
+                    onMoreScreen = onMoreScreen,
+                    onSelect = ::navigate,
+                    onMore = { showMore = true },
+                )
+            }
+            navHost(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(
+                        start = if (windowLayout.useRail) 0.dp else innerPadding.calculateStartPadding(direction),
+                        top = innerPadding.calculateTopPadding(),
+                        end = innerPadding.calculateEndPadding(direction),
+                        bottom = innerPadding.calculateBottomPadding(),
+                    ),
+            )
         }
     }
 
@@ -392,6 +440,61 @@ private fun GrowthOsApp(
             )
         }
     }
+}
+
+/** Caps a single-column screen's width on the wide layouts (centered); a no-op on COMPACT. */
+@Composable
+private fun WideContent(maxWidthDp: Int = CONTENT_MAX_WIDTH_DP, content: @Composable () -> Unit) =
+    ConstrainedContent(maxWidthDp, content)
+
+/**
+ * The wide-window navigation: a left rail with the same primary destinations as the bottom bar plus More (which opens
+ * the same More sheet). It is its own column in a Row, so it never overlaps the content or a hinge, and it applies
+ * the start/top/bottom system-bar insets itself.
+ */
+@Composable
+private fun GrowthNavRail(
+    items: List<Destination>,
+    currentDestination: androidx.navigation.NavDestination?,
+    onMoreScreen: Boolean,
+    onSelect: (String) -> Unit,
+    onMore: () -> Unit,
+) {
+    NavigationRail(
+        containerColor = SurfaceElevated,
+        modifier = Modifier.width(RAIL_WIDTH_DP.dp).fillMaxHeight(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            items.forEach { destination ->
+                val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                RailItem(destination.icon, destination.label, selected) { onSelect(destination.route) }
+            }
+            RailItem(Icons.Filled.MoreHoriz, "More", onMoreScreen, onMore)
+        }
+    }
+}
+
+@Composable
+private fun RailItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    NavigationRailItem(
+        selected = selected,
+        onClick = onClick,
+        icon = { Icon(icon, contentDescription = null) },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp)) },
+        alwaysShowLabel = true,
+        colors = NavigationRailItemDefaults.colors(
+            selectedIconColor = Accent,
+            selectedTextColor = Accent,
+            indicatorColor = Accent.copy(alpha = 0.16f),
+            unselectedIconColor = TextTertiary,
+            unselectedTextColor = TextTertiary,
+        ),
+        modifier = Modifier.heightIn(min = 56.dp),
+    )
 }
 
 /**
