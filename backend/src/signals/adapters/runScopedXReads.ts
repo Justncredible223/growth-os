@@ -1,5 +1,5 @@
 import type { IngestionCursorStore } from "./ingestionCursorStore.js";
-import type { XMention, XSignalAdapter } from "./xAdapter.js";
+import type { XMention, XOwnProfile, XSignalAdapter } from "./xAdapter.js";
 
 /** Numeric comparison of two X post ids (snowflakes). Falls back to length-then-lexical order for anything that is not all digits. */
 export function compareXIds(a: string, b: string): number {
@@ -37,7 +37,26 @@ export class RunScopedXReads {
     private mentionCursorSources: string[],
   ) {}
 
+  private profile: Promise<XOwnProfile> | null = null;
+
+  /**
+   * The account's id and public follower numbers from ONE /users/me call per run. Whichever step asks first pays the
+   * read; the daily follower snapshot (src/posting/followerSnapshots.ts) then reads the numbers for free.
+   */
+  resolveOwnProfile(now: Date = new Date()): Promise<XOwnProfile> {
+    if (!this.profile) {
+      const pending = this.adapter.resolveOwnProfile(now);
+      this.profile = pending;
+      pending.catch(() => {
+        if (this.profile === pending) this.profile = null;
+      });
+    }
+    return this.profile;
+  }
+
   resolveOwnUserId(now: Date = new Date()): Promise<string> {
+    // Adapters that can return the profile share its one call; a bare adapter (older tests) keeps the id-only call.
+    if (typeof this.adapter.resolveOwnProfile === "function") return this.resolveOwnProfile(now).then((p) => p.id);
     if (!this.userId) {
       const pending = this.adapter.resolveOwnUserId(now);
       this.userId = pending;
