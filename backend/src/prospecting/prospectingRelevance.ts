@@ -319,9 +319,67 @@ export function isTooSmallToBeWorthIt(followerCount: number | null | undefined):
   return typeof followerCount === "number" && followerCount < MIN_PROSPECT_FOLLOWERS;
 }
 
-/** Prospecting's gate: about futures / prop-firm trading, and a post a person can actually reply to (not a newsletter or an ad). */
-export function isReplyWorthyPost(postText: string): boolean {
+/**
+ * Sales-funnel broadcasts (owner direction 2026-10-16, reply-style experiment: a reply under an academy or signal seller's
+ * funnel post reaches only that account's buyers and followers who are being sold to). Extends isPromoContent; nothing
+ * above is weakened. Each pattern needs a selling cue, not just a topic word, so a real trader asking about a course or
+ * a broker is kept.
+ */
+const SALES_FUNNEL_PATTERNS: RegExp[] = [
+  /\bJOIN\b/, // shouted call to action ("... ACADEMY ... JOIN")
+  /\b(?:join|enrol+|register for|sign ?up for|apply for|get access to) (?:the |our |my |this )?(?:\w+ ){0,3}(?:academy|course|mentorship|masterclass|bootcamp|webinar|community|group|channel|telegram|discord|vip)\b/i,
+  /\b(?:live )?trading academy\b/i,
+  /\bdm (?:me|us)\b|\bdm for\b|\b(?:message|text) me (?:for|to)\b|\bwhats ?app\b|\btelegram\b|\bt\.me\//i,
+  /\b(?:vip|premium|paid|private) (?:signals?|group|channel|community|mentorship)\b|\bsignals? (?:group|service|provider|channel)\b/i,
+  /\bfree (?:class|training|webinar|workshop|ebook|e-book|pdf|strategy|trial)\b/i,
+  /\b(?:limited|only \d+) (?:seats?|spots?|slots?|places?)\b|\benrollment (?:is )?(?:open|closing)\b|\bcohort\b/i,
+  /\b(?:turn|grow|flip) \$?\d+k? (?:in)?to \$?\d+k?\b/i,
+];
+/** CFD / retail-forex broker vocabulary: promo for a different audience than futures traders on prop firms. */
+const CFD_BROKER_PATTERNS: RegExp[] = [/\bCFDs?\b/, /\b(?:MT4|MT5|MetaTrader)\b/i, /\bspread betting\b/i, /\b(?:forex|fx) brokers?\b/i, /\bzero commission\b/i, /\bleverage up to\b/i, /\bopen (?:a |an |your )?(?:live |demo )?account\b/i];
+const INVITE_REPLY_PATTERN = /\b(?:what do you|how do you|what would you|which (?:one )?do you|anyone else|who else|your (?:take|thoughts)|thoughts on|drop your|tell me|curious (?:how|what|which|if|whether)|do you (?:still|ever|also))\b|\bpoll\b/i;
+
+function countHashtags(text: string): number {
+  return (text.match(/#\w+/g) ?? []).length;
+}
+function hasLink(text: string): boolean {
+  return /https?:\/\/\S+/i.test(text);
+}
+
+/** True when what is left after removing links, hashtags and @mentions is too little to reply to. */
+export function isOnlyHashtagsOrLinks(postText: string): boolean {
+  const rest = postText.replace(/https?:\/\/\S+/gi, " ").replace(/#\w+/g, " ").replace(/@\w+/g, " ").replace(/[^\p{L}\p{N}\s]/gu, " ");
+  return rest.split(/\s+/).filter((w) => w.length > 1).length < 3;
+}
+
+/** Sales funnel / CFD-broker promo / hashtag-only posts that never reach the queue. Genuine trader questions pass. */
+export function isSalesFunnelOrEmptyPost(postText: string): boolean {
+  if (isOnlyHashtagsOrLinks(postText)) return true;
+  if (countHashtags(postText) >= 4) return true;
+  if (SALES_FUNNEL_PATTERNS.some((p) => p.test(postText))) return true;
+  // A link plus a selling cue is a funnel even when each alone would pass.
+  if (hasLink(postText) && /\b(?:join|register|enrol+|sign ?up|get access|learn how|grab|claim|limited)\b/i.test(postText)) return true;
+  if (CFD_BROKER_PATTERNS.some((p) => p.test(postText))) {
+    // A plain trader question about CFDs vs futures is a real conversation; a CFD statement or hashtagged bait is a broker's marketing.
+    const genuineQuestion = postText.includes("?") && countHashtags(postText) < 2 && !hasLink(postText);
+    if (!genuineQuestion) return true;
+  }
+  return false;
+}
+
+/** True when the post asks the reader something or invites replies (feeds a small score boost, see prospectingScoring.ts). */
+export function invitesReplies(postText: string): boolean {
+  return INVITE_REPLY_PATTERN.test(postText);
+}
+
+/** The original gate: about futures / prop-firm trading, and a post a person can actually reply to (not a newsletter or an ad). */
+export function isReplyWorthyBase(postText: string): boolean {
   return isPlausiblyTradingRelated(postText) && !isAiAgentHype(postText) && !isBroadcastContent(postText) && !isPromoContent(postText);
+}
+
+/** Prospecting's gate: the original gate plus no sales funnel, CFD-broker promo or hashtag/link-only post (reply-style experiment, 2026-10-16). */
+export function isReplyWorthyPost(postText: string): boolean {
+  return isReplyWorthyBase(postText) && !isSalesFunnelOrEmptyPost(postText);
 }
 
 /** AI trading-agent hype (2026-10-04) is not the manual-discipline audience. No override: these posts always mention drawdown too. */

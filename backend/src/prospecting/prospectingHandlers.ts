@@ -10,6 +10,7 @@ import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK,
 import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWithRetries } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance.js";
+import { matchPostedStyle, optionSoftProblem, postMentionsFillbook, type DraftOption } from "./prospectingDraftOptions.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
@@ -245,6 +246,12 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   // regenerated with the reason fed back, up to MAX_DRAFT_ATTEMPTS, and never shown. A draft with only a
   // soft style tell ("most traders", a question tacked on the end, too many sentences) gets ONE retry and
   // is then shown as the best attempt, since the owner edits every reply anyway.
+  //
+  // Two-option mode (reply-style experiment): one model call returns a sharp reply (`reply`) and a helpful one
+  // (`helpfulReply`). Each option is checked on its own; if one fails a hard check the whole call is retried with that
+  // option named, and if the attempts run out with one option still clean, that single clean option is shown.
+  let bestPartial: { candidate: ProspectingDraftResult; option: DraftOption } | null = null;
+  const postInvitesFillbook = postMentionsFillbook(row.postText);
   const { draft: accepted, hardReason } = await draftWithRetries({
     generate: (retryFeedback) => drafter(retryFeedback ? { ...draftContext, retryFeedback } : draftContext, brandRulesSummary, verifiedKnowledgeSummary),
     assess: (candidate) => {
@@ -255,6 +262,31 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       // terminal status and no persisted draft as the earlier gates.
       if (!candidate.isRelevant) {
         throw new ProspectingIrrelevantSignal();
+      }
+      if (candidate.helpfulReply !== undefined) {
+        const options: DraftOption[] = [
+          { style: "sharp", text: candidate.reply },
+          { style: "helpful", text: candidate.helpfulReply },
+        ];
+        const hardFor = (option: DraftOption): string | null =>
+          checkReplyGuardrails(option.text, false)?.reason ??
+          (candidate.usesLink ? "declares a link; cold replies never include one" : null) ??
+          (mustOmitFillbook && namesFillbook(option.text)
+            ? recovery.active
+              ? "names Fillbook while recovery mode is on -- leave the product out entirely"
+              : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
+            : null) ??
+          (!postInvitesFillbook && namesFillbook(option.text) ? "names Fillbook in a cold reply -- the post did not ask about it, so leave the product out" : null);
+        const verdicts = options.map((o) => ({ option: o, hard: hardFor(o), soft: optionSoftProblem(o.style, o.text) }));
+        const label = (o: DraftOption) => (o.style === "sharp" ? "The sharp option" : "The helpful option");
+        const badHard = verdicts.find((v) => v.hard);
+        if (badHard) {
+          const clean = verdicts.filter((v) => !v.hard);
+          if (clean.length === 1) bestPartial = { candidate, option: clean[0]!.option };
+          return { hard: `${label(badHard.option)} ${badHard.hard}`, soft: null, rejectedText: badHard.option.text };
+        }
+        const badSoft = verdicts.find((v) => v.soft);
+        return badSoft ? { hard: null, soft: `${label(badSoft.option)} ${badSoft.soft}`, rejectedText: badSoft.option.text } : { hard: null, soft: null };
       }
       // Mechanical, $0 safety net -- catches banned generic phrases, an
       // unexplained link, and unverified performance/customer claims
@@ -278,10 +310,21 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     }
     throw err;
   });
-  if (!accepted) {
+  if (!accepted && !bestPartial) {
     throw new ProspectingActionError(`Draft rejected -- ${hardReason}. Try drafting again.`);
   }
-  const draft = accepted;
+  const draft = accepted ?? bestPartial!.candidate;
+  let options: DraftOption[] | null = null;
+  if (accepted) {
+    if (accepted.helpfulReply !== undefined) {
+      options = [
+        { style: "sharp", text: accepted.reply },
+        { style: "helpful", text: accepted.helpfulReply },
+      ];
+    }
+  } else {
+    options = [bestPartial!.option];
+  }
 
   // Swaps the model's static placeholder link for a real per-candidate
   // short link (see trackableLinks.ts) -- closes the "per-reply link
@@ -291,8 +334,10 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     ? substituteTrackableLink(draft.reply, PROSPECTING_TRACKABLE_LINK, buildTrackableReplyLink(`prospecting:${id}`, "prospecting", id))
     : draft.reply;
 
+  // draftReply is always the first option's text so older app builds (which only know draftReply) keep working.
   await repo.updateStatus(id, "ready", {
-    draftReply: finalReply,
+    draftReply: options ? options[0]!.text : finalReply,
+    ...(options ? { draftOptions: options } : {}),
     replyMentionsFillbook: draft.mentionsFillbook,
     replyUsedLink: draft.usesLink,
   });
@@ -332,8 +377,11 @@ export async function markProspectingReplied(
   if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
 
   const now = new Date().toISOString();
+  // Record which style was actually posted: no finalReply means the app posted the draft as it was (the first option).
+  const postedText = finalReply && finalReply.trim() ? finalReply : row.draftReply;
   await repo.updateStatus(id, "replied", {
     repliedAt: now,
+    postedStyle: matchPostedStyle(postedText, row.draftOptions, row.draftReply),
     finalReply: finalReply && finalReply !== row.draftReply ? finalReply : undefined,
     replyMentionsFillbook: mentionsFillbook ?? row.replyMentionsFillbook ?? undefined,
     replyUsedLink: usedLink ?? row.replyUsedLink ?? undefined,

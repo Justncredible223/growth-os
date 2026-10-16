@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import { recordXSearchCostEvent } from "../cost/costTracking.js";
 import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.js";
-import { isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "./prospectingRelevance.js";
+import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   QUEUE_FULL_THRESHOLD,
@@ -167,7 +167,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       // "risk management") is never written to prospecting_candidates in
       // the first place, instead of being stored and only reclassified
       // 'not_relevant' the next time the queue happens to be fetched.
-      if (!isReplyWorthyPost(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
+      if (!isReplyWorthyBase(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
         excludedAsIrrelevant++;
         continue;
       }
@@ -194,6 +194,12 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       });
 
       if (scoreResult.excluded) {
+        excludedAsSpam++;
+        continue;
+      }
+      // Sales funnels (academy / course / signal seller / "DM me" / CFD-broker promo / hashtag- or link-only posts) are counted
+      // with spam: they are the same kind of post, and they never reach the queue.
+      if (isSalesFunnelOrEmptyPost(post.text)) {
         excludedAsSpam++;
         continue;
       }

@@ -530,6 +530,14 @@ class NetworkGrowthOsRepository(
         creatorCandidate = optBoolean("creatorCandidate", false),
         status = getString("status"),
         draftReply = optStringOrNull("draftReply"),
+        draftOptions = optJSONArray("draftOptions")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val style = o.optString("style", "")
+                val text = o.optString("text", "")
+                if (style.isNotBlank() && text.isNotBlank()) DraftOption(style, text) else null
+            }
+        } ?: emptyList(),
         replyMentionsFillbook = if (isNull("replyMentionsFillbook")) null else getBoolean("replyMentionsFillbook"),
         replyUsedLink = if (isNull("replyUsedLink")) null else getBoolean("replyUsedLink"),
     )
