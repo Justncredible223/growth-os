@@ -19,6 +19,7 @@ import { pruneOldCostEvents } from "../src/cost/costTracking.js";
 import { pruneOldVideoRenders } from "../src/video/videoRenderRetention.js";
 import { retiredStepSkip } from "../src/retiredSteps.js";
 import { runGiveawayPlanStep } from "../src/giveaway/giveawayPlan.js";
+import { runYoutubeFollowerStep } from "../src/posting/platformFollowers.js";
 import { generateStrategy } from "../src/strategy/strategyEngine.js";
 import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
 import { decideNotifications } from "../src/notifications/notificationEngine.js";
@@ -319,6 +320,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // The giveaway's dated playbook (src/giveaway/giveawayPlan.ts): one notification per milestone with a checklist and,
     // where a public post helps, a ready draft. Reads and writes only the notifications table; posts nothing.
     results.push(await runStep("giveaway_plan", async () => runGiveawayPlanStep(client, new Date())));
+    results.push(await runStep("youtube_followers", async () => runYoutubeFollowerStep({ client, now: new Date() })));
   }
 
   if (groups.xFeedPost) {
