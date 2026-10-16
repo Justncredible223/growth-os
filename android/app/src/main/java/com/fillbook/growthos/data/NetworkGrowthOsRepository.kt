@@ -960,6 +960,11 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=posting", body)
     }
 
+    override suspend fun recordFollowers(platform: String, followers: Int): String {
+        val json = post("/api/approvals?resource=posting", JSONObject().put("action", "record-followers").put("platform", platform).put("followers", followers))
+        return json.optString("summary", "Saved.")
+    }
+
     override suspend fun getEveningReport(): EveningReport {
         val json = get("/api/summary?resource=evening-report")
         return EveningReport(
