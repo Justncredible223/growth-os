@@ -130,7 +130,8 @@ export function vwapOf(candles: Candle[]): number[] {
   });
 }
 
-export const CHART_SIZE = { w: 780, h: 520 } as const;
+/** Matches the teachChart box (mockLayout.ts): the chart fills the lower frame, down to y 1500. */
+export const CHART_SIZE = { w: 840, h: 810 } as const;
 const PAD = { left: 16, right: 186, top: 24, bottom: 24 };
 
 const TONE: Record<ChartTone, string> = { accent: "var(--cyan)", good: "var(--good)", bad: "var(--bad)", mute: "var(--mute)" };

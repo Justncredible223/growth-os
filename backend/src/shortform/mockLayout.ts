@@ -40,6 +40,16 @@ export const MOCK_SAFE: Rect = (() => {
 export const MOCK_CANVAS = { width: CANVAS.width, height: CANVAS.height } as const;
 
 /**
+ * The explainer and strategy cards (explainers.ts, strategyVideos.ts) use more of the frame than the product slides (owner
+ * decision 2026-10-17: the bottom third was empty): wider (x 60-900, still left of the button column at x 930) and down to
+ * y 1500, above a normal viewer's caption block at about y 1520. Every WORD stays above TEACH_TEXT_BOTTOM (the product slides'
+ * limit, which a promoted post's promotion block covers from about y 1250); only a drawn chart may run below it, so a promoted
+ * view can lose the bottom of a picture but never a line of text.
+ */
+export const TEACH_SAFE: Rect = { x: 60, y: 170, w: 840, h: 1330 };
+export const TEACH_TEXT_BOTTOM = MOCK_BOTTOM_LIMIT;
+
+/**
  * Where every element of the mock sits. Windows have a fixed height (rows share it), so text that is too long is a
  * validation error, not a reflow. `window` is the one box beats 2-4 draw their window in; beat 1 draws its window in
  * `window` under one hero figure, or in `windowLow` under two.
@@ -60,14 +70,16 @@ export const MOCK_BOXES = {
   hookText: { x: MOCK_SAFE.x, y: 240, w: MOCK_SAFE.w, h: 400 },
   hookFigs: { x: MOCK_SAFE.x, y: 660, w: MOCK_SAFE.w, h: 470 },
   /** An explainer's teaching card (explainers.ts): the step label, the headline (auto-fitted), and the plain-words line under it. */
-  teachStep: { x: MOCK_SAFE.x, y: 300, w: MOCK_SAFE.w, h: 50 },
-  teachHead: { x: MOCK_SAFE.x, y: 372, w: MOCK_SAFE.w, h: 430 },
-  teachBody: { x: MOCK_SAFE.x, y: 830, w: MOCK_SAFE.w, h: 280 },
+  teachStep: { x: 60, y: 300, w: 840, h: 56 },
+  teachHead: { x: 60, y: 380, w: 840, h: 520 },
+  teachBody: { x: 60, y: 940, w: 840, h: 270 },
+  /** Below the text: a picture-only step tracker on the plain teaching cards (fine to lose under a promotion block). */
+  teachTrack: { x: 60, y: 1290, w: 840, h: 150 },
   /** A strategy video's card (strategyVideos.ts): a shorter headline, the drawn chart, its illustration tag, and one line under it. */
-  teachChartHead: { x: MOCK_SAFE.x, y: 366, w: MOCK_SAFE.w, h: 150 },
-  teachChartTag: { x: MOCK_SAFE.x, y: 526, w: MOCK_SAFE.w, h: 30 },
-  teachChart: { x: MOCK_SAFE.x, y: 560, w: MOCK_SAFE.w, h: 520 },
-  teachChartBody: { x: MOCK_SAFE.x, y: 1092, w: MOCK_SAFE.w, h: 118 },
+  teachChartHead: { x: 60, y: 372, w: 840, h: 150 },
+  teachChartBody: { x: 60, y: 530, w: 840, h: 112 },
+  teachChartTag: { x: 60, y: 654, w: 840, h: 30 },
+  teachChart: { x: 60, y: 690, w: 840, h: 810 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;
@@ -129,7 +141,11 @@ export const MOCK_LIMITS = {
 export function boxesOutsideSafeArea(): MockBoxName[] {
   const out: MockBoxName[] = [];
   for (const [name, b] of Object.entries(MOCK_BOXES) as Array<[MockBoxName, Rect]>) {
-    if (b.x < MOCK_SAFE.x || b.y < MOCK_SAFE.y || b.x + b.w > MOCK_SAFE.x + MOCK_SAFE.w || b.y + b.h > MOCK_SAFE.y + MOCK_SAFE.h) out.push(name);
+    // The explainer and strategy cards have their own wider area; their words also stay above TEACH_TEXT_BOTTOM (only the chart may go lower).
+    const teach = name.startsWith("teach");
+    const safe = teach ? TEACH_SAFE : MOCK_SAFE;
+    const textBottom = teach && name !== "teachChart" && name !== "teachTrack" ? TEACH_TEXT_BOTTOM : Infinity;
+    if (b.x < safe.x || b.y < safe.y || b.x + b.w > safe.x + safe.w || b.y + b.h > Math.min(safe.y + safe.h, textBottom)) out.push(name);
   }
   return out;
 }
