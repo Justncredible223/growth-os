@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DETAIL_FOOTER, HOOK_MOTION, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, WINDOW_BAR, cursorPath, heroFontSize, hookValueFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
+import { DETAIL_FOOTER, HOOK_MOTION, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, TEACH_SAFE, TEACH_TEXT_BOTTOM, WINDOW_BAR, cursorPath, heroFontSize, hookValueFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
 import { CLASSIC_MOCK_STYLE, type MockStyle } from "../../src/shortform/mockStyle.js";
 import { ILLUSTRATION_TAG, strategyChartSvg, type StrategyChartSpec } from "../../src/shortform/strategyCharts.js";
-import type { ChartSpec, ChartTone, MockRow } from "../../src/shortform/types.js";
+import type { ChartSpec, ChartTone, MockRow, Rect } from "../../src/shortform/types.js";
 import { VideoFactoryError } from "./types.js";
 
 /**
@@ -79,11 +79,13 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .cursor{position:absolute;width:64px;height:64px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));pointer-events:none}
 .step{display:flex;align-items:center}.step span{display:inline-flex;align-items:center;height:50px;padding:0 26px;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:999px;font:700 24px/1 MR;letter-spacing:.16em;color:var(--cyan);white-space:nowrap}
 .thead{font:800 120px/1.06 SG;letter-spacing:-.025em;color:var(--ink);overflow:hidden;display:flex;flex-direction:column;justify-content:center}.thead em{font-style:normal;color:var(--cyan)}
-.tbody{font:600 50px/1.32 MR;color:var(--mute);overflow:hidden}
+.tbody{font:600 56px/1.32 MR;color:var(--mute);overflow:hidden}
 .tbar{position:absolute;width:140px;height:10px;border-radius:5px;background:var(--cyan)}
 .ctag{font:700 20px/30px MR;letter-spacing:.14em;color:var(--dim);white-space:nowrap;overflow:hidden}
 .cpanel{border:2px solid var(--line);border-radius:24px;background:var(--bg1);overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
-.cbody{font-size:40px;line-height:1.3}
+.cbody{font-size:42px;line-height:1.3}
+.track{display:flex;flex-direction:column;gap:22px}.track .segs{display:flex;gap:14px}.track .segs i{flex:1;height:16px;border-radius:8px;background:var(--line)}.track .segs i.on{background:var(--cyan)}.track .segs i.done{background:var(--cyan);opacity:.35}
+.track .lbl{font:700 30px/1 MR;letter-spacing:.14em;color:var(--dim)}
 `;
 
 /**
@@ -276,6 +278,8 @@ export interface TeachFrame {
   chart?: StrategyChartSpec;
   /** The closing invitation: drawn in its own box in place of the plain-words line. */
   cta?: string | null;
+  /** Plain teaching cards only: where this card sits among the video's teaching cards (drawn as a step tracker below the text). */
+  progress?: { index: number; of: number };
 }
 
 /** The teaching card's HTML. Pure: the same frame always gives the same markup. */
@@ -315,6 +319,9 @@ ${chartContent}
     (frame.cta
       ? `<div ${box("teachBody")} class="cta" data-fit${a("pop", 220)}>${esc(frame.cta)}</div>`
       : `<div ${box("teachBody")} class="tbody" data-fit${a("fade", 260)}>${esc(frame.captionText)}</div>`) +
+    (frame.progress && !frame.cta
+      ? `<div ${box("teachTrack")} class="track"${a("fade", 320)}><div class="lbl">STEP ${frame.progress.index} OF ${frame.progress.of}</div><div class="segs">${Array.from({ length: frame.progress.of }, (_, k) => `<i class="${k + 1 === frame.progress!.index ? "on" : k + 1 < frame.progress!.index ? "done" : ""}"></i>`).join("")}</div></div>`
+      : "") +
     `</div>`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="left center" data-fast="1">
 <img ${box("logo")} class="logo" src="${url(style.palette.light ? "fillbook-horizontal-dark.svg" : "fillbook-horizontal-white.svg")}">
@@ -360,13 +367,18 @@ interface Measured {
 }
 
 /** Problems found by measuring the rendered page, as plain messages (empty = every box is clear of the platform overlays and no text overflows). */
-export function measuredProblems(measured: Measured[]): string[] {
+export function measuredProblems(measured: Measured[], area: { safe: Rect; textBottom?: number; pictureBoxes?: string[] } = { safe: MOCK_SAFE }): string[] {
   const out: string[] = [];
-  const right = MOCK_SAFE.x + MOCK_SAFE.w;
-  const bottom = MOCK_SAFE.y + MOCK_SAFE.h;
+  const safe = area.safe;
+  const right = safe.x + safe.w;
+  const bottom = safe.y + safe.h;
   for (const m of measured) {
-    if (m.x < MOCK_SAFE.x - 1 || m.y < MOCK_SAFE.y - 1 || m.x + m.w > right + 1 || m.y + m.h > bottom + 1) {
-      out.push(`${m.box} renders at x ${Math.round(m.x)}-${Math.round(m.x + m.w)}, y ${Math.round(m.y)}-${Math.round(m.y + m.h)}, outside the clear area x ${MOCK_SAFE.x}-${right}, y ${MOCK_SAFE.y}-${bottom}.`);
+    if (m.x < safe.x - 1 || m.y < safe.y - 1 || m.x + m.w > right + 1 || m.y + m.h > bottom + 1) {
+      out.push(`${m.box} renders at x ${Math.round(m.x)}-${Math.round(m.x + m.w)}, y ${Math.round(m.y)}-${Math.round(m.y + m.h)}, outside the clear area x ${safe.x}-${right}, y ${safe.y}-${bottom}.`);
+    }
+    // Words stay above the line a promoted post's promotion block starts at; only a picture (the drawn chart) may run below it.
+    if (area.textBottom !== undefined && !(area.pictureBoxes ?? []).includes(m.box) && m.y + m.h > area.textBottom + 1) {
+      out.push(`${m.box} ends at y ${Math.round(m.y + m.h)}, below y ${area.textBottom}, where a promoted post's promotion block would cover its text.`);
     }
     if (m.fit && (m.overflowX > 1 || m.overflowY > 1)) out.push(`${m.box}'s text overflows its box by ${Math.round(m.overflowX)}px across and ${Math.round(m.overflowY)}px down.`);
   }
@@ -409,7 +421,7 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
     throw new VideoFactoryError(`mockCard: could not start Chromium (${err instanceof Error ? err.message.split("\n")[0] : String(err)}). Install it with "npx playwright install chromium", or set MOCK_CHROMIUM_PATH.`);
   }
   const page = await browser.newPage({ viewport: { width: MOCK_CANVAS.width, height: MOCK_CANVAS.height }, deviceScaleFactor: 1 });
-  const load = async (frame: MockFrame | { html: string }, outPath: string): Promise<void> => {
+  const load = async (frame: MockFrame | { html: string }, outPath: string, area?: Parameters<typeof measuredProblems>[1]): Promise<void> => {
       const htmlPath = outPath.replace(/\.png$/i, ".html");
       writeFileSync(htmlPath, "html" in frame ? frame.html : buildMockHtml(frame), "utf-8");
       await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "load" });
@@ -433,7 +445,7 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
             };
           }),
       );
-      const problems = measuredProblems(measured);
+      const problems = measuredProblems(measured, area);
       if (problems.length > 0) throw new VideoFactoryError(`mockCard: "${outPath}" would be covered by a platform overlay or clipped:\n${problems.join("\n")}`);
       // The finished slide is what is measured and what is held after the entrance.
       await page.evaluate(() => (window as unknown as { seek(ms: number): void }).seek(Infinity));
@@ -457,7 +469,7 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
     },
     async renderTeachBeat(frame, outDir, prefix) {
       const stillPath = join(outDir, `${prefix}.png`);
-      await load({ html: buildTeachHtml(frame) }, stillPath);
+      await load({ html: buildTeachHtml(frame) }, stillPath, { safe: TEACH_SAFE, textBottom: TEACH_TEXT_BOTTOM, pictureBoxes: ["teachChart", "teachTrack"] });
       await page.screenshot({ path: stillPath });
       const count = teachFrameCount(frame);
       for (let i = 0; i < count; i++) {

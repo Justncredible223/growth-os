@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CHART, validateChartScene } from "../src/shortform/chart";
-import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea, cursorPath, heroFontSize, mockFitProblems, windowGeometry } from "../src/shortform/mockLayout";
+import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea, cursorPath, heroFontSize, mockFitProblems, windowGeometry , TEACH_SAFE, TEACH_TEXT_BOTTOM } from "../src/shortform/mockLayout";
 import { PLATFORM_OVERLAY_ZONES, buildFfmpegArgs } from "../scripts/video-factory/render";
 import { BARS_PILOTS, barsConvictionPlan, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { MOCK_CARD_PILOTS } from "../src/shortform/chartMockConcepts";
@@ -24,9 +24,22 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     expect(MOCK_RIGHT_LIMIT).toBe(CHART.safeRight);
     expect(boxesOutsideSafeArea()).toEqual([]);
     for (const [name, b] of Object.entries(MOCK_BOXES)) {
+      if (name.startsWith("teach")) continue; // the explainer and strategy cards: their own wider area, tested below
       expect(b.x + b.w, name).toBeLessThanOrEqual(880);
       expect(b.y + b.h, name).toBeLessThanOrEqual(1220);
       expect(b.y, name).toBeGreaterThanOrEqual(150);
+    }
+  });
+
+  it("the explainer and strategy cards use the wider area: left of the buttons, above a normal caption, and every word above the promotion line", () => {
+    const { rightColumn, captionTop } = PLATFORM_OVERLAY_ZONES;
+    for (const [name, b] of Object.entries(MOCK_BOXES)) {
+      if (!name.startsWith("teach")) continue;
+      expect(b.x, name).toBeGreaterThanOrEqual(TEACH_SAFE.x);
+      expect(b.x + b.w, name).toBeLessThanOrEqual(Math.min(TEACH_SAFE.x + TEACH_SAFE.w, rightColumn.x - 30));
+      expect(b.y + b.h, name).toBeLessThanOrEqual(Math.min(TEACH_SAFE.y + TEACH_SAFE.h, captionTop - 100));
+      // Only pictures (the chart, the step tracker) may go below the promotion line; text boxes end above it.
+      if (name !== "teachChart" && name !== "teachTrack") expect(b.y + b.h, name).toBeLessThanOrEqual(TEACH_TEXT_BOTTOM);
     }
   });
 
@@ -35,8 +48,8 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     for (const [name, b] of Object.entries(MOCK_BOXES)) {
       expect(b.x + b.w, name).toBeLessThanOrEqual(rightColumn.x);
       expect(b.y + b.h, name).toBeLessThanOrEqual(captionTop);
-      // Clear of the ad preview's promotion tag, which starts near y 1250.
-      expect(b.y + b.h, name).toBeLessThanOrEqual(1220);
+      // Clear of the ad preview's promotion tag, which starts near y 1250 (pictures on the teaching cards excepted, above).
+      if (name !== "teachChart" && name !== "teachTrack") expect(b.y + b.h, name).toBeLessThanOrEqual(1220);
     }
   });
 

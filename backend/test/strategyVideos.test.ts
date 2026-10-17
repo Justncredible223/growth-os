@@ -90,6 +90,6 @@ describe("the figures the videos say match the drawings", () => {
   it("the SVG is well formed and sized", () => {
     const svg = strategyChartSvg({ scenario: "demandSupply", show: 24, overlays: [{ kind: "vwap", label: "VWAP" }] });
     expect(svg.startsWith("<svg")).toBe(true);
-    expect(svg).toContain('width="780"');
+    expect(svg).toContain('width="840"');
   });
 });

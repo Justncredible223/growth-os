@@ -190,7 +190,7 @@ export async function buildRenderPlanScenes(
       if (s.teach) {
         // An explainer's teaching card: drawn in the same look as the video's product slides, with no vector text over it.
         mockRenderer ??= await createMockRenderer(outDir);
-        const beat = await mockRenderer.renderTeachBeat({ step: s.teach.step, headline: s.headline, captionText: s.captionText, style: mockStyle, holdSeconds: s.durationSeconds, ...(s.teach.chart ? { chart: s.teach.chart } : {}), cta: s.cta }, outDir, `teach-${i}`);
+        const beat = await mockRenderer.renderTeachBeat({ step: s.teach.step, headline: s.headline, captionText: s.captionText, style: mockStyle, holdSeconds: s.durationSeconds, ...(s.teach.chart ? { chart: s.teach.chart } : {}), cta: s.cta, ...teachProgress(plan, i) }, outDir, `teach-${i}`);
         sceneBackground = beat.stillPath;
         mockFrames = { pattern: beat.pattern, count: beat.count };
       }
@@ -572,4 +572,11 @@ export async function synthesizeSilentNarration(plan: ScenePlan, outDir: string,
 
 export function ensureDir(path: string): void {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
+}
+
+/** A plain teaching card's place among the video's plain teaching cards (no chart, a step label, no invitation): drawn as a step tracker. Read from the plan at render time, so nothing in the plan (or its hash) changes. */
+function teachProgress(plan: ScenePlan, i: number): { progress?: { index: number; of: number } } {
+  const plain = plan.scenes.map((s, k) => ({ s, k })).filter(({ s }) => s.teach && !s.teach.chart && s.teach.step !== "" && !s.cta);
+  const at = plain.findIndex(({ k }) => k === i);
+  return at < 0 || plain.length < 2 ? {} : { progress: { index: at + 1, of: plain.length } };
 }

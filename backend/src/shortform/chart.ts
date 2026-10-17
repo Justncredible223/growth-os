@@ -198,7 +198,9 @@ export function chartGeometry(chart: ChartSpec): ChartGeometry {
   }
   if (chart.kind === "mock") {
     // A mock is drawn by the HTML renderer inside fixed boxes (mockLayout.ts): report their extent so the generic safe-area check covers it.
-    for (const b of Object.values(MOCK_BOXES)) {
+    // The teaching and strategy card boxes belong to a different card (checked against TEACH_SAFE in mockLayout.ts), not to a mock slide.
+    for (const [name, b] of Object.entries(MOCK_BOXES)) {
+      if (name.startsWith("teach")) continue;
       maxX = Math.max(maxX, b.x + b.w);
       maxY = Math.max(maxY, b.y + b.h);
     }

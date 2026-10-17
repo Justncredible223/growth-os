@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
 import { buildVideoScriptFromScenePlan, youtubeTitleProblems } from "../src/content/videoScriptWriter";
 import { FALLBACK_TOPIC, YOUTUBE_TITLE_MAX, searchTopicFor, youtubeSearchDescription, youtubeSearchTitle } from "../src/shortform/youtubeSearchTitles";
 
@@ -59,5 +59,30 @@ describe("search-style YouTube description", () => {
         expect(d, p.planId).not.toMatch(/demo data/i);
       } else expect(d, p.planId).toContain("demo data from a sample Fillbook account");
     }
+  });
+});
+
+describe("hashtags by topic", () => {
+  it("every offered video has 4-5 tags: #DayTrading, an audience tag, and its topic's own tags, never the old fixed three", () => {
+    for (const id of OFFERED_DAILY_CONCEPT_IDS) {
+      const tags = buildVideoScriptFromScenePlan(MOTION_SCENE_PLANS.find((p) => p.planId === id)!).hashtags;
+      expect(tags[0], id).toBe("DayTrading");
+      expect(["FuturesTrading", "PropFirm"], id).toContain(tags[1]);
+      expect(tags.length, id).toBeGreaterThanOrEqual(4);
+      expect(tags.length, id).toBeLessThanOrEqual(5);
+      expect(new Set(tags).size, id).toBe(tags.length);
+      for (const t of tags) expect(t, id).toMatch(/^[A-Za-z]+$/);
+      expect(tags, id).not.toContain("PropFirmTrading");
+    }
+  });
+
+  it("matches the subject: the consistency explainer and the strategy setups carry their own tag", () => {
+    const tagsOf = (id: string) => buildVideoScriptFromScenePlan(MOTION_SCENE_PLANS.find((p) => p.planId === id)!).hashtags;
+    expect(tagsOf("explain-02-consistency-rule")).toContain("ConsistencyRule");
+    expect(tagsOf("explain-19-trailing-floor")).toContain("TrailingDrawdown");
+    expect(tagsOf("strategy-01-orb-range-trigger")).toContain("OpeningRangeBreakout");
+    expect(tagsOf("strategy-04-vwap-pullback")).toContain("VWAP");
+    expect(tagsOf("strategy-06-break-and-retest")).toContain("BreakAndRetest");
+    expect(tagsOf("strategy-09-demand-zone")).toContain("SupplyAndDemand");
   });
 });
