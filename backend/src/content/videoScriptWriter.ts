@@ -3,7 +3,7 @@ import type { LlmClient } from "./llmClient.js";
 import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
 import { computeScenePlanHash } from "../shortform/scenePlan.js";
 import { OFFICIAL_HANDLE, type ScenePlan } from "../shortform/types.js";
-import { youtubeSearchDescription, youtubeSearchTitle } from "../shortform/youtubeSearchTitles.js";
+import { strategyHashtags, videoHashtags, youtubeSearchDescription, youtubeSearchTitle } from "../shortform/youtubeSearchTitles.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -516,7 +516,8 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
   const script = plan.scenes.map((s) => s.narration).join(" ");
   const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
-  const hashtags = ["FuturesTrading", "PropFirmTrading", "TradingJournal"];
+  // Tags by the video's own topic (owner request 2026-10-17); they were the same three on every video.
+  const hashtags = videoHashtags(title, topic);
   if (plan.planId.startsWith("strategy-")) {
     // A strategy video (strategyVideos.ts) shows drawn illustrations, not an account's data: its own title is already the search
     // phrase, and every caption says the charts are illustrations and not a recommendation.
@@ -529,7 +530,7 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
       youtubeDescription: [`${topic}.`, illustration, `Fillbook is a trading journal: log your own trades and check them against your own rules. ${OFFICIAL_HANDLE}`].join("\n\n"),
       tiktokCaption: `${plan.hook} Illustration, not a recommendation. ${OFFICIAL_HANDLE}`,
       instagramCaption: `${plan.hook} ${topic}. ${illustration} ${OFFICIAL_HANDLE}`,
-      hashtags: ["FuturesTrading", "DayTrading", "TradingStrategy"],
+      hashtags: strategyHashtags(plan.planId),
       disclosureCta,
       youtubeThumbnailConcept: `${plan.hook} -- bold text overlay over the drawn chart.`,
       motionScenePlan: { scenePlanId: plan.planId, scenePlanHash: computeScenePlanHash(plan) },
