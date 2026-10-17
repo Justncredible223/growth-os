@@ -67,6 +67,8 @@ import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary }
 import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration, synthesizeSuppliedNarrationAudio } from "../video-factory/scenePlanAdapter.js";
 import { findSuppliedVoice } from "../video-factory/suppliedVoice.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
+import { createMockRenderer } from "../video-factory/mockCard.js";
+import { thumbnailSpecFor } from "../../src/shortform/thumbnails.js";
 import { isPayoffPlan, isNarratedMockPlan, MOCK_NARRATION } from "../../src/shortform/motionPlans.js";
 import { mockStyleFor } from "../../src/shortform/mockStyle.js";
 import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
@@ -299,6 +301,28 @@ async function musicRotationIndex(client: SupabaseClient, videoRenderId: string)
   }
 }
 
+/**
+ * The cover image. A video built from a verified scene plan gets the designed cover (thumbnails.ts: big number-led headline over the
+ * app's figures or the strategy chart, drawn by the same browser the slides use). Anything else, or any failure of the browser
+ * path, falls back to the plain hook card, so a cover problem never costs a render its thumbnail.
+ */
+async function renderCover(plan: ScenePlan | null | undefined, hook: string, outPath: string, outDir: string, runner: ProcessRunner): Promise<void> {
+  if (plan) {
+    try {
+      const renderer = await createMockRenderer(outDir);
+      try {
+        await renderer.renderThumbnail(thumbnailSpecFor(plan), outPath);
+        return;
+      } finally {
+        await renderer.close();
+      }
+    } catch (err) {
+      console.error("[render-single] designed cover failed, using the plain card:", (err as Error).message ?? err);
+    }
+  }
+  await renderThumbnailCard(hook, outPath, runner);
+}
+
 export async function runRender(videoRenderId: string, campaignAssetId: string, deps: RenderWorkerDeps): Promise<RenderRunResult> {
   const { client, runner, workDir, sendPush } = deps;
   await requireExecutable(runner, "ffmpeg", ["-version"]);
@@ -380,7 +404,7 @@ export async function runRender(videoRenderId: string, campaignAssetId: string, 
   let thumbnailPath: string | null = null;
   try {
     const thumbnailLocalPath = join(outDir, "thumbnail.jpg");
-    await renderThumbnailCard(pkg.videoScript.hook, thumbnailLocalPath, runner);
+    await renderCover(motionMatch.plan, pkg.videoScript.hook, thumbnailLocalPath, outDir, runner);
     const candidatePath = `${videoRenderId}-thumbnail.jpg`;
     const { error: thumbUploadError } = await client.storage
       .from(STORAGE_BUCKET)
