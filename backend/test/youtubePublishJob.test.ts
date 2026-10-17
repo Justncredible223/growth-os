@@ -158,3 +158,47 @@ describe("createPublishYoutubeJobHandler", () => {
     await expect(createPublishYoutubeJobHandler(deps)(makeJob({ videoRenderId: "render-1" }))).rejects.toThrow("not ready to publish");
   });
 });
+
+describe("YouTube every other day", () => {
+  const NOW = new Date("2026-10-18T19:00:00Z");
+  function depsFor(fake: FakeSupabaseClient, uploadVideo: ReturnType<typeof vi.fn>): PublishYoutubeJobDeps {
+    return {
+      client: withStorage(fake, async () => ({ data: fakeBlob(), error: null })),
+      uploadClient: { uploadVideo } as unknown as YoutubeUploadClient,
+      performanceRepo: new InMemoryVideoPerformanceRepository(),
+      auditSink: vi.fn().mockResolvedValue(undefined),
+      now: () => NOW,
+    };
+  }
+
+  it("skips the upload when another video went to YouTube within 40 hours, and records nothing for this render", async () => {
+    const fake = makeFake();
+    fake.tables.platform_publications = [
+      { id: "pub-0", video_render_id: "render-0", platform: "youtube", status: "drafted", updated_at: "2026-10-17T19:05:00Z" },
+    ];
+    const uploadVideo = vi.fn();
+    await createPublishYoutubeJobHandler(depsFor(fake, uploadVideo))(makeJob({ videoRenderId: "render-1" }));
+    expect(uploadVideo).not.toHaveBeenCalled();
+    expect((fake.tables.platform_publications ?? []).some((r) => r.video_render_id === "render-1")).toBe(false);
+  });
+
+  it("uploads when the last YouTube draft is older than 40 hours", async () => {
+    const fake = makeFake();
+    fake.tables.platform_publications = [
+      { id: "pub-0", video_render_id: "render-0", platform: "youtube", status: "drafted", updated_at: "2026-10-16T19:05:00Z" },
+    ];
+    const uploadVideo = vi.fn().mockResolvedValue("yt-new");
+    await createPublishYoutubeJobHandler(depsFor(fake, uploadVideo))(makeJob({ videoRenderId: "render-1" }));
+    expect(uploadVideo).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed attempt does not count as a recent upload", async () => {
+    const fake = makeFake();
+    fake.tables.platform_publications = [
+      { id: "pub-0", video_render_id: "render-0", platform: "youtube", status: "failed", updated_at: "2026-10-18T10:00:00Z" },
+    ];
+    const uploadVideo = vi.fn().mockResolvedValue("yt-new");
+    await createPublishYoutubeJobHandler(depsFor(fake, uploadVideo))(makeJob({ videoRenderId: "render-1" }));
+    expect(uploadVideo).toHaveBeenCalledTimes(1);
+  });
+});
