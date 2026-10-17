@@ -24,6 +24,9 @@ export function replyLinksToGiveawayPage(reply: string): boolean {
   return reply.toLowerCase().includes(INBOUND_GIVEAWAY_LINK);
 }
 
+/** "I don't have context...", "can't see the thread", "not sure what you're asking about": a reply that gives up instead of answering. */
+export const LACKS_CONTEXT = /\b(?:i|we)\s*(?:do not|don['’]?t|can['’]?t|cannot)\s+(?:have|see|know)\b[^.!?]{0,40}\b(?:context|thread|conversation|what you(?:['’]re| are)? (?:asking|referring|talking))|\bno context\b|\bnot sure what you(?:['’]re| are)? (?:asking|referring|talking)/i;
+
 export interface InboundDraftPolicyContext {
   /** The original inbound message text. */
   messageText: string;
@@ -54,6 +57,10 @@ export function assessInboundDraft(candidate: { reply: string; usesLink: boolean
 
   if (!hard && ctx.authorIsOwnAccount) {
     hard = containsOwnPostImpersonationClaim(candidate.reply)?.reason ?? null;
+  }
+  // A draft that says it cannot see the conversation is never useful to post; regenerate (the thread, when known, is in the prompt).
+  if (!hard && LACKS_CONTEXT.test(candidate.reply)) {
+    hard = "says it lacks context or cannot see the conversation; reply to what they said using the thread given, or ask which part they mean";
   }
   if (!hard && asksIfGiveawayIsReal(ctx.messageText) && !linksGiveaway) {
     hard = `does not point to ${INBOUND_GIVEAWAY_LINK} and the official rules, which a question about whether the giveaway is real must do`;
