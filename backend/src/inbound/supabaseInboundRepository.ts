@@ -118,6 +118,11 @@ export class SupabaseInboundRepository implements InboundRepository {
     return (data ?? []).map(fromRow);
   }
 
+  async setInResponseToText(id: string, text: string): Promise<void> {
+    const { error } = await this.client.from("inbound_engagements").update({ in_response_to_text: text }).eq("id", id);
+    if (error) throw new Error(`setInResponseToText failed: ${error.message}`);
+  }
+
   async getById(id: string): Promise<InboundEngagement | null> {
     const { data, error } = await this.client.from("inbound_engagements").select().eq("id", id).maybeSingle();
     if (error) throw new Error(`getById failed: ${error.message}`);

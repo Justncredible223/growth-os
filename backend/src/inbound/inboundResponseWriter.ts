@@ -146,6 +146,8 @@ This is a real one-on-one reply on ${profile.displayName}, not a broadcast post:
 - Sound like a person replying, not a brand announcing something.
 - Add real value or a genuine reaction -- don't just restate what they said back at them.
 - Preserve the actual conversation context you're given -- reply to what they specifically said.
+- When the conversation so far is given, you are CONTINUING it: answer their latest message in light of what was already said, never repeat a point Fillbook already made, and never ask them something they already answered. A short message like "how so" or "why" is a question about the last thing Fillbook said: explain that one thing.
+- Never write that you lack context, cannot see the thread, or do not know what they are asking about. If the thread is missing and the message cannot be answered, reply with one short natural question about which part they mean.
 - If they've engaged with us before (noted below), it's fine to acknowledge that lightly and
   naturally -- never in a canned "thanks for being a loyal follower!" way.
 - ${profile.styleRules}
@@ -180,6 +182,8 @@ export interface InboundDraftContext {
   authorHandle: string | null;
   messageText: string;
   inResponseToText: string | null;
+  /** The earlier turns of this conversation, oldest first, as plain lines (inboundThread.ts formatThread). Empty or absent for a first message. */
+  thread?: string;
   isRepeatEngager: boolean;
   priorInteractionCount: number;
   /** Recent owner edits shown as tone examples. Optional and best-effort, see inboundStyleExamples.ts. */
@@ -217,7 +221,12 @@ export async function draftInboundResponse(
     `From: ${profile.handlePrefix}${context.authorHandle ?? "unknown"}`,
     relationshipNote,
     "",
-    context.inResponseToText ? `What they were replying to: ${context.inResponseToText}` : "(Standalone mention/reply -- no parent post text available.)",
+    context.thread?.trim()
+      ? `The conversation so far (oldest first; their message below replies to the last line):
+${context.thread.trim()}`
+      : context.inResponseToText
+        ? `What they were replying to: ${context.inResponseToText}`
+        : "(Standalone mention/reply -- no parent post text available.)",
     "",
     "Their message:",
     context.messageText,

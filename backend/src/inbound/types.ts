@@ -52,6 +52,8 @@ export interface InboundRepository {
   findLatestInConversation(conversationId: string): Promise<InboundEngagement | null>;
   listByStatus(statuses: InboundStatus[]): Promise<InboundEngagement[]>;
   getById(id: string): Promise<InboundEngagement | null>;
+  /** Stores the conversation text the drafter was given, so the card can show it. */
+  setInResponseToText(id: string, text: string): Promise<void>;
   updateStatus(
     id: string,
     status: InboundStatus,

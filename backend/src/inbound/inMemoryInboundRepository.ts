@@ -28,6 +28,11 @@ export class InMemoryInboundRepository implements InboundRepository {
     return this.rows.filter((r) => statuses.includes(r.status));
   }
 
+  async setInResponseToText(id: string, text: string): Promise<void> {
+    const row = this.rows.find((r) => r.id === id);
+    if (row) row.inResponseToText = text;
+  }
+
   async getById(id: string): Promise<InboundEngagement | null> {
     return this.rows.find((r) => r.id === id) ?? null;
   }

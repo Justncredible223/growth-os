@@ -1,4 +1,5 @@
 import { loadInboundStyleExamples } from "./inboundStyleExamples.js";
+import { buildInboundThread, formatThread } from "./inboundThread.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
@@ -161,11 +162,21 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   const { brandRulesSummary, verifiedKnowledgeSummary } = await loadGroundingContext(client);
   const llmClient = createRecordedLlmClient(client, { step: "inbound-draft", tier: "owner", context: { inboundEngagementId: id } });
 
+  // Rebuild the conversation behind this reply (our posted replies, their earlier messages, the post we first replied to). Best
+  // effort: with no earlier turns known the draft is written as before.
+  let thread = "";
+  try {
+    thread = formatThread(await buildInboundThread(client, row));
+  } catch {
+    thread = "";
+  }
+
   const draftContext: InboundDraftContext = {
     platform: row.platform,
     authorHandle: row.authorHandle,
     messageText: row.body,
-    inResponseToText: row.inResponseToText,
+    inResponseToText: row.inResponseToText ?? (thread || null),
+    ...(thread ? { thread } : {}),
     isRepeatEngager: row.isRepeatEngager,
     priorInteractionCount: await repo.countPriorFromAuthor(row.platform, row.authorExternalId ?? ""),
     styleExamples: await loadInboundStyleExamples(client),
@@ -193,7 +204,9 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     : draft.reply;
 
   await repo.updateStatus(id, "draft_ready", { draftResponse: finalReply, draftUsesLink: draft.usesLink });
-  return { ...row, status: "draft_ready", draftResponse: finalReply, draftUsesLink: draft.usesLink };
+  // Keep the rebuilt thread on the row so the card shows it too (the app already displays inResponseToText).
+  if (thread && !row.inResponseToText) await repo.setInResponseToText(id, thread);
+  return { ...row, status: "draft_ready", draftResponse: finalReply, draftUsesLink: draft.usesLink, inResponseToText: row.inResponseToText ?? (thread || null) };
 }
 
 /**
