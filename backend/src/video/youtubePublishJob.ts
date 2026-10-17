@@ -12,6 +12,13 @@ import { authorizeAndAudit, type AuditSink } from "../firewall/externalWriteFire
 const STORAGE_BUCKET = "rendered-videos";
 export const PUBLISH_YOUTUBE_JOB_TYPE = "publish_youtube";
 
+/**
+ * YouTube gets a draft every other day, not every day (owner analytics 2026-10-17: 31 near-identical Shorts in four
+ * weeks, the last ones at 0 to 2 views). 40 hours rather than 48 so a daily noon render lands on alternate days even
+ * when a render runs a few hours late. TikTok is unaffected.
+ */
+export const YOUTUBE_MIN_HOURS_BETWEEN_DRAFTS = 40;
+
 export interface PublishYoutubeJobPayload {
   videoRenderId: string;
 }
@@ -29,6 +36,8 @@ export interface PublishYoutubeJobDeps {
   uploadClient: YoutubeUploadClient;
   performanceRepo: VideoPerformanceRepository;
   auditSink: AuditSink;
+  /** Injected for tests; defaults to the real clock. */
+  now?: () => Date;
 }
 
 /** Writes a real row to audit_logs -- see docs/EXTERNAL_WRITE_FIREWALL.md. */
@@ -132,6 +141,20 @@ export function createPublishYoutubeJobHandler(deps: PublishYoutubeJobDeps): Job
     if (existingError) throw new Error(`load platform_publications failed: ${existingError.message}`);
     const existingStatus = (existing as { status: string } | null)?.status;
     if (existingStatus === "drafted" || existingStatus === "published") return;
+
+    // Every other day: skip this render on YouTube when another one went up recently. The job completes without an
+    // upload and without a platform_publications row, so the video simply stays TikTok-only.
+    const now = deps.now?.() ?? new Date();
+    const since = new Date(now.getTime() - YOUTUBE_MIN_HOURS_BETWEEN_DRAFTS * 3_600_000).toISOString();
+    const { data: recent, error: recentError } = await deps.client
+      .from("platform_publications")
+      .select("video_render_id")
+      .eq("platform", "youtube")
+      .in("status", ["drafted", "published"])
+      .gte("updated_at", since)
+      .limit(1);
+    if (recentError) throw new Error(`load recent YouTube drafts failed: ${recentError.message}`);
+    if ((recent ?? []).length > 0) return;
 
     await authorizeAndAudit(
       {

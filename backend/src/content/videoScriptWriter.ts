@@ -3,6 +3,7 @@ import type { LlmClient } from "./llmClient.js";
 import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
 import { computeScenePlanHash } from "../shortform/scenePlan.js";
 import { OFFICIAL_HANDLE, type ScenePlan } from "../shortform/types.js";
+import { youtubeSearchDescription, youtubeSearchTitle } from "../shortform/youtubeSearchTitles.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -520,9 +521,10 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
     hook: plan.hook,
     script,
     shotList,
-    youtubeTitle: title,
-    // Plain about what the numbers are: a sample account's demo data, shown inside a trading journal -- never "real" results.
-    youtubeDescription: `${topic}. Every number shown is demo data from a sample Fillbook account, not a real trader's results. Fillbook is a trading journal: log your own trades and check them against your own rules. ${OFFICIAL_HANDLE}`,
+    // Search-style title and an explainer-first description (owner analytics 2026-10-17: YouTube search brought the
+    // views, number teasers did not). Still plain that the numbers are a sample account's demo data: that line closes it.
+    youtubeTitle: youtubeSearchTitle(title, topic),
+    youtubeDescription: youtubeSearchDescription(title, topic, OFFICIAL_HANDLE),
     tiktokCaption: `${plan.hook} Demo account data. ${OFFICIAL_HANDLE}`,
     instagramCaption: `${plan.hook} ${topic}. Demo data from a sample account, not a real trader. ${OFFICIAL_HANDLE}`,
     hashtags,
