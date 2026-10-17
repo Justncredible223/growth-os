@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DETAIL_FOOTER, HOOK_MOTION, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, TEACH_SAFE, TEACH_TEXT_BOTTOM, WINDOW_BAR, cursorPath, heroFontSize, hookValueFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
 import { CLASSIC_MOCK_STYLE, type MockStyle } from "../../src/shortform/mockStyle.js";
 import { ILLUSTRATION_TAG, strategyChartSvg, type StrategyChartSpec } from "../../src/shortform/strategyCharts.js";
+import { THUMB_SAFE, headlinePieces, type ThumbnailSpec } from "../../src/shortform/thumbnails.js";
 import type { ChartSpec, ChartTone, MockRow, Rect } from "../../src/shortform/types.js";
 import { VideoFactoryError } from "./types.js";
 
@@ -81,6 +82,17 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .thead{font:800 120px/1.06 SG;letter-spacing:-.025em;color:var(--ink);overflow:hidden;display:flex;flex-direction:column;justify-content:center}.thead em{font-style:normal;color:var(--cyan)}
 .tbody{font:600 56px/1.32 MR;color:var(--mute);overflow:hidden}
 .tbar{position:absolute;width:140px;height:10px;border-radius:5px;background:var(--cyan)}
+.th-tag{display:inline-flex;align-items:center;height:60px;padding:0 30px;border:3px solid var(--ctaborder);background:var(--ctabg);border-radius:999px;font:800 30px/1 MR;letter-spacing:.18em;color:var(--cyan);white-space:nowrap}
+.th-head{font:800 150px/1.02 SG;letter-spacing:-.03em;color:var(--ink);overflow:hidden;display:flex;flex-direction:column;justify-content:center}
+.th-head .fig{color:var(--cyan)}.th-head .fig.good{color:var(--good)}.th-head .fig.bad{color:var(--bad)}
+.th-visual{display:flex;flex-direction:column;gap:26px;justify-content:center}
+.th-tile{flex:1;min-height:0;border:3px solid var(--line);border-radius:36px;background:var(--bg1);box-shadow:0 30px 90px var(--shadow);padding:20px 44px 0;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
+.th-tile .tl{flex:none;font:700 44px/54px SG;color:var(--mute);white-space:nowrap;overflow:hidden}
+.th-tile .tv{flex:none;font:800 230px/1.3 SG;letter-spacing:-.05em;white-space:nowrap;overflow:hidden}
+.th-tile .tv.good{color:var(--good)}.th-tile .tv.bad{color:var(--bad)}
+.th-chart{border:3px solid var(--line);border-radius:36px;background:var(--bg1);box-shadow:0 30px 90px var(--shadow);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.th-chart svg{width:100%;height:100%}
+.th-fine{font:700 24px/1 MR;letter-spacing:.14em;color:var(--dim);white-space:nowrap;overflow:hidden;text-transform:uppercase}
 .ctag{font:700 20px/30px MR;letter-spacing:.14em;color:var(--dim);white-space:nowrap;overflow:hidden}
 .cpanel{border:2px solid var(--line);border-radius:24px;background:var(--bg1);overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
 .cbody{font-size:42px;line-height:1.3}
@@ -330,6 +342,38 @@ ${content}
 </body></html>`;
 }
 
+/**
+ * A cover image (thumbnails.ts), drawn in the classic brand look so every cover on the profile grid belongs to the same set.
+ * Boxes sit inside THUMB_SAFE, the 3:4 centre of the frame that a profile-grid tile shows.
+ */
+export function buildThumbnailHtml(spec: ThumbnailSpec): string {
+  const S = THUMB_SAFE;
+  const place = (name: string, x: number, y: number, w: number, h: number): string => `data-box="${name}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"`;
+  const pieces = headlinePieces(spec.headline)
+    .map((p) => (p.figure ? `<span class="fig ${spec.accent === "cyan" ? "" : spec.accent}">${esc(p.text)}</span>` : esc(p.text)))
+    .join("");
+  const visualTop = 970;
+  const visualH = 640;
+  let visual = "";
+  if (spec.visual?.kind === "tiles") {
+    const tileList = spec.visual.tiles;
+    const tiles = tileList
+      .map((t) => `<div class="th-tile"><div class="tl">${esc(t.label)}</div><div class="tv ${toneClass(t.tone)}" data-autofit="${tileList.length > 1 ? 170 : 280}" data-fit>${esc(t.value)}</div></div>`)
+      .join("");
+    visual = `<div ${place("thumbVisual", S.x, visualTop, S.w, visualH)} class="th-visual">${tiles}</div>`;
+  } else if (spec.visual?.kind === "chart") {
+    visual = `<div ${place("thumbVisual", S.x, visualTop, S.w, visualH)} class="th-chart">${strategyChartSvg(spec.visual.chart)}</div>`;
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(CLASSIC_MOCK_STYLE)}</style></head><body data-origin="left center" data-fast="1">
+<img ${place("thumbLogo", S.x, S.y + 10, 260, 70)} class="logo" src="${url("fillbook-horizontal-white.svg")}" style="left:${S.x}px;top:${S.y + 10}px;width:260px;height:70px">
+<div ${place("thumbTag", S.x, S.y + 100, 620, 60)}><span class="th-tag">${esc(spec.tag)}</span></div>
+<div ${place("thumbHead", S.x, S.y + 200, S.w, 500)} class="th-head" data-autofit="170" data-fit><div>${pieces}</div></div>
+${visual}
+<div ${place("thumbFine", S.x, visualTop + visualH + 36, S.w, 30)} class="th-fine" data-fit>${esc(spec.fine)}</div>
+<script>${PAGE_SCRIPT}</script>
+</body></html>`;
+}
+
 /** Frames drawn for a teaching card: the opening card's push-in runs for its whole hold; the others have the short entrance. */
 export function teachFrameCount(frame: TeachFrame): number {
   const seconds = frame.step === "" ? Math.min(Math.max(frame.holdSeconds ?? 4, 1), 6) : HOOK_MOTION.entranceSeconds;
@@ -407,6 +451,8 @@ export interface MockRenderer {
   renderBeat(frame: MockFrame, outDir: string, prefix: string): Promise<{ stillPath: string; pattern: string; count: number }>;
   /** The same for an explainer's teaching card. */
   renderTeachBeat(frame: TeachFrame, outDir: string, prefix: string): Promise<{ stillPath: string; pattern: string; count: number }>;
+  /** A cover image as a JPEG (thumbnails.ts). Measured like every other slide: a box outside the grid-visible area throws. */
+  renderThumbnail(spec: ThumbnailSpec, outPath: string): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -466,6 +512,14 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
         await page.screenshot({ path: join(outDir, `${prefix}-${String(i).padStart(3, "0")}.png`) });
       }
       return { stillPath, pattern: `${prefix}-%03d.png`, count };
+    },
+    async renderThumbnail(spec, outPath) {
+      const htmlPath = outPath.replace(/.(jpe?g|png)$/i, ".html");
+      await load({ html: buildThumbnailHtml(spec) }, htmlPath.replace(/.html$/, ".png"), {
+        safe: { x: THUMB_SAFE.x, y: THUMB_SAFE.y, w: THUMB_SAFE.w, h: THUMB_SAFE.h },
+      });
+      await page.screenshot({ path: outPath, type: "jpeg", quality: 92 });
+      return outPath;
     },
     async renderTeachBeat(frame, outDir, prefix) {
       const stillPath = join(outDir, `${prefix}.png`);
