@@ -11,6 +11,8 @@ import { DAILY_PILOTS } from "./dailyConcepts.js";
 import { FRESH_PILOTS } from "./freshConcepts.js";
 import { FRESH2_PILOTS } from "./freshConcepts2.js";
 import { RECORDING_PILOTS } from "./freshRecordingConcepts.js";
+import { EXPLAINERS_OFFERED, EXPLAINER_PILOTS, isExplainerPlan } from "./explainers.js";
+import { STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
 
 /**
  * Every verified ScenePlan a motion concept can be requested for: the original pilots plus the payoff redesign
@@ -18,7 +20,7 @@ import { RECORDING_PILOTS } from "./freshRecordingConcepts.js";
  * "Create Fillbook Video" list and the render worker use) and the campaign pipeline (which drafts the script)
  * resolve a concept id against, so they can never disagree about what exists.
  */
-export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS];
+export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS, ...EXPLAINER_PILOTS, ...STRATEGY_PILOTS];
 
 /**
  * True when this plan is a chart card (the "chart" layout). Since 2026-10-01 these are the only concepts the app offers
@@ -39,6 +41,9 @@ export function isMockPlan(plan: ScenePlan): boolean {
 }
 
 /**
+ * Since 2026-10-17 (owner decision): the 30 explainers of explainers.ts, in their day order, replace the clip pool below. The
+ * history that follows is kept for the fresh concepts, which stay resolvable (their scenes are the explainers' examples).
+ *
  * The concepts the app offers, in request order (owner decision, 2026-10-07: the old pool is cleared and replaced): the nine hook-first
  * concepts of freshConcepts.ts plus the twenty-one of freshConcepts2.ts, each of which opens on a pain or a striking number, ordered as the
  * 30-day plan documented at the top of freshConcepts2.ts (strongest hooks first, never more than two of one lane in a row, never the same
@@ -48,7 +53,13 @@ export function isMockPlan(plan: ScenePlan): boolean {
  * ONE ordered array on purpose: the screen-recording alternatives (freshRecordingConcepts.ts) stand in place of fresh-02-plan-said-3 (day 2), fresh-04-setup-lost-422 (day 21) and
  * fresh-06-five-revenge (day 1) as fresh-02b, fresh-04b and fresh-06b, so the pool is 30 distinct days; the three card versions follow the 30 as hidden fallbacks (a recording alternative and its card version are near-copies, so only one is ever offered).
  */
-export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = [
+export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = Array.from({ length: 30 }, (_, i) =>
+  // Every third day is a strategy video (strategyVideos.ts); the other days are the explainers, in their order.
+  (i + 1) % 3 === 0 ? STRATEGY_DAY_ORDER[(i + 1) / 3 - 1]! : EXPLAINERS_OFFERED[i - Math.floor((i + 1) / 3)]!,
+);
+
+/** The fresh clips' 30-day order (2026-10-07 to 2026-10-16), retired by the explainers. Kept so the clip pool's own checks still run. */
+export const RETIRED_FRESH_DAILY_ORDER: readonly string[] = [
   "fresh-06b-five-revenge-recording", // day 1
   "fresh-02b-plan-said-3-recording", // day 2
   "fresh-07-take-it-again", // day 3
@@ -98,7 +109,7 @@ export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = [];
  * concept, including the first twelve product mocks and the 30 earlier daily ones, stays resolvable but is never offered.
  */
 export function isOfferedPlan(plan: ScenePlan): boolean {
-  return (isMockPlan(plan) || isRecordingPlan(plan)) && (OFFERED_DAILY_CONCEPT_IDS.includes(plan.planId) || EXTRA_OFFERED_CONCEPT_IDS.includes(plan.planId));
+  return (isMockPlan(plan) || isRecordingPlan(plan) || isExplainerPlan(plan)) && (OFFERED_DAILY_CONCEPT_IDS.includes(plan.planId) || EXTRA_OFFERED_CONCEPT_IDS.includes(plan.planId));
 }
 
 /** The offered concepts' position in the order (0 = day 1; the extras follow the daily pool), or -1 for a plan that is not offered. */
@@ -119,7 +130,7 @@ export const MOCK_NARRATION = { rate: MOCK_SPEECH_RATE, minSceneSeconds: MOCK_MI
 
 /** True when this is an offered product-mock plan that is narrated (not the silent music-only form). */
 export function isNarratedMockPlan(plan: ScenePlan): boolean {
-  return (isMockPlan(plan) || isRecordingPlan(plan)) && plan.voiceover !== "none";
+  return (isMockPlan(plan) || isRecordingPlan(plan) || isExplainerPlan(plan)) && plan.voiceover !== "none";
 }
 
 /** True when this plan uses the payoff layout and therefore needs the payoff render settings (voice rate, crossfade). */

@@ -24,8 +24,8 @@ vi.mock("../src/shortform/storyScore", async (importOriginal) => {
  */
 
 // A chart-card concept: the only kind the app offers for a new video (older concepts are retired from the list).
-const CONCEPT_ID = "fresh-01-two-limits";
-const CONCEPT_TITLE = "Two limits. The smaller one decides.";
+const CONCEPT_ID = "explain-01-copy-trading-risk";
+const CONCEPT_TITLE = "Copying one trade to two accounts copies the loss too";
 
 function fakeReq(body: unknown, method = "POST"): VercelRequest {
   return { method, headers: { authorization: "Bearer test-app-token" }, body } as unknown as VercelRequest;
@@ -176,20 +176,21 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
-    // 2026-10-07: only the fresh hook-first concepts are offered (freshConcepts.ts, freshConcepts2.ts). The first twelve product mocks, the 30 earlier daily
+    // 2026-10-17: only the 30 explainers are offered (explainers.ts). The fresh clips, the first twelve product mocks, the 30 earlier daily
     // concepts and every older concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
-    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["fresh-01-two-limits", "fresh-02b-plan-said-3-recording", "fresh-08-nobody-fines"]));
-    // The 30 distinct ideas in the 30-day order; the 3 card versions of the recorded ideas are hidden as near-copies.
+    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["explain-01-copy-trading-risk", "explain-02-consistency-rule", "explain-03-moving-stops"]));
+    // The 30 explainers in their day order.
     expect(body.motionConcepts.map((c) => c.id)).toEqual(OFFERED_DAILY_CONCEPT_IDS.slice(0, 30));
     // 2026-10-07: nothing else is offered (EXTRA_OFFERED_CONCEPT_IDS is empty; the conviction video is cleared too).
-    expect(body.motionConcepts.every((c) => c.id.startsWith("fresh-"))).toBe(true);
+    expect(body.motionConcepts.every((c) => /^(explain|strategy)-/.test(c.id))).toBe(true);
     expect(body.motionConcepts.length).toBe(30);
-    expect(body.motionConcepts.filter((c) => !c.id.startsWith("fresh-"))).toEqual([]);
+    expect(body.motionConcepts.filter((c) => !/^(explain|strategy)-/.test(c.id))).toEqual([]);
     // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
     const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
     expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
     expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe(OFFERED_DAILY_CONCEPT_IDS[0]);
-    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds.sort()).toEqual(["fresh-02-plan-said-3", "fresh-04-setup-lost-422", "fresh-06-five-revenge"]);
+    // No explainer is a near-copy of another, so none is hidden.
+    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toEqual([]);
   });
 
   it("POST for a retired (older-style) concept is refused with 409, and a custom-topic or Radar video request is refused too", async () => {
@@ -278,9 +279,9 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
 });
 
 describe("api/run-campaign.ts handler -- a concept is used up once requested (owner rule 2026-09-25)", () => {
-  const A = "Motion concept request: Two limits. The smaller one decides.";
-  const B = "Motion concept request: The plan said 3. The trade was 5.";
-  const C = "Motion concept request: Nobody fines you for off-plan trades";
+  const A = "Motion concept request: Copying one trade to two accounts copies the loss too";
+  const B = "Motion concept request: The consistency rule: when your best day is too big";
+  const C = "Motion concept request: What moving your stop loss actually costs";
   let handler: typeof import("../api/run-campaign").default;
   let state: ReturnType<typeof createFakeClient>;
 
@@ -311,13 +312,13 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
     const ids = body.motionConcepts.map((c) => c.id);
-    expect(ids).not.toContain("fresh-01-two-limits");
-    expect(ids).not.toContain("fresh-02-plan-said-3");
-    expect(ids).toContain("fresh-08-nobody-fines");
+    expect(ids).not.toContain("explain-01-copy-trading-risk");
+    expect(ids).not.toContain("explain-02-consistency-rule");
+    expect(ids).toContain("explain-03-moving-stops");
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "fresh-01-two-limits", state: "made" }),
-        expect.objectContaining({ id: "fresh-02-plan-said-3", state: "waiting" }),
+        expect.objectContaining({ id: "explain-01-copy-trading-risk", state: "made" }),
+        expect.objectContaining({ id: "explain-02-consistency-rule", state: "waiting" }),
       ]),
     );
   });
@@ -329,8 +330,8 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     const body = result.body as { unavailableMotionConcepts: { id: string; state: string }[] };
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "fresh-01-two-limits", state: "rejected" }),
-        expect.objectContaining({ id: "fresh-08-nobody-fines", state: "waiting" }),
+        expect.objectContaining({ id: "explain-01-copy-trading-risk", state: "rejected" }),
+        expect.objectContaining({ id: "explain-03-moving-stops", state: "waiting" }),
       ]),
     );
   });
@@ -340,15 +341,15 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
-    expect(body.motionConcepts.map((c) => c.id)).toContain("fresh-01-two-limits");
-    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "fresh-08-nobody-fines", state: "rejected" })]));
-    expect(body.unavailableMotionConcepts.map((c) => c.id)).not.toContain("fresh-01-two-limits");
+    expect(body.motionConcepts.map((c) => c.id)).toContain("explain-01-copy-trading-risk");
+    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "explain-03-moving-stops", state: "rejected" })]));
+    expect(body.unavailableMotionConcepts.map((c) => c.id)).not.toContain("explain-01-copy-trading-risk");
   });
 
   it("POST for a concept that already has a video is refused with 409 before anything is created or enqueued", async () => {
     await load({ campaignRows: [{ thesis: A, status: "approved" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "fresh-01-two-limits" }), res);
+    await handler(fakeReq({ motionConceptId: "explain-01-copy-trading-risk" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already been made");
     expect(state.insertedOpportunities).toHaveLength(0);
@@ -358,7 +359,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept waiting in Approvals is refused with 409", async () => {
     await load({ campaignRows: [{ thesis: B, status: "in_review" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "fresh-02-plan-said-3" }), res);
+    await handler(fakeReq({ motionConceptId: "explain-02-consistency-rule" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("waiting in Approvals");
   });
@@ -366,7 +367,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept whose request is still queued is refused with 409, so it can't be run twice", async () => {
     await load({ pendingRuns: [{ opportunity_id: "opp-queued", title: C }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "fresh-08-nobody-fines" }), res);
+    await handler(fakeReq({ motionConceptId: "explain-03-moving-stops" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already in progress");
     expect(state.calls).toHaveLength(0);
@@ -375,7 +376,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept whose script was rejected is refused with 409", async () => {
     await load({ campaignRows: [{ thesis: A, status: "retired" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "fresh-01-two-limits" }), res);
+    await handler(fakeReq({ motionConceptId: "explain-01-copy-trading-risk" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already rejected");
   });
@@ -401,13 +402,13 @@ describe("api/run-campaign.ts handler -- one new concept request a day (owner ru
   });
 
   it("refuses a second request on the same day with a 409 that names today's concept, before anything is created or queued", async () => {
-    await load("Motion concept request: The plan said 3. The trade was 5.");
+    await load("Motion concept request: The consistency rule: when your best day is too big");
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "fresh-01-two-limits" }), res);
+    await handler(fakeReq({ motionConceptId: "explain-01-copy-trading-risk" }), res);
     expect(result.statusCode).toBe(409);
     const error = (result.body as { error: string }).error;
     expect(error).toMatch(/One video a day/);
-    expect(error).toContain("The plan said 3. The trade was 5.");
+    expect(error).toContain("The consistency rule: when your best day is too big");
     expect(error).toMatch(/Arizona/);
     expect(state.calls.filter((c) => c.kind === "enqueue_campaign_run")).toEqual([]);
     expect(state.insertedOpportunities).toEqual([]);
@@ -416,17 +417,17 @@ describe("api/run-campaign.ts handler -- one new concept request a day (owner ru
   it("accepts the day's first request", async () => {
     await load(null);
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "fresh-01-two-limits" }), res);
+    await handler(fakeReq({ motionConceptId: "explain-01-copy-trading-risk" }), res);
     expect(result.statusCode).toBe(200);
     expect(state.calls.filter((c) => c.kind === "enqueue_campaign_run")).toHaveLength(1);
   });
 
   it("GET tells the app which concept was requested today and when the next request opens", async () => {
-    await load("Motion concept request: The plan said 3. The trade was 5.");
+    await load("Motion concept request: The consistency rule: when your best day is too big");
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { dailyLimit: { requestedToday: string | null; nextRequestAt: string | null } };
-    expect(body.dailyLimit.requestedToday).toContain("The plan said 3");
+    expect(body.dailyLimit.requestedToday).toContain("The consistency rule: when your");
     expect(new Date(body.dailyLimit.nextRequestAt!).getTime()).toBeGreaterThan(Date.now());
 
     await load(null);

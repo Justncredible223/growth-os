@@ -36,7 +36,8 @@ data class PlanSlot(
     val remaining: List<PostingPlatform>,
 )
 
-data class PostingPlan(val date: String, val slots: List<PlanSlot>, val backlog: Int)
+/** [youtubeNextAt]: when YouTube may be posted to again (ISO), or null when it may be posted now. One YouTube post per 48 hours (2026-10-17). */
+data class PostingPlan(val date: String, val slots: List<PlanSlot>, val backlog: Int, val youtubeNextAt: String? = null)
 
 data class PostResult(
     val id: String,
@@ -84,6 +85,7 @@ internal fun JSONObject.toPostingOverview(): PostingOverview {
         plan = PostingPlan(
             date = plan.getString("date"),
             backlog = plan.getInt("backlog"),
+            youtubeNextAt = if (plan.isNull("youtubeNextAt")) null else plan.optString("youtubeNextAt").takeIf { it.isNotBlank() },
             slots = plan.getJSONArray("slots").mapObjects { s ->
                 PlanSlot(
                     time = s.getString("time"),

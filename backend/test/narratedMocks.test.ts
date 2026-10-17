@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, isOfferedPlan, isNarratedMockPlan, MOCK_NARRATION, MOCK_SPEECH_RATE, MOCK_MIN_BEAT_SECONDS } from "../src/shortform/motionPlans";
 import { DEFAULT_VOICE } from "../scripts/video-factory/voiceover";
+import { isExplainerPlan } from "../src/shortform/explainers";
 
 const offered = MOTION_SCENE_PLANS.filter(isOfferedPlan);
 
@@ -31,9 +32,15 @@ describe("narrated product mocks", () => {
     }
   });
 
-  it("keep every beat short (7 words or fewer, about two seconds spoken)", () => {
+  it("keep every example beat short (7 words or fewer, about two seconds spoken); an explainer's teaching cards are one sentence", () => {
     for (const p of offered) {
       for (const s of p.scenes) {
+        if (isExplainerPlan(p) && s.layout === "payoff") {
+          // A teaching card (explainers.ts) is one spoken sentence, so one recording per video still cuts cleanly at the pauses.
+          expect(sentences(s.narration), `${p.planId}: "${s.narration}"`).toHaveLength(1);
+          expect(s.narration.split(/s+/).length, `${p.planId}: "${s.narration}"`).toBeLessThanOrEqual(25);
+          continue;
+        }
         const words = s.narration.split(/\s+/).length;
         expect(words, `${p.planId}: "${s.narration}"`).toBeLessThanOrEqual(7);
       }

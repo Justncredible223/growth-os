@@ -4,7 +4,7 @@ import { extractYoutubeVideoId } from "../video/youtubeUrl.js";
 import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import type { XOwnTweet } from "../signals/adapters/xAdapter.js";
 import { dayForTitle } from "../video/todaysVideo.js";
-import { POSTING_PLATFORMS, assessReplyVisibility, buildPostingPlan, type PlanVideo, type PostingPlan, type PostingPlatform, type ReplyVisibility } from "./postingPlan.js";
+import { POSTING_PLATFORMS, YOUTUBE_MIN_HOURS_BETWEEN_POSTS, assessReplyVisibility, buildPostingPlan, phoenixLabel, youtubeNextAllowedAt, type PlanVideo, type PostingPlan, type PostingPlatform, type ReplyVisibility } from "./postingPlan.js";
 
 /** How far back results are listed and YouTube stats refreshed. */
 const RESULTS_WINDOW_DAYS = 30;
@@ -63,7 +63,16 @@ export async function loadPostingPlan(client: SupabaseClient, now: Date = new Da
     readyAt: r.created_at,
     posts: posts.get(r.campaign_asset_id) ?? [],
   }));
-  return buildPostingPlan(videos, now);
+  return buildPostingPlan(videos, now, await lastYoutubePost(client));
+}
+
+/** The newest recorded YouTube post (any video), or null. */
+async function lastYoutubePost(client: SupabaseClient, exceptAssetId?: string): Promise<string | null> {
+  let query = client.from("video_posts").select("posted_at, campaign_asset_id").eq("platform", "youtube_shorts");
+  if (exceptAssetId) query = query.neq("campaign_asset_id", exceptAssetId);
+  const { data, error } = await query.order("posted_at", { ascending: false }).limit(1);
+  if (error) throw new Error(`Posting plan: YouTube post lookup failed: ${error.message}`);
+  return ((data ?? []) as Array<{ posted_at: string }>)[0]?.posted_at ?? null;
 }
 
 /** Records (or corrects) where a video was posted on one platform. */
@@ -76,6 +85,11 @@ export async function recordVideoPost(
   const titles = await titlesForAssets(client, [input.campaignAssetId]);
   const title = titles.get(input.campaignAssetId);
   if (!title) throw new PostingActionError(`No video with asset id ${input.campaignAssetId}`);
+  if (input.platform === "youtube_shorts") {
+    // One YouTube post per 48 hours. Correcting this same video's YouTube link is always allowed.
+    const next = youtubeNextAllowedAt(await lastYoutubePost(client, input.campaignAssetId), now);
+    if (next) throw new PostingActionError(`One YouTube post per ${YOUTUBE_MIN_HOURS_BETWEEN_POSTS} hours: the next one can go up after ${phoenixLabel(next)} Arizona time. Post this video to TikTok and Instagram only.`);
+  }
   const { error } = await client.from("video_posts").upsert(
     {
       campaign_asset_id: input.campaignAssetId,

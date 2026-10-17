@@ -386,6 +386,11 @@ export interface SceneSpec {
   fontSizes?: { headline: number; caption: number };
   /** Required when `layout` is "payoff"; ignored otherwise. */
   payoff?: PayoffSpec;
+  /**
+   * An explainer's teaching card (explainers.ts): drawn in the video's own mock look (mockCard.ts) instead of as payoff text.
+   * `step` is the small label above the headline ("The rule"); empty on an explainer's opening card.
+   */
+  teach?: { step: string; chart?: import("./strategyCharts.js").StrategyChartSpec };
   /** Required when `layout` is "chart"; ignored otherwise. */
   chart?: ChartSpec;
   /** Required when `layout` is "recording"; ignored otherwise. */

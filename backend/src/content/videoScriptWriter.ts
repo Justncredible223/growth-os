@@ -517,6 +517,24 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
   const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
   const hashtags = ["FuturesTrading", "PropFirmTrading", "TradingJournal"];
+  if (plan.planId.startsWith("strategy-")) {
+    // A strategy video (strategyVideos.ts) shows drawn illustrations, not an account's data: its own title is already the search
+    // phrase, and every caption says the charts are illustrations and not a recommendation.
+    const illustration = "Every chart is a drawn illustration, not a real market and not a recommendation.";
+    return {
+      hook: plan.hook,
+      script,
+      shotList,
+      youtubeTitle: title,
+      youtubeDescription: [`${topic}.`, illustration, `Fillbook is a trading journal: log your own trades and check them against your own rules. ${OFFICIAL_HANDLE}`].join("\n\n"),
+      tiktokCaption: `${plan.hook} Illustration, not a recommendation. ${OFFICIAL_HANDLE}`,
+      instagramCaption: `${plan.hook} ${topic}. ${illustration} ${OFFICIAL_HANDLE}`,
+      hashtags: ["FuturesTrading", "DayTrading", "TradingStrategy"],
+      disclosureCta,
+      youtubeThumbnailConcept: `${plan.hook} -- bold text overlay over the drawn chart.`,
+      motionScenePlan: { scenePlanId: plan.planId, scenePlanHash: computeScenePlanHash(plan) },
+    };
+  }
   return {
     hook: plan.hook,
     script,

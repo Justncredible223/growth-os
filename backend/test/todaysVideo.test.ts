@@ -5,7 +5,7 @@ import { OFFERED_DAILY_CONCEPT_IDS, dailyPosition } from "../src/shortform/motio
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog";
 
 const START = "2026-10-04T04:00:00.000Z"; // midnight Eastern, Oct 4
-const concept = listMotionConcepts().find((c) => c.id === "fresh-05-below-the-floor")!;
+const concept = listMotionConcepts().find((c) => c.id === "explain-19-trailing-floor")!;
 const THESIS = manualMotionConceptTitle(concept);
 
 const input = (patch: Partial<TodaysVideoInput> = {}): TodaysVideoInput => ({
@@ -28,8 +28,8 @@ describe("the daily video's state for the Home card", () => {
   it("is 'drafting' while a request is queued or running, ahead of anything else", () => {
     const v = describeTodaysVideo(input({ pendingTitles: [THESIS], latest: { thesis: "x", status: "approved", createdAt: START } }));
     expect(v.state).toBe("drafting");
-    expect(v.title).toBe("$60 below the floor");
-    expect(v.day).toBe(dailyPosition("fresh-05-below-the-floor") + 1);
+    expect(v.title).toBe("Trailing drawdown explained: how the floor moves");
+    expect(v.day).toBe(dailyPosition("explain-19-trailing-floor") + 1);
   });
 
   it("is 'needs_approval' when the script is waiting in Approvals", () => {
@@ -60,7 +60,7 @@ describe("the daily video's state for the Home card", () => {
   it("does not call an earlier day's fully posted video today's", () => {
     const v = describeTodaysVideo(input({ latest: { thesis: THESIS, status: "approved", createdAt: "2026-10-03T13:00:00.000Z" }, render: { status: "ready", error: null }, platformsPosted: ["tiktok"] }));
     expect(v.state).toBe("none");
-    expect(v.detail).toContain("Last video: $60 below the floor");
+    expect(v.detail).toContain("Last video: Trailing drawdown explained: how the floor moves");
   });
 
   it("still shows an earlier day's video that is rendered but not posted yet", () => {

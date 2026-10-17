@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { needsDay7Stats } from "../src/posting/postingRepository";
-import { assessReplyVisibility, buildPostingPlan, phoenixDate, phoenixInstant, type PlanVideo } from "../src/posting/postingPlan";
+import { YOUTUBE_MIN_HOURS_BETWEEN_POSTS, assessReplyVisibility, buildPostingPlan, phoenixDate, phoenixInstant, youtubeNextAllowedAt, type PlanVideo } from "../src/posting/postingPlan";
 
 // 2026-09-25 10:00 Arizona = 17:00 UTC.
 const NOW = new Date("2026-09-25T17:00:00Z");
@@ -89,5 +89,37 @@ describe("needsDay7Stats (asks again for the week-old TikTok/Instagram numbers)"
     expect(needsDay7Stats("tiktok", "2026-09-22T12:00:00Z", { source: "manual", capturedAt: "2026-09-23T12:00:00Z" }, now)).toBe(false);
     expect(needsDay7Stats("tiktok", posted, { source: "manual", capturedAt: "2026-09-25T12:00:00Z" }, now)).toBe(false);
     expect(needsDay7Stats("instagram", posted, null, now)).toBe(false);
+  });
+});
+
+
+describe("one YouTube post per 48 hours (owner rule 2026-10-17)", () => {
+  const NOW_YT = new Date("2026-10-18T20:00:00Z");
+  const v = (posts: PlanVideo["posts"] = []): PlanVideo => ({ campaignAssetId: "a", videoRenderId: "r", title: "T", readyAt: "2026-10-18T10:00:00Z", posts });
+
+  it("leaves YouTube out of today's remaining platforms while the last YouTube post is younger than 48 hours", () => {
+    const plan = buildPostingPlan([v()], NOW_YT, "2026-10-17T19:00:00Z");
+    expect(plan.slots[0]!.remaining).toEqual(["tiktok", "instagram"]);
+    expect(plan.youtubeNextAt).toBe("2026-10-19T19:00:00.000Z");
+  });
+
+  it("lists YouTube again once 48 hours have passed, or when there was no YouTube post", () => {
+    expect(buildPostingPlan([v()], NOW_YT, "2026-10-16T19:00:00Z").slots[0]!.remaining).toContain("youtube_shorts");
+    expect(buildPostingPlan([v()], NOW_YT, "2026-10-16T19:00:00Z").youtubeNextAt).toBeNull();
+    expect(buildPostingPlan([v()], NOW_YT).slots[0]!.remaining).toContain("youtube_shorts");
+  });
+
+  it("counts a slot as done when TikTok and Instagram are posted and YouTube is not allowed yet", () => {
+    const posted = [
+      { platform: "tiktok" as const, url: "https://tiktok.com/x", postedAt: "2026-10-18T19:10:00Z" },
+      { platform: "instagram" as const, url: "https://instagram.com/x", postedAt: "2026-10-18T19:20:00Z" },
+    ];
+    expect(buildPostingPlan([v(posted)], NOW_YT, "2026-10-17T19:00:00Z").slots[0]!.status).toBe("done");
+  });
+
+  it("is exactly 48 hours", () => {
+    expect(YOUTUBE_MIN_HOURS_BETWEEN_POSTS).toBe(48);
+    expect(youtubeNextAllowedAt("2026-10-16T20:00:00.000Z", NOW_YT)).toBeNull();
+    expect(youtubeNextAllowedAt("2026-10-16T20:00:01.000Z", NOW_YT)).toBe("2026-10-18T20:00:01.000Z");
   });
 });

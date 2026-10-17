@@ -51,7 +51,13 @@ describe("search-style YouTube description", () => {
     expect(d.trim().endsWith("@fillbookhq")).toBe(true);
   });
 
-  it("every concept's description keeps the demo-data line", () => {
-    for (const p of MOTION_SCENE_PLANS) expect(buildVideoScriptFromScenePlan(p).youtubeDescription).toContain("demo data from a sample Fillbook account");
+  it("every concept's description keeps the demo-data line, and a strategy video says its charts are illustrations instead", () => {
+    for (const p of MOTION_SCENE_PLANS) {
+      const d = buildVideoScriptFromScenePlan(p).youtubeDescription;
+      if (p.planId.startsWith("strategy-")) {
+        expect(d, p.planId).toContain("drawn illustration, not a real market and not a recommendation");
+        expect(d, p.planId).not.toMatch(/demo data/i);
+      } else expect(d, p.planId).toContain("demo data from a sample Fillbook account");
+    }
   });
 });

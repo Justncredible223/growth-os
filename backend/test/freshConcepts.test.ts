@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "../src/shortform/freshConcepts";
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
 import { nearCopies } from "../src/shortform/conceptVariety";
-import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, EXTRA_OFFERED_CONCEPT_IDS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, RETIRED_FRESH_DAILY_ORDER, EXTRA_OFFERED_CONCEPT_IDS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans";
 import { RECORDING_PILOTS } from "../src/shortform/freshRecordingConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { scoreStory, renderBar } from "../src/shortform/storyScore";
@@ -11,12 +11,12 @@ const manifest = loadManifest();
 const words = (t: string) => t.trim().split(/\s+/).length;
 
 describe("the first 9 fresh hook-first concepts (part of the offered pool since 2026-10-07)", () => {
-  it("are all offered, and every older plan stays resolvable but is not offered", () => {
+  it("were in the retired clip pool, and stay resolvable but are no longer offered (explainers since 2026-10-17)", () => {
     expect(FRESH_PILOTS).toHaveLength(9);
     // The offered pool is these 9 plus the 21 of freshConcepts2.ts; its size, order and lane mix are checked in freshConcepts2.test.ts.
-    for (const id of FRESH_CONCEPT_ORDER) expect(OFFERED_DAILY_CONCEPT_IDS, id).toContain(id);
+    for (const id of FRESH_CONCEPT_ORDER) expect(RETIRED_FRESH_DAILY_ORDER, id).toContain(id);
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    FRESH_PILOTS.forEach((p) => expect(dailyPosition(p.planId)).toBe(OFFERED_DAILY_CONCEPT_IDS.indexOf(p.planId)));
+    FRESH_PILOTS.forEach((p) => expect(dailyPosition(p.planId)).toBe(-1));
     for (const p of DAILY_PILOTS) {
       expect(MOTION_SCENE_PLANS).toContain(p);
       expect(dailyPosition(p.planId)).toBe(-1);

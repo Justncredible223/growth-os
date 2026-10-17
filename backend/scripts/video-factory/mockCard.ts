@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DETAIL_FOOTER, HOOK_MOTION, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SAFE, WINDOW_BAR, cursorPath, heroFontSize, hookValueFontSize, windowGeometry, type MockBoxName } from "../../src/shortform/mockLayout.js";
 import { CLASSIC_MOCK_STYLE, type MockStyle } from "../../src/shortform/mockStyle.js";
+import { ILLUSTRATION_TAG, strategyChartSvg, type StrategyChartSpec } from "../../src/shortform/strategyCharts.js";
 import type { ChartSpec, ChartTone, MockRow } from "../../src/shortform/types.js";
 import { VideoFactoryError } from "./types.js";
 
@@ -76,6 +77,13 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .tile .tl{display:flex;align-items:center;height:44px;font:700 36px/44px SG;color:var(--ink);white-space:nowrap}.tile .tl span{margin-left:auto;font:600 20px MR;letter-spacing:.14em;color:var(--dim)}
 .tile .tv{font-family:SG;font-weight:700;letter-spacing:-.04em;white-space:nowrap}
 .cursor{position:absolute;width:64px;height:64px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));pointer-events:none}
+.step{display:flex;align-items:center}.step span{display:inline-flex;align-items:center;height:50px;padding:0 26px;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:999px;font:700 24px/1 MR;letter-spacing:.16em;color:var(--cyan);white-space:nowrap}
+.thead{font:800 120px/1.06 SG;letter-spacing:-.025em;color:var(--ink);overflow:hidden;display:flex;flex-direction:column;justify-content:center}.thead em{font-style:normal;color:var(--cyan)}
+.tbody{font:600 50px/1.32 MR;color:var(--mute);overflow:hidden}
+.tbar{position:absolute;width:140px;height:10px;border-radius:5px;background:var(--cyan)}
+.ctag{font:700 20px/30px MR;letter-spacing:.14em;color:var(--dim);white-space:nowrap;overflow:hidden}
+.cpanel{border:2px solid var(--line);border-radius:24px;background:var(--bg1);overflow:hidden;box-shadow:0 24px 70px var(--shadow)}
+.cbody{font-size:40px;line-height:1.3}
 `;
 
 /**
@@ -255,6 +263,72 @@ ${showCaption ? `<div ${box("caption")} class="caption" data-fit${hookBeat ? "" 
 </body></html>`;
 }
 
+/** One teaching card of an explainer (explainers.ts), drawn in the same look as the video's product slides. */
+export interface TeachFrame {
+  /** "The rule", "Why it matters"...; empty on the explainer's opening card, which is drawn larger and fully visible at t=0. */
+  step: string;
+  headline: string;
+  captionText: string;
+  style?: MockStyle;
+  /** How long the card is on screen (s); the opening card's slow push-in is spread over it. */
+  holdSeconds?: number;
+  /** A strategy video's drawn chart (strategyCharts.ts), shown under a shorter headline. */
+  chart?: StrategyChartSpec;
+  /** The closing invitation: drawn in its own box in place of the plain-words line. */
+  cta?: string | null;
+}
+
+/** The teaching card's HTML. Pure: the same frame always gives the same markup. */
+export function buildTeachHtml(frame: TeachFrame): string {
+  const style = frame.style ?? CLASSIC_MOCK_STYLE;
+  const opening = frame.step === "";
+  const box = (name: MockBoxName): string => `data-box="${name}"`;
+  // The opening card is a valid cover from its first frame: nothing on it fades in, it only pushes in slowly.
+  const a = (kind: string, delay: number): string => (opening ? "" : ` data-a="${kind}" data-d="${delay}"`);
+  // The headline's last word in the accent, like the site's headlines.
+  const words = frame.headline.trim().split(/\s+/);
+  const last = words.pop() ?? "";
+  const head = `${esc(words.join(" "))}${words.length > 0 ? " " : ""}<em>${esc(last)}</em>`;
+  const hold = Math.round((frame.holdSeconds ?? 4) * 1000);
+  const step = opening ? "" : `<div ${box("teachStep")} class="step" data-fit${a("pop", 0)}><span>${esc(frame.step.toUpperCase())}</span></div>`;
+  if (frame.chart) {
+    // A strategy card: shorter headline, the drawn chart with its illustration tag, and one line under it.
+    const chartContent =
+      step +
+      `<div ${box("teachChartHead")} class="thead" data-autofit="88" data-fit${a("settle", 60)}><div>${head}</div></div>` +
+      `<div ${box("teachChartTag")} class="ctag" data-fit${a("fade", 120)}>${esc(ILLUSTRATION_TAG.toUpperCase())}</div>` +
+      `<div ${box("teachChart")} class="cpanel"${a("fade", 140)}>${strategyChartSvg(frame.chart)}</div>` +
+      `<div ${box("teachChartBody")} class="tbody cbody" data-fit${a("fade", 300)}>${esc(frame.captionText)}</div>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="left center" data-fast="1">
+<img ${box("logo")} class="logo" src="${url(style.palette.light ? "fillbook-horizontal-dark.svg" : "fillbook-horizontal-white.svg")}">
+${chartContent}
+<script>${PAGE_SCRIPT}</script>
+</body></html>`;
+  }
+  // Without a step label the headline takes the label's room too.
+  const headStyle = opening ? ` style="top:${MOCK_BOXES.teachStep.y}px;height:${MOCK_BOXES.teachHead.y + MOCK_BOXES.teachHead.h - MOCK_BOXES.teachStep.y}px"` : "";
+  const content =
+    `<div class="hookwrap"${opening ? ` data-hook="push" data-hold="${hold}"` : ""}>` +
+    step +
+    `<div ${box("teachHead")} class="thead" data-autofit="${opening ? 150 : 120}" data-fit${headStyle}${a("settle", 80)}><div>${head}</div></div>` +
+    `<div class="tbar" style="left:${MOCK_BOXES.teachBody.x}px;top:${MOCK_BOXES.teachBody.y - 34}px"${a("fade", 200)}></div>` +
+    (frame.cta
+      ? `<div ${box("teachBody")} class="cta" data-fit${a("pop", 220)}>${esc(frame.cta)}</div>`
+      : `<div ${box("teachBody")} class="tbody" data-fit${a("fade", 260)}>${esc(frame.captionText)}</div>`) +
+    `</div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="left center" data-fast="1">
+<img ${box("logo")} class="logo" src="${url(style.palette.light ? "fillbook-horizontal-dark.svg" : "fillbook-horizontal-white.svg")}">
+${content}
+<script>${PAGE_SCRIPT}</script>
+</body></html>`;
+}
+
+/** Frames drawn for a teaching card: the opening card's push-in runs for its whole hold; the others have the short entrance. */
+export function teachFrameCount(frame: TeachFrame): number {
+  const seconds = frame.step === "" ? Math.min(Math.max(frame.holdSeconds ?? 4, 1), 6) : HOOK_MOTION.entranceSeconds;
+  return Math.round(seconds * MOCK_ENTRANCE.fps);
+}
+
 /** Where Chromium lives: an explicit env override, Playwright's own install, or the pre-installed browser some environments ship. */
 function chromiumPath(): string | undefined {
   const fromEnv = process.env.MOCK_CHROMIUM_PATH ?? process.env.CHROMIUM_EXECUTABLE;
@@ -319,6 +393,8 @@ export interface MockRenderer {
   render(frame: MockFrame, outPath: string): Promise<string>;
   /** The finished slide plus its entrance as numbered frames (`<prefix>-000.png` ...). Returns the finished still and the frame pattern. */
   renderBeat(frame: MockFrame, outDir: string, prefix: string): Promise<{ stillPath: string; pattern: string; count: number }>;
+  /** The same for an explainer's teaching card. */
+  renderTeachBeat(frame: TeachFrame, outDir: string, prefix: string): Promise<{ stillPath: string; pattern: string; count: number }>;
   close(): Promise<void>;
 }
 
@@ -333,9 +409,9 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
     throw new VideoFactoryError(`mockCard: could not start Chromium (${err instanceof Error ? err.message.split("\n")[0] : String(err)}). Install it with "npx playwright install chromium", or set MOCK_CHROMIUM_PATH.`);
   }
   const page = await browser.newPage({ viewport: { width: MOCK_CANVAS.width, height: MOCK_CANVAS.height }, deviceScaleFactor: 1 });
-  const load = async (frame: MockFrame, outPath: string): Promise<void> => {
+  const load = async (frame: MockFrame | { html: string }, outPath: string): Promise<void> => {
       const htmlPath = outPath.replace(/\.png$/i, ".html");
-      writeFileSync(htmlPath, buildMockHtml(frame), "utf-8");
+      writeFileSync(htmlPath, "html" in frame ? frame.html : buildMockHtml(frame), "utf-8");
       await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "load" });
       // A face no element on this slide uses (the closing slide has no figure rows) would stay "unloaded"; load all three explicitly.
       await page.evaluate(() => Promise.all(["700 20px SG", "600 20px MR", "700 20px JB"].map((f) => document.fonts.load(f))));
@@ -373,6 +449,17 @@ export async function createMockRenderer(workDir: string): Promise<MockRenderer>
       await load(frame, stillPath);
       await page.screenshot({ path: stillPath });
       const count = beatFrameCount(frame);
+      for (let i = 0; i < count; i++) {
+        await page.evaluate((ms) => (window as unknown as { seek(ms: number): void }).seek(ms), (i * 1000) / MOCK_ENTRANCE.fps);
+        await page.screenshot({ path: join(outDir, `${prefix}-${String(i).padStart(3, "0")}.png`) });
+      }
+      return { stillPath, pattern: `${prefix}-%03d.png`, count };
+    },
+    async renderTeachBeat(frame, outDir, prefix) {
+      const stillPath = join(outDir, `${prefix}.png`);
+      await load({ html: buildTeachHtml(frame) }, stillPath);
+      await page.screenshot({ path: stillPath });
+      const count = teachFrameCount(frame);
       for (let i = 0; i < count; i++) {
         await page.evaluate((ms) => (window as unknown as { seek(ms: number): void }).seek(ms), (i * 1000) / MOCK_ENTRANCE.fps);
         await page.screenshot({ path: join(outDir, `${prefix}-${String(i).padStart(3, "0")}.png`) });

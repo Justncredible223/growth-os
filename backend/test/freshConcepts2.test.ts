@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "../src/shortform/freshConcepts";
 import { FRESH2_PILOTS, FRESH2_CONCEPT_ORDER, FRESH_LANES } from "../src/shortform/freshConcepts2";
 import { nearCopies } from "../src/shortform/conceptVariety";
-import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, EXTRA_OFFERED_CONCEPT_IDS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, RETIRED_FRESH_DAILY_ORDER, EXTRA_OFFERED_CONCEPT_IDS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { scoreStory, renderBar } from "../src/shortform/storyScore";
 import { buildMockHtml } from "../scripts/video-factory/mockCard";
@@ -15,7 +15,8 @@ const frame = (s: SceneSpec) => ({ chart: s.chart!, headline: s.headline, captio
 /** A screen-recording variant (ids like fresh-02b-...) stands in for the card version of the same idea (fresh-02-...): it keeps its number. */
 const ideaOf = (id: string) => id.replace(/^(fresh-\d{2})[a-z]?-.*$/, "$1");
 const own = [...FRESH_CONCEPT_ORDER, ...FRESH2_CONCEPT_ORDER];
-const offeredAll = [...OFFERED_DAILY_CONCEPT_IDS];
+// The clip pool's 30-day order, offered 2026-10-07 to 2026-10-16 and retired by the explainers (explainers.test.ts).
+const offeredAll = [...RETIRED_FRESH_DAILY_ORDER];
 /** The 30 requested days; the 3 card versions of the recorded ideas follow as hidden fallbacks (a near-copy of its recording, so never requested alongside it). */
 const pool = offeredAll.slice(0, 30);
 const planOf = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id)!;
@@ -27,7 +28,7 @@ describe("the 21 more fresh hook-first concepts (freshConcepts2.ts) and the 30-d
     for (const p of FRESH2_PILOTS) expect(MOTION_SCENE_PLANS).toContain(p);
   });
 
-  it("the offered pool is exactly 30 distinct ideas: the 9 + the 21, once each (a recording variant stands in for its card version), in one explicit order", () => {
+  it("the retired clip pool was exactly 30 distinct ideas: the 9 + the 21, once each (a recording variant stands in for its card version), in one explicit order", () => {
     expect(offeredAll).toHaveLength(33);
     expect(offeredAll.slice(30)).toEqual(["fresh-02-plan-said-3", "fresh-04-setup-lost-422", "fresh-06-five-revenge"]);
     expect(pool).toHaveLength(30);
@@ -35,8 +36,9 @@ describe("the 21 more fresh hook-first concepts (freshConcepts2.ts) and the 30-d
     expect(pool.map(ideaOf).sort()).toEqual(own.map(ideaOf).sort());
     expect(new Set(pool.map(ideaOf)).size).toBe(30);
     expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...offeredAll].sort());
-    offeredAll.forEach((id, i) => expect(dailyPosition(id)).toBe(i));
+    // Since 2026-10-17 none of them is offered: the explainers replaced the pool, and the clips stay resolvable.
+    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).some((p) => offeredAll.includes(p.planId))).toBe(false);
+    offeredAll.forEach((id) => expect(dailyPosition(id)).toBe(-1));
   });
 
   it("opens with the strongest universal hooks in days 1-10", () => {
