@@ -1,17 +1,21 @@
 #!/usr/bin/env node
 /**
- * Splits the owner's recordings (one plain file per day, no timing markup) into the five parts per day the renderer uses, and
+ * Splits the owner's recordings (one plain file per day, no timing markup) into one part per beat (nine for an explainer), and
  * checks every split before writing anything for that day. See scripts/video-factory/splitRecording.ts for how the cuts are
  * chosen and what is checked.
  *
- *   npx tsx scripts/splitVoiceRecordings.ts <folder with daily-01-brief-room.mp3 ...> [--dry]
+ *   npx tsx scripts/splitVoiceRecordings.ts <folder with explain-01-copy-trading-risk.mp3 ...> [--dry] [--legacy]
  *
- * Writes <planId>-1.mp3 ... <planId>-5.mp3 into scripts/video-factory/assets/voice/ for each day that passes. A day that
+ * Reads the offered pool in day order (the explainers since 2026-10-17); --legacy reads the 30 older daily concepts. A day with no
+ * file in the folder is reported as missing.
+ *
+ * Writes <planId>-1.mp3 ... <planId>-<beats>.mp3 into scripts/video-factory/assets/voice/ for each day that passes. A day that
  * fails is reported with the reason and left alone. Exit code 1 if any day fails or is missing.
  */
 import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts.js";
+import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans.js";
 import { createProcessRunner } from "./video-factory/processRunner.js";
 import { measureAudioDuration } from "./video-factory/voiceover.js";
 import { SILENCE_THRESHOLD_DB, VOICE_DIR, VOICE_EXTENSIONS, parseSilences } from "./video-factory/suppliedVoice.js";
@@ -28,7 +32,8 @@ async function main() {
   let failed = 0;
   let written = 0;
   console.log("Day  Status  Total   Pauses chosen (s)            Next best  Ratio  Share error  Notes");
-  for (const [i, plan] of DAILY_PILOTS.entries()) {
+  const pool = args.includes("--legacy") ? DAILY_PILOTS : OFFERED_DAILY_CONCEPT_IDS.map((id) => MOTION_SCENE_PLANS.find((p) => p.planId === id)!);
+  for (const [i, plan] of pool.entries()) {
     const day = String(i + 1).padStart(2);
     const found = VOICE_EXTENSIONS.map((ext) => join(resolve(folder), `${plan.planId}.${ext}`)).find((p) => existsSync(p));
     if (!found) {

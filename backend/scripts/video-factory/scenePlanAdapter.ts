@@ -187,6 +187,13 @@ export async function buildRenderPlanScenes(
         sceneBackground = beat.stillPath;
         mockFrames = { pattern: beat.pattern, count: beat.count };
       }
+      if (s.teach) {
+        // An explainer's teaching card: drawn in the same look as the video's product slides, with no vector text over it.
+        mockRenderer ??= await createMockRenderer(outDir);
+        const beat = await mockRenderer.renderTeachBeat({ step: s.teach.step, headline: s.headline, captionText: s.captionText, style: mockStyle, holdSeconds: s.durationSeconds, ...(s.teach.chart ? { chart: s.teach.chart } : {}), cta: s.cta }, outDir, `teach-${i}`);
+        sceneBackground = beat.stillPath;
+        mockFrames = { pattern: beat.pattern, count: beat.count };
+      }
       if (!s.assetId || chart) renderScene.card = { backgroundPath: sceneBackground, ...(mockFrames ? { frames: mockFrames } : {}) };
 
       if (s.assetId && !chart) {
@@ -249,7 +256,7 @@ export async function buildRenderPlanScenes(
 
       const start = elapsed;
       const end = elapsed + s.durationSeconds;
-      if (chart?.kind === "mock") {
+      if (chart?.kind === "mock" || s.teach) {
         // Everything is already in the HTML still (headline, mock, caption, invitation); no vector text is drawn over it.
       } else if (chart) {
         // Chart layout: the headline, the chart up to this scene's beat, and the beat's caption, all drawn as vector cues.

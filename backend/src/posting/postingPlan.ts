@@ -44,6 +44,27 @@ export interface PostingPlan {
   slots: PlanSlot[];
   /** Ready videos not posted anywhere yet, beyond today's slots. */
   backlog: number;
+  /** When YouTube may be posted to again (ISO), or null when it may be posted now. See YOUTUBE_MIN_HOURS_BETWEEN_POSTS. */
+  youtubeNextAt: string | null;
+}
+
+/**
+ * One YouTube Short per 48 hours (owner rule, 2026-10-17): 31 near-identical Shorts in four weeks were getting 0-2 views. While a
+ * YouTube post is younger than this, YouTube is left out of the plan's remaining platforms and a new YouTube link is refused.
+ * TikTok and Instagram are not limited.
+ */
+export const YOUTUBE_MIN_HOURS_BETWEEN_POSTS = 48;
+
+/** "Sat, Oct 19, 12:05 PM" in Arizona time, for messages the owner reads. */
+export function phoenixLabel(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", { timeZone: "America/Phoenix", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+/** The instant YouTube may be posted to again after a post at `lastYoutubePostAt`, or null when that is already past (or there was none). */
+export function youtubeNextAllowedAt(lastYoutubePostAt: string | null, now: Date): string | null {
+  if (!lastYoutubePostAt) return null;
+  const next = Date.parse(lastYoutubePostAt) + YOUTUBE_MIN_HOURS_BETWEEN_POSTS * 3_600_000;
+  return Number.isFinite(next) && next > now.getTime() ? new Date(next).toISOString() : null;
 }
 
 /** YYYY-MM-DD for an instant, in Arizona. */
@@ -56,17 +77,18 @@ export function phoenixInstant(date: string, time: string): Date {
   return new Date(new Date(`${date}T${time}:00Z`).getTime() - PHOENIX_OFFSET_MS);
 }
 
-function remainingPlatforms(video: PlanVideo): PostingPlatform[] {
+function remainingPlatforms(video: PlanVideo, youtubeBlocked: boolean): PostingPlatform[] {
   const done = new Set(video.posts.map((p) => p.platform));
-  return POSTING_PLATFORMS.filter((p) => !done.has(p));
+  return POSTING_PLATFORMS.filter((p) => !done.has(p) && !(youtubeBlocked && p === "youtube_shorts"));
 }
 
 /**
  * Fills today's slot(s) (one a day now). Videos first posted today keep the slots, in the order they went out; the rest go to
  * ready videos that aren't fully posted yet, oldest first. A video posted before today never returns to the plan.
  */
-export function buildPostingPlan(videos: PlanVideo[], now: Date = new Date()): PostingPlan {
+export function buildPostingPlan(videos: PlanVideo[], now: Date = new Date(), lastYoutubePostAt: string | null = null): PostingPlan {
   const date = phoenixDate(now);
+  const youtubeNextAt = youtubeNextAllowedAt(lastYoutubePostAt, now);
   const firstPostDate = (v: PlanVideo) => (v.posts.length ? phoenixDate(new Date(v.posts.map((p) => p.postedAt).sort()[0]!)) : null);
 
   const startedToday = videos
@@ -78,12 +100,12 @@ export function buildPostingPlan(videos: PlanVideo[], now: Date = new Date()): P
   const slots: PlanSlot[] = POSTING_SLOT_TIMES.map((time, i) => {
     const startsAt = phoenixInstant(date, time);
     const video = queue[i] ?? null;
-    const remaining = video ? remainingPlatforms(video) : [];
+    const remaining = video ? remainingPlatforms(video, youtubeNextAt !== null) : [];
     const status: SlotStatus = !video ? "empty" : remaining.length === 0 ? "done" : now >= startsAt ? "due" : "upcoming";
     return { time, startsAt: startsAt.toISOString(), status, video, remaining };
   });
 
-  return { date, slots, backlog: Math.max(0, waiting.length - Math.max(0, POSTING_SLOT_TIMES.length - startedToday.length)) };
+  return { date, slots, backlog: Math.max(0, waiting.length - Math.max(0, POSTING_SLOT_TIMES.length - startedToday.length)), youtubeNextAt };
 }
 
 export interface ReplyViewSample {

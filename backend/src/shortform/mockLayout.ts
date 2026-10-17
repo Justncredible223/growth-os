@@ -59,6 +59,15 @@ export const MOCK_BOXES = {
   /** hookFirst beat 1 only: the headline, drawn large (auto-fitted, up to 150px), then the opening figures as big tiles. */
   hookText: { x: MOCK_SAFE.x, y: 240, w: MOCK_SAFE.w, h: 400 },
   hookFigs: { x: MOCK_SAFE.x, y: 660, w: MOCK_SAFE.w, h: 470 },
+  /** An explainer's teaching card (explainers.ts): the step label, the headline (auto-fitted), and the plain-words line under it. */
+  teachStep: { x: MOCK_SAFE.x, y: 300, w: MOCK_SAFE.w, h: 50 },
+  teachHead: { x: MOCK_SAFE.x, y: 372, w: MOCK_SAFE.w, h: 430 },
+  teachBody: { x: MOCK_SAFE.x, y: 830, w: MOCK_SAFE.w, h: 280 },
+  /** A strategy video's card (strategyVideos.ts): a shorter headline, the drawn chart, its illustration tag, and one line under it. */
+  teachChartHead: { x: MOCK_SAFE.x, y: 366, w: MOCK_SAFE.w, h: 150 },
+  teachChartTag: { x: MOCK_SAFE.x, y: 526, w: MOCK_SAFE.w, h: 30 },
+  teachChart: { x: MOCK_SAFE.x, y: 560, w: MOCK_SAFE.w, h: 520 },
+  teachChartBody: { x: MOCK_SAFE.x, y: 1092, w: MOCK_SAFE.w, h: 118 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;

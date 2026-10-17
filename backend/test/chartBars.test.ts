@@ -168,7 +168,8 @@ describe("the daily queue", () => {
 
   it("never serves two concepts about the same recording back to back", () => {
     const byId = new Map(MOTION_SCENE_PLANS.map((p) => [p.planId, p] as const));
-    const assets = offeredChartConcepts().map((c) => byId.get(c.id)!.scenes[0]!.assetId);
+    // The recording behind each video: its first scene that shows one (an explainer may open on a text card).
+    const assets = offeredChartConcepts().map((c) => byId.get(c.id)!.scenes.find((s) => s.assetId)?.assetId ?? c.id);
     for (let i = 1; i < assets.length; i++) expect(assets[i], `day ${i + 1}`).not.toBe(assets[i - 1]);
   });
 });

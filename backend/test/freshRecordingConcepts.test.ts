@@ -20,7 +20,7 @@ describe("the 3 screen-recording alternatives of fresh concepts", () => {
     expect(cardVersionOf("fresh-02-plan-said-3")).toBeUndefined();
     for (const p of RECORDING_PILOTS) {
       expect(isRecordingPlan(p), p.planId).toBe(true);
-      expect(isOfferedPlan(p), p.planId).toBe(true);
+      expect(isOfferedPlan(p), p.planId).toBe(false); // retired with the clip pool on 2026-10-17
       expect(isNarratedMockPlan(p), p.planId).toBe(true);
       expect(isPayoffPlan(p), p.planId).toBe(true);
       expect(MOTION_SCENE_PLANS).toContain(p);

@@ -53,6 +53,8 @@ export function computeScenePlanHash(plan: ScenePlan): string {
       ...(s.chart ? { chart: s.chart, layout: s.layout } : {}),
       // Only present on recording-layout scenes, so every existing plan's hash is unchanged.
       ...(s.recording ? { recording: s.recording, layout: s.layout } : {}),
+      // Only present on an explainer's teaching cards.
+      ...(s.teach ? { teach: s.teach } : {}),
     })),
   };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");

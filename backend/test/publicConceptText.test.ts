@@ -11,7 +11,7 @@ describe("text the owner copies into a post", () => {
 
   it("never puts 'screen recording' in the title, description or captions of any offered concept", () => {
     const offered = MOTION_SCENE_PLANS.filter(isOfferedPlan);
-    expect(offered.some((p) => /screen recording/i.test(p.title))).toBe(true); // the internal titles keep the marker (the app tracks a concept by its title)
+    expect(MOTION_SCENE_PLANS.some((p) => /screen recording/i.test(p.title))).toBe(true); // the internal titles keep the marker (the app tracks a concept by its title)
     for (const plan of offered) {
       const video = buildVideoScriptFromScenePlan(plan);
       for (const text of [video.youtubeTitle, video.youtubeDescription, video.tiktokCaption, video.instagramCaption]) {

@@ -105,8 +105,14 @@ export function scoreStory(plan: ScenePlan): StoryScore {
   // 4. LENGTH AND PACE (15)
   const total = plan.scenes.reduce((n, s) => n + s.durationSeconds, 0);
   const pace = total / plan.scenes.length;
+  // An explainer (explainers.ts) teaches one rule over about 30-45 seconds; a clip states one finding in 12-20.
+  if (plan.series === "Explained") {
+    add("length", "30 to 45 seconds (explainer)", 8, total >= 28 && total <= 45 ? 8 : total > 45 && total <= 55 ? 4 : 0, `${total.toFixed(1)}s planned.`);
+    add("pace", "A new beat every 2.5 to 5.5 seconds (explainer)", 7, pace >= 2.5 && pace <= 5.5 ? 7 : pace > 5.5 && pace <= 7 ? 3 : pace < 2.5 ? 3 : 0, `${pace.toFixed(1)}s per scene on average.`);
+  } else {
   add("length", "12 to 20 seconds", 8, total >= 12 && total <= 20 ? 8 : total > 20 && total <= 26 ? 4 : total >= 9 && total < 12 ? 4 : 0, `${total.toFixed(1)}s planned.`);
   add("pace", "A new beat every 1.8 to 3.5 seconds", 7, pace >= 1.8 && pace <= 3.5 ? 7 : pace > 3.5 && pace <= 5 ? 3 : pace < 1.8 ? 3 : 0, `${pace.toFixed(1)}s per scene on average.`);
+  }
 
   const score = criteria.reduce((n, c) => n + c.points, 0);
   const fixes = [...criteria]

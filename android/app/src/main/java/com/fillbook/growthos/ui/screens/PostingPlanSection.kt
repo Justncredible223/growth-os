@@ -36,6 +36,14 @@ import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 
+/** "YouTube in 23h" (or "in 40m" under an hour) until [nextAtIso]; null once it has passed or cannot be read. */
+internal fun youtubeWaitLabel(nextAtIso: String?, nowMillis: Long = System.currentTimeMillis()): String? {
+    val next = nextAtIso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: return null
+    val minutes = (next - nowMillis) / 60_000
+    if (minutes <= 0) return null
+    return if (minutes < 60) "YouTube in ${minutes}m" else "YouTube in ${(minutes + 59) / 60}h"
+}
+
 /** "06:30" -> "6:30 AM", "17:30" -> "5:30 PM". */
 internal fun slotLabel(time: String): String {
     val (h, m) = time.split(":").map { it.toInt() }
@@ -59,7 +67,8 @@ internal fun slotStatusLabel(slot: PlanSlot): Pair<String, StatusTone> = when (s
 fun PostingPlanCard(plan: PostingPlan, onAddLink: (PlanVideo, PostingPlatform) -> Unit) {
     GrowthCard(accentBar = Accent) {
         Text("Today's posting plan", style = MaterialTheme.typography.titleMedium)
-        Text("One video a day, Arizona time. Add each link after you post.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+        Text("One video a day, Arizona time. Add each link after you post. YouTube: one post every 48 hours.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+        val youtubeWait = youtubeWaitLabel(plan.youtubeNextAt)
         Spacer(Modifier.height(10.dp))
         plan.slots.forEachIndexed { i, slot ->
             if (i > 0) Spacer(Modifier.height(12.dp))
@@ -74,6 +83,11 @@ fun PostingPlanCard(plan: PostingPlan, onAddLink: (PlanVideo, PostingPlatform) -
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 64.dp)) {
                     PostingPlatform.entries.forEach { platform ->
                         val posted = video.posts.any { it.platform == platform }
+                        if (!posted && platform == PostingPlatform.YOUTUBE_SHORTS && youtubeWait != null) {
+                            // One YouTube post per 48 hours: no button until the window opens (the server refuses it too).
+                            TextButton(onClick = {}, enabled = false) { Text(youtubeWait, color = TextTertiary, style = MaterialTheme.typography.labelMedium) }
+                            return@forEach
+                        }
                         TextButton(onClick = { onAddLink(video, platform) }) {
                             Text(if (posted) "✓ ${platform.label}" else "+ ${platform.label}", color = if (posted) Success else Accent, style = MaterialTheme.typography.labelMedium)
                         }
