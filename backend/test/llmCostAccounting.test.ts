@@ -146,40 +146,38 @@ describe("LlmClient: awaited usage recording and the budget guard", () => {
 
 describe("daily budget tiers", () => {
   const env = {} as NodeJS.ProcessEnv;
-  it("background work stops at the daily budget, excluding the live host's own spend", () => {
-    expect(budgetExceeded("background", { totalUsd: 1.6, liveHostUsd: 0 }, env)).toBe(true);
-    expect(budgetExceeded("background", { totalUsd: 1.6, liveHostUsd: 1.2 }, env)).toBe(false);
+  it("background work stops at the daily budget", () => {
+    expect(budgetExceeded("background", { totalUsd: 1.6 }, env)).toBe(true);
+    expect(budgetExceeded("background", { totalUsd: 1.4 }, env)).toBe(false);
   });
-  it("owner actions and the live host are exempt from the background budget but not from the absolute ceiling", () => {
-    expect(budgetExceeded("owner", { totalUsd: 3, liveHostUsd: 0 }, env)).toBe(false);
-    expect(budgetExceeded("live", { totalUsd: 3, liveHostUsd: 3 }, env)).toBe(false);
-    expect(budgetExceeded("owner", { totalUsd: 5, liveHostUsd: 0 }, env)).toBe(true);
-    expect(budgetExceeded("live", { totalUsd: 5.2, liveHostUsd: 5 }, env)).toBe(true);
+  it("owner actions are exempt from the background budget but not from the absolute ceiling", () => {
+    expect(budgetExceeded("owner", { totalUsd: 3 }, env)).toBe(false);
+    expect(budgetExceeded("owner", { totalUsd: 5 }, env)).toBe(true);
   });
   it("is tunable by env and ignores junk values", () => {
-    expect(budgetExceeded("background", { totalUsd: 0.6, liveHostUsd: 0 }, { LLM_DAILY_BUDGET_USD: "0.5" })).toBe(true);
-    expect(budgetExceeded("background", { totalUsd: 1.4, liveHostUsd: 0 }, { LLM_DAILY_BUDGET_USD: "abc" })).toBe(false);
+    expect(budgetExceeded("background", { totalUsd: 0.6 }, { LLM_DAILY_BUDGET_USD: "0.5" })).toBe(true);
+    expect(budgetExceeded("background", { totalUsd: 1.4 }, { LLM_DAILY_BUDGET_USD: "abc" })).toBe(false);
   });
 
-  it("reads today's spend (all event types for the LLM, live host split out) with paging", async () => {
+  it("reads today's spend (all event types for the LLM) with paging", async () => {
     const client = new FakeSupabaseClient({
       cost_events: [
-        { id: "1", event_type: "llm_call", cost_usd: 0.5, created_at: "2026-10-13T01:00:00Z", context: { endpoint: "live-host-line" } },
+        { id: "1", event_type: "llm_call", cost_usd: 0.5, created_at: "2026-10-13T01:00:00Z", context: { endpoint: "engagement-draft" } },
         { id: "2", event_type: "prospecting_llm_call", cost_usd: 0.25, created_at: "2026-10-13T02:00:00Z", context: {} },
         { id: "3", event_type: "x_search_read", cost_usd: 9, created_at: "2026-10-13T02:00:00Z", context: {} },
         { id: "4", event_type: "llm_call", cost_usd: 7, created_at: "2026-10-12T23:59:00Z", context: {} },
       ],
     });
-    expect(await loadTodayLlmSpend(asSupabase(client), NOW)).toEqual({ totalUsd: 0.75, liveHostUsd: 0.5 });
+    expect(await loadTodayLlmSpend(asSupabase(client), NOW)).toEqual({ totalUsd: 0.75 });
   });
 
   it("guard fails open when spend cannot be read, and counts a call's own cost locally", async () => {
     const broken = new DailyBudgetGuard(async () => { throw new Error("db"); }, "background", {} as NodeJS.ProcessEnv);
     await expect(broken.check()).resolves.toBeUndefined();
 
-    const guard = new DailyBudgetGuard(async () => ({ totalUsd: 1.49, liveHostUsd: 0 }), "background", {} as NodeJS.ProcessEnv);
+    const guard = new DailyBudgetGuard(async () => ({ totalUsd: 1.49 }), "background", {} as NodeJS.ProcessEnv);
     await expect(guard.check()).resolves.toBeUndefined();
-    guard.note({ model: "claude-sonnet-4-5-20250929", inputTokens: 100_000, outputTokens: 0 }, false); // $0.30
+    guard.note({ model: "claude-sonnet-4-5-20250929", inputTokens: 100_000, outputTokens: 0 }); // $0.30
     await expect(guard.check()).rejects.toThrow(/daily LLM budget reached/);
   });
 });

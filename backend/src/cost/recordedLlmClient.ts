@@ -1,14 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLlmClient, type LlmClient, type LlmUsage } from "../content/llmClient.js";
 import { recordCostEvent } from "./costTracking.js";
-import { DailyBudgetGuard, LIVE_HOST_COST_ENDPOINT_TAG, loadTodayLlmSpend, type LlmCallerTier } from "./llmBudget.js";
+import { DailyBudgetGuard, loadTodayLlmSpend, type LlmCallerTier } from "./llmBudget.js";
 
 export interface RecordedClientOptions {
   /** The job's name. Recorded on every cost row (context.step and context.endpoint) and shown in the cost summary. */
   step: string;
   /**
-   * Who is asking: "background" (scheduled/automatic, subject to the daily ceiling), "owner" (an action the owner
-   * just took) or "live" (the live host). See llmBudget.ts for exactly what each is exempt from.
+   * Who is asking: "background" (scheduled/automatic, subject to the daily ceiling) or "owner" (an action the owner
+   * just took). See llmBudget.ts for exactly what each is exempt from.
    */
   tier?: LlmCallerTier;
   /** Extra context stored on each cost row (opportunityId, engagementItemId, ...). */
@@ -32,11 +32,10 @@ export function createRecordedLlmClient(client: SupabaseClient, options: Recorde
   const env = options.env ?? process.env;
   const tier = options.tier ?? "background";
   const guard = new DailyBudgetGuard(() => loadTodayLlmSpend(client), tier, env);
-  const isLive = options.step === LIVE_HOST_COST_ENDPOINT_TAG;
   return createLlmClient(
     env,
     async (usage) => {
-      guard.note(usage, isLive);
+      guard.note(usage);
       options.onUsage?.(usage);
       const recorded = await recordCostEvent(client, usage, { ...(options.context ?? {}), endpoint: options.step, step: options.step }, options.eventType ?? "llm_call");
       options.onCostRecorded?.(recorded, usage);
