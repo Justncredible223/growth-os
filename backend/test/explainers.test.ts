@@ -58,7 +58,9 @@ describe("the explainers", () => {
 
   it("open on a new card instead of the example's hook exactly when that example was already posted", () => {
     const postedCards = new Set(POSTED.map(cardOf));
-    for (const e of EXPLAINERS) expect(Boolean(e.hook), e.slug).toBe(postedCards.has(e.source));
+    // 2026-10-24 direct-hook test: five unposted explainers also open on their own rewritten card, to compare watch time against the rest.
+    const DIRECT_HOOK_TEST = new Set(["one-day-carries-month", "edge-score", "normal-trade-count", "weak-hour", "weekday-results"]);
+    for (const e of EXPLAINERS) expect(Boolean(e.hook), e.slug).toBe(postedCards.has(e.source) || DIRECT_HOOK_TEST.has(e.slug));
   });
 
   it("are valid plans with verified figures that clear the render bar", () => {
