@@ -20,9 +20,10 @@ const VARIATION_PREFIX = "strategy";
 /**
  * The closing card (on screen only: the narration is already recorded, so this costs no voice credits). 2026-10-24: the strategy
  * videos earned the most followers but never said what Fillbook is. This names one verified view (Reports split results by
- * setup, weekday and time of day, from the trader's imported or synced trades) before the free-trial line.
+ * setup, weekday and time of day, from the trader's imported or synced trades) before the free-trial line. Kept to three lines on
+ * the card: at four the last line sat on the box border.
  */
-const CTA = `Fillbook splits your results by setup, weekday and time of day. Try it free for 14 days. ${OFFICIAL_HANDLE}`;
+const CTA = `Fillbook splits results by setup and weekday. Free for 14 days. ${OFFICIAL_HANDLE}`;
 
 export interface StrategyBeat {
   /** The label above the headline ("The setup"); empty on the opening card. */
