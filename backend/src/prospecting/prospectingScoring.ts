@@ -147,6 +147,13 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const midSizedBonus = followers >= 1_000 && followers <= 30_000 ? 6 : 0;
   if (midSizedBonus > 0) breakdown.midSizedAccount = `${followers} followers is a size that tends to notice replies -> +${midSizedBonus}`;
 
+  // Thread traffic (2026-10-24 reply review: the last 20 replies got a median of 9 views). A reply is seen by about as many
+  // people as see the post it sits under, so a post that already has real impressions is worth more than a quiet one from the
+  // same-sized account. Log-scaled and capped at +10; a post with no impression count reported gets nothing, never a penalty.
+  const impressionCount = metrics.impression_count ?? 0;
+  const trafficPoints = impressionCount > 0 ? Math.min(Math.log10(impressionCount + 1) * 3, 10) : 0;
+  if (trafficPoints > 0) breakdown.threadTraffic = `${impressionCount} impressions on the post -> +${trafficPoints.toFixed(1)} (capped at 10)`;
+
   // Recency -- hour-scale, not a 7-day slope (2026-09-21 reach review): on X
   // a reply lands near the top of a thread only if it is among the first
   // few, so a 1-hour-old post is worth far more than a 20-hour-old one, a
@@ -196,7 +203,7 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
     ? "already replied to this author before -> +10"
     : "no prior Prospecting contact -> +0";
 
-  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints - crowdedPenalty;
+  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + trafficPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints - crowdedPenalty;
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 
   return { score, breakdown, excluded: false, exclusionReason: null };
