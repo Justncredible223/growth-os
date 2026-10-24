@@ -5,15 +5,19 @@ import { distinctConcepts } from "../src/shortform/conceptVariety";
 import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
 import { DAILY_CONCEPT_ORDER } from "../src/shortform/dailyConcepts";
 import { EXTRA_OFFERED_CONCEPT_IDS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
-import { LOW_SUPPLY_AT, MAX_CHART_CARDS_WAITING, offeredChartConcepts, runDailyChartCardRequests, type ConceptState, type DailyChartCardDeps } from "../src/video/dailyChartCardRequests";
+import { LOW_SUPPLY_AT, MAX_CHART_CARDS_WAITING, VIDEO_REQUEST_WEEKDAYS, isVideoRequestDay, offeredChartConcepts, runDailyChartCardRequests, type ConceptState, type DailyChartCardDeps } from "../src/video/dailyChartCardRequests";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
 
 const concepts = offeredChartConcepts();
 const titleOf = (i: number) => manualMotionConceptTitle(concepts[i]!);
 
-function deps(opts: { paused?: boolean; today?: string | null; states?: Array<[number, ConceptState]>; fail?: (id: string) => boolean } = {}) {
+// Tuesday 2026-10-27, 05:00 in Arizona: a request day.
+const A_TUESDAY = new Date("2026-10-27T12:00:00Z");
+
+function deps(opts: { now?: Date; paused?: boolean; today?: string | null; states?: Array<[number, ConceptState]>; fail?: (id: string) => boolean } = {}) {
   const requested: string[] = [];
   const d: DailyChartCardDeps = {
+    now: () => opts.now ?? A_TUESDAY,
     isPaused: async () => opts.paused ?? false,
     states: async () => new Map((opts.states ?? []).map(([i, s]) => [titleOf(i), s] as const)),
     requestedToday: async () => opts.today ?? null,
@@ -39,6 +43,38 @@ describe("the concepts the daily refill draws from", () => {
     expect(concepts.map((c) => c.id)).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
     expect(concepts[0]!.id).toBe("explain-01-copy-trading-risk");
     expect(concepts.map((c) => c.id)).toContain("strategy-01-orb-range-trigger");
+  });
+});
+
+describe("two videos a week (owner 2026-10-24)", () => {
+  it("requests on Tuesday and Friday only", () => {
+    expect(VIDEO_REQUEST_WEEKDAYS).toEqual([2, 5]);
+  });
+
+  it("reads the weekday in Arizona, not UTC", () => {
+    // 2026-10-28T03:00Z is Wednesday in UTC but still Tuesday 20:00 in Arizona.
+    expect(isVideoRequestDay(new Date("2026-10-28T03:00:00Z"))).toBe(true);
+    // 2026-10-27T03:00Z is Monday 20:00 in Arizona.
+    expect(isVideoRequestDay(new Date("2026-10-27T03:00:00Z"))).toBe(false);
+    expect(isVideoRequestDay(new Date("2026-10-30T18:00:00Z"))).toBe(true); // Friday
+    expect(isVideoRequestDay(new Date("2026-10-24T18:00:00Z"))).toBe(false); // Saturday
+  });
+
+  it("skips without reading state or requesting on any other day", async () => {
+    const { d, requested } = deps({ now: new Date("2026-10-29T18:00:00Z") }); // Thursday
+    const states = vi.fn(d.states);
+    const requestedToday = vi.fn(d.requestedToday);
+    const report = await runDailyChartCardRequests({ ...d, states, requestedToday });
+    expect(report).toMatch(/two videos a week.*Tuesday and Friday.*Thursday/);
+    expect(requested).toEqual([]);
+    expect(states).not.toHaveBeenCalled();
+    expect(requestedToday).not.toHaveBeenCalled();
+  });
+
+  it("requests on a Friday", async () => {
+    const { d, requested } = deps({ now: new Date("2026-10-30T18:00:00Z") });
+    await runDailyChartCardRequests(d);
+    expect(requested).toHaveLength(1);
   });
 });
 

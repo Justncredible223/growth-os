@@ -89,6 +89,7 @@ describe("the daily refill never queues two near-copies", () => {
     const states = new Map<string, ConceptState>();
     const requested: string[] = [];
     const deps = {
+      now: () => new Date("2026-10-27T18:00:00Z"), // a Tuesday, so the two-a-week gate lets every pass through
       isPaused: async () => false,
       states: async () => states,
       requestedToday: async () => null,

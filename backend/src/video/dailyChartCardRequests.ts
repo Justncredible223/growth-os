@@ -5,17 +5,39 @@ import { MOTION_SCENE_PLANS, dailyPosition, isOfferedPlan } from "../shortform/m
 import { renderBar } from "../shortform/storyScore.js";
 import { distinctConcepts } from "../shortform/conceptVariety.js";
 import type { ScenePlan } from "../shortform/types.js";
+import { ONE_PER_DAY_ZONE } from "./dailyLimit.js";
 
 /**
  * The daily chart-card refill: keeps a few chart cards waiting in Approvals so there is always something fresh to
  * approve, without the owner requesting each one. It only REQUESTS (queues a draft); approving, and so rendering,
- * stays the owner's action in the app. It is bounded four ways: one request per calendar day in total (owner rule,
+ * stays the owner's action in the app. It is bounded five ways: only on VIDEO_REQUEST_WEEKDAYS (two a week, owner 2026-10-24), one request per calendar day in total (owner rule,
  * 2026-10-03, shared with the app's Motion render button), never more than MAX_CHART_CARDS_WAITING waiting at once (so a few days of not approving never piles up drafts or review spend), only concepts that are offered and clear
  * the render bar, and each concept only once (a used-up concept is never requested again).
  */
 export const MAX_CHART_CARDS_WAITING = 1;
 /** When fewer than this many unused chart concepts remain, the step report says so, so the supply is topped up in time. */
 export const LOW_SUPPLY_AT = 4;
+
+/**
+ * Owner decision 2026-10-24: two new videos a week, not one a day. The refill only requests a concept on these weekdays
+ * (0 = Sunday ... 6 = Saturday), read in the one-a-day zone (America/Phoenix), so approving -- and so rendering -- happens at
+ * most twice a week. Tuesday and Friday. The app's own Motion render button is not gated: a by-hand request stays the
+ * owner's call (and is still held to one a day by dailyLimit.ts). To change the cadence, edit this list.
+ */
+export const VIDEO_REQUEST_WEEKDAYS: readonly number[] = [2, 5];
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+
+/** The weekday (0 = Sunday) of `now` in the given zone. */
+export function weekdayInZone(now: Date, zone: string = ONE_PER_DAY_ZONE): number {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "long" }).format(now);
+  return WEEKDAY_NAMES.indexOf(name as (typeof WEEKDAY_NAMES)[number]);
+}
+
+/** True when the refill may request a concept on the zone's calendar day containing `now`. */
+export function isVideoRequestDay(now: Date, days: readonly number[] = VIDEO_REQUEST_WEEKDAYS, zone: string = ONE_PER_DAY_ZONE): boolean {
+  return days.includes(weekdayInZone(now, zone));
+}
 
 export type ConceptState = "made" | "waiting" | "rejected";
 
@@ -26,6 +48,8 @@ export interface DailyChartCardDeps {
   /** The title of the concept already requested today (by this refill or by hand), or null when today's one request is still free. */
   requestedToday(): Promise<string | null>;
   request(conceptId: string): Promise<{ campaignRunRequestId: string; opportunityId: string }>;
+  /** The run's clock, for the weekday gate. Defaults to the real time. */
+  now?: () => Date;
 }
 
 /**
@@ -45,6 +69,11 @@ export function offeredChartConcepts(): MotionConceptSummary[] {
 
 export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promise<string> {
   if (await deps.isPaused()) return "skipped -- the system is paused";
+  const today = weekdayInZone((deps.now ?? (() => new Date()))());
+  if (!VIDEO_REQUEST_WEEKDAYS.includes(today)) {
+    const days = VIDEO_REQUEST_WEEKDAYS.map((d) => WEEKDAY_NAMES[d]).join(" and ");
+    return `skipped -- two videos a week: requests go out on ${days} only (today is ${WEEKDAY_NAMES[today] ?? "unknown"})`;
+  }
   const alreadyToday = await deps.requestedToday();
   if (alreadyToday) return `skipped -- one video a day: "${alreadyToday}" was already requested today`;
   const states = await deps.states();
