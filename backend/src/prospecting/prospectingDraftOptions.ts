@@ -44,6 +44,22 @@ export function postMentionsFillbook(postText: string): boolean {
   return /\bfillbook/i.test(postText);
 }
 
+/**
+ * Slogan shapes the sharp option drifts into (owner-flagged 2026-10-24: the tidy two-beat line is itself a bot tell). Kept narrow on
+ * purpose: the shared soft patterns once matched 70% of what the model writes, so only the exact personification and
+ * punchline-closer shapes are caught here, and only for the sharp option.
+ */
+const SHARP_SLOGAN_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /\b(?:doesn'?t|does not|don'?t|do not) (?:care|forgive|forget)\b/i, reason: "gives an abstract thing a mind (\"doesn't care\"), a slogan shape" },
+  { pattern: /\b(?:just|only|simply) (?:knows|remembers|counts|waits)\b/i, reason: 'closes on a punchline ("it just knows"), a slogan shape' },
+];
+
+/** True when the line is two very short sentences back to back, the balanced slogan rhythm. */
+function isTwoBeatSlogan(text: string): boolean {
+  const parts = text.split(/(?<=[.!?])\s+/).map((p) => p.trim()).filter(Boolean);
+  return parts.length === 2 && parts.every((p) => wordCount(p) <= 7);
+}
+
 /** Soft style problems for one option (a retry hint, never a reason to refuse). Null when it is fine. */
 export function optionSoftProblem(style: DraftStyle, text: string): string | null {
   const base = checkReplySoftStyle(text)?.reason;
@@ -52,6 +68,9 @@ export function optionSoftProblem(style: DraftStyle, text: string): string | nul
     const words = wordCount(text);
     if (words < SHARP_MIN_WORDS || words > SHARP_MAX_WORDS) return `is ${words} words; the sharp option must be ${SHARP_MIN_WORDS} to ${SHARP_MAX_WORDS} words`;
     if (sentenceCount(text) > 2) return "runs more than two short sentences; the sharp option is a single line";
+    const slogan = SHARP_SLOGAN_PATTERNS.find(({ pattern }) => pattern.test(text));
+    if (slogan) return slogan.reason;
+    if (isTwoBeatSlogan(text)) return "is two short balanced sentences, a slogan rhythm; make it one specific, uneven sentence";
     return null;
   }
   const sentences = sentenceCount(text);
