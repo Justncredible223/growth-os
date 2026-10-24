@@ -99,8 +99,8 @@ describe("closing card names one Fillbook view (2026-10-24)", () => {
     for (const input of STRATEGIES) {
       const plan = buildStrategyVideo(1, input);
       const close = plan.scenes[plan.scenes.length - 1]!;
-      expect(close.cta).toMatch(/Fillbook splits your results by setup, weekday and time of day/);
-      expect(close.cta).toMatch(/Try it free for 14 days/);
+      expect(close.cta).toMatch(/Fillbook splits results by setup and weekday/);
+      expect(close.cta).toMatch(/Free for 14 days/);
       expect(close.cta).not.toMatch(/real.time|live|alert|before you|profit|guarantee/i);
     }
   });
