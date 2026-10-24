@@ -6,14 +6,11 @@ import { estimateCostUsd, selectCostEvents } from "./costTracking.js";
  * Hard DAILY ceiling on Anthropic spend (UTC day, the same day the Anthropic console bills by). Added 2026-10-13
  * after a 30-day bill of about $26 with spike days of $1.75 to $2.75.
  *
- * Three kinds of caller, three limits:
+ * Two kinds of caller, two limits:
  *  - "background": scheduled and automatic work (Engage autofill, auto-draft, Prospecting/Inbound pulses, partnerships).
- *    Stops at DAILY_LLM_BUDGET_USD of everything spent today EXCLUDING the live host, so a long stream cannot starve
- *    the daily pipeline and the pipeline cannot starve a stream.
+ *    Stops at DAILY_LLM_BUDGET_USD of everything spent today.
  *  - "owner": an action the owner just tapped (draft this reply, request this video, regenerate today's post).
  *    Exempt from the background ceiling; only the absolute backstop below applies.
- *  - "live": the live host. It keeps its own per-stream budget (live_host_settings.daily_budget_usd, default $3) and
- *    is exempt from the background ceiling; only the absolute backstop applies.
  *
  * ABSOLUTE_DAILY_LLM_CEILING_USD is the last line: when ALL spend today reaches it, every caller skips, owner
  * actions included. Both values are env-tunable without a deploy (LLM_DAILY_BUDGET_USD, LLM_DAILY_HARD_CEILING_USD);
@@ -26,13 +23,12 @@ import { estimateCostUsd, selectCostEvents } from "./costTracking.js";
 export const DAILY_LLM_BUDGET_USD = 1.5;
 export const ABSOLUTE_DAILY_LLM_CEILING_USD = 5;
 
-export type LlmCallerTier = "background" | "owner" | "live";
+export type LlmCallerTier = "background" | "owner";
 
 export const BUDGET_SKIP_MESSAGE = "skipped -- daily LLM budget reached";
 
 /** Event types that hold Anthropic spend (the X read events are not model calls). */
 const LLM_EVENT_TYPES = ["llm_call", "partnership_llm_call", "prospecting_llm_call"];
-export const LIVE_HOST_COST_ENDPOINT_TAG = "live-host-line";
 
 function positiveNumber(raw: string | undefined, fallback: number): number {
   const n = Number(raw);
@@ -48,13 +44,12 @@ export function absoluteCeilingUsd(env: NodeJS.ProcessEnv = process.env): number
 
 export interface TodaySpend {
   totalUsd: number;
-  liveHostUsd: number;
 }
 
 /** True when a call at this tier must be skipped given today's spend. Pure. */
 export function budgetExceeded(tier: LlmCallerTier, spend: TodaySpend, env: NodeJS.ProcessEnv = process.env): boolean {
   if (spend.totalUsd >= absoluteCeilingUsd(env)) return true;
-  if (tier === "background") return spend.totalUsd - spend.liveHostUsd >= dailyBudgetUsd(env);
+  if (tier === "background") return spend.totalUsd >= dailyBudgetUsd(env);
   return false;
 }
 
@@ -66,13 +61,8 @@ function utcDayStart(now: Date): string {
 export async function loadTodayLlmSpend(client: SupabaseClient, now: Date = new Date()): Promise<TodaySpend> {
   const rows = await selectCostEvents(client, "cost_usd, context", { since: utcDayStart(now), eventTypes: LLM_EVENT_TYPES });
   let totalUsd = 0;
-  let liveHostUsd = 0;
-  for (const row of rows) {
-    const cost = Number(row.cost_usd ?? 0);
-    totalUsd += cost;
-    if (row.context?.endpoint === LIVE_HOST_COST_ENDPOINT_TAG) liveHostUsd += cost;
-  }
-  return { totalUsd, liveHostUsd };
+  for (const row of rows) totalUsd += Number(row.cost_usd ?? 0);
+  return { totalUsd };
 }
 
 /** How long a read of today's spend is trusted within one process, so a burst of calls is one query, not N. */
@@ -117,9 +107,8 @@ export class DailyBudgetGuard implements LlmBudgetGuard {
   }
 
   /** Adds a finished call's cost so the next check in this process sees it before the next re-read. */
-  note(usage: LlmUsage, isLiveHost: boolean): void {
+  note(usage: LlmUsage): void {
     if (!this.spend) return;
-    const cost = estimateCostUsd(usage);
-    this.spend = { totalUsd: this.spend.totalUsd + cost, liveHostUsd: this.spend.liveHostUsd + (isLiveHost ? cost : 0) };
+    this.spend = { totalUsd: this.spend.totalUsd + estimateCostUsd(usage) };
   }
 }

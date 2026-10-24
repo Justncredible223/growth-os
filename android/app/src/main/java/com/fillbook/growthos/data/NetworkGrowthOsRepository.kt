@@ -346,22 +346,6 @@ class NetworkGrowthOsRepository(
         post("/api/summary", JSONObject().put("paused", paused))
     }
 
-    override suspend fun getLiveHostStatus(): LiveHostStatus = parseLiveHostStatus(get("/api/approvals?resource=live-host"))
-
-    override suspend fun setLiveHostSwitch(on: Boolean) {
-        post("/api/approvals?resource=live-host", JSONObject().put("action", "set-desired").put("desired", if (on) "on" else "off"))
-    }
-
-    override suspend fun setLiveHostYoutubeVideo(linkOrId: String) {
-        val settings = JSONObject().put("youtubeVideoId", if (linkOrId.isBlank()) JSONObject.NULL else linkOrId)
-        post("/api/approvals?resource=live-host", JSONObject().put("action", "update-settings").put("settings", settings))
-    }
-
-    override suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String) {
-        val settings = JSONObject().put("tiktokChatEnabled", enabled).put("tiktokUsername", username.trim())
-        post("/api/approvals?resource=live-host", JSONObject().put("action", "update-settings").put("settings", settings))
-    }
-
     /**
      * Engagement actions: the server answers a refusal (daily cap, spacing, cooldown: HTTP 429) or a bad request
      * (HTTP 400/409) with a readable `{error}` body. Surface that text instead of a generic network message.

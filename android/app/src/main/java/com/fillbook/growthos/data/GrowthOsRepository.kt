@@ -76,15 +76,6 @@ interface GrowthOsRepository {
     /** Backs the Settings/System "Pause System" control -- actually stops auto-draft and manual campaign runs server-side, not just a display flag. */
     suspend fun setPaused(paused: Boolean)
 
-    /** The Live Host tab: the switch, the PC worker's presence, and every chat message seen and line said this stream. */
-    suspend fun getLiveHostStatus(): LiveHostStatus
-    /** The owner's Live Host switch. The character only speaks on stream while this is on; off stops it at once. */
-    suspend fun setLiveHostSwitch(on: Boolean)
-    /** The YouTube live stream whose chat the host reads. Accepts a link or an id; blank clears it. */
-    suspend fun setLiveHostYoutubeVideo(linkOrId: String)
-    /** Turns TikTok LIVE chat reading on or off, for the given TikTok username. Owner-only, like the switch. */
-    suspend fun setLiveHostTiktokChat(enabled: Boolean, username: String)
-
     /**
      * The Engage tab (engagement assistant): other creators' videos with drafted comments. Nothing here posts to
      * a platform; the owner posts by hand and [doneEngagement] only records that they did. Refusals from the

@@ -81,6 +81,11 @@ None of these were pursued further this pass.
 
 ## Update 2026-10-09: option 3 was chosen for LIVE chat only
 
+**Removed 2026-10-24:** the Live Host was stopped and its TikTok LIVE chat
+reader (`backend/scripts/live-host/tiktokChat.ts`) was deleted with it.
+Nothing in Growth OS reads TikTok chat any more. The note below is kept as
+history.
+
 The owner explicitly approved an unofficial reader for one narrow purpose:
 reading the chat of Fillbook's own TikTok LIVE so the Live Host can answer
 it (see the TikTok section of `docs/LIVE_HOST.md`). This is the

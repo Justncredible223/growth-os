@@ -49,7 +49,6 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Nightlight
 import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.WbSunny
@@ -106,7 +105,6 @@ import com.fillbook.growthos.ui.screens.InboundScreen
 import com.fillbook.growthos.ui.screens.EngagementScreen
 import com.fillbook.growthos.ui.screens.EngagementShareInbox
 import com.fillbook.growthos.ui.components.SharedEngagementLink
-import com.fillbook.growthos.ui.screens.LiveHostScreen
 import com.fillbook.growthos.ui.screens.ProspectingScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
 import com.fillbook.growthos.ui.screens.ExperimentsScreen
@@ -150,7 +148,6 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object VideoStatus : Destination("video_status", "Video Status", Icons.Filled.Movie)
     data object FillbookStats : Destination("fillbook_stats", "Fillbook Stats", Icons.Filled.ShowChart)
     data object Results : Destination("results", "Results", Icons.Filled.QueryStats)
-    data object LiveHost : Destination("live_host", "Live Host", Icons.Filled.Podcasts)
     data object Engage : Destination("engage", "Engage", Icons.Filled.ThumbUp)
 }
 
@@ -184,7 +181,6 @@ private val primaryDestinations =
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
     Destination.Results,
-    Destination.LiveHost,
     Destination.Partnerships,
     Destination.Analytics,
     Destination.ContentLibrary,
@@ -382,7 +378,6 @@ private fun GrowthOsApp(
             composable(Destination.VideoStatus.route) { VideoStatusScreen(repo) }
             composable(Destination.FillbookStats.route) { WideContent { FillbookStatsScreen(fillbookAdminRepo) } }
             composable(Destination.Results.route) { WideContent(GRID_CONTENT_MAX_WIDTH_DP) { ResultsScreen(repo) } }
-            composable(Destination.LiveHost.route) { WideContent { LiveHostScreen(repo) } }
             composable(Destination.Engage.route) { EngagementScreen(repo) }
         }
     }
