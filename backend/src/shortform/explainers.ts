@@ -203,7 +203,6 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "one-day-carries-month",
-    hook: { headline: "One day carried the month. Then?", caption: "A month total can look steady when one day made most of it.", say: "One day carried the whole month, so what is left without it?", take: "A month total can hide one big day." },
     source: "fresh-18-one-day-1788",
     title: "When one trading day carries your whole month",
     topic: "A sample account's month where one day made almost all of the profit",
