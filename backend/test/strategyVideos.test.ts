@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { STRATEGIES, STRATEGY_PILOTS, STRATEGY_DAY_ORDER, isStrategyPlan } from "../src/shortform/strategyVideos";
+import { STRATEGIES, STRATEGY_PILOTS, STRATEGY_DAY_ORDER, buildStrategyVideo, isStrategyPlan } from "../src/shortform/strategyVideos";
 import { ILLUSTRATION_TAG, SCENARIOS, strategyChartSvg, vwapOf } from "../src/shortform/strategyCharts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
@@ -93,3 +93,16 @@ describe("the figures the videos say match the drawings", () => {
     expect(svg).toContain('width="840"');
   });
 });
+
+describe("closing card names one Fillbook view (2026-10-24)", () => {
+  it("every strategy video ends on a card that says what Fillbook shows, then the free trial, with no real-time or profit claim", () => {
+    for (const input of STRATEGIES) {
+      const plan = buildStrategyVideo(1, input);
+      const close = plan.scenes[plan.scenes.length - 1]!;
+      expect(close.cta).toMatch(/Fillbook splits your results by setup, weekday and time of day/);
+      expect(close.cta).toMatch(/Try it free for 14 days/);
+      expect(close.cta).not.toMatch(/real.time|live|alert|before you|profit|guarantee/i);
+    }
+  });
+});
+
