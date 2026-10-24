@@ -108,3 +108,23 @@ describe("the explainers", () => {
     for (let i = 1; i < EXPLAINER_PILOTS.length; i++) expect(rec(i), `day ${i + 1}`).not.toBe(rec(i - 1));
   });
 });
+
+describe("explainer closing cards name one Fillbook view (2026-10-24)", () => {
+  it("a video with a view ends on that view plus the free trial; the rest keep the original invitation; no real-time or profit claim", () => {
+    let withView = 0;
+    for (const e of EXPLAINERS) {
+      const plan = EXPLAINER_PILOTS.find((p) => p.planId.endsWith(`-${e.slug}`))!;
+      const close = plan.scenes[plan.scenes.length - 1]!;
+      if (e.view) {
+        withView++;
+        expect(close.cta, e.slug).toBe(`${e.view} Free for 14 days. @fillbookhq`);
+        expect(close.cta, e.slug).not.toMatch(/real.time|live|alert|before you|profit|guarantee|protect/i);
+        expect(e.view.length, e.slug).toBeLessThanOrEqual(56);
+      } else {
+        expect(close.cta, e.slug).toMatch(/Try it free on your own account for 14 days/);
+      }
+    }
+    expect(withView).toBe(13);
+  });
+});
+
