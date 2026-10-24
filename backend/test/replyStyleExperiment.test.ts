@@ -236,6 +236,31 @@ describe("two-option drafting", () => {
   });
 });
 
+describe("sharp option slogan check", () => {
+  it("flags the personified and punchline slogan shapes, and the balanced two-beat rhythm", () => {
+    expect(optionSoftProblem("sharp", "The drawdown doesn't care why you sized up after the second payout hit.")).toMatch(/slogan/);
+    expect(optionSoftProblem("sharp", "You sized up after two payouts on a Friday, and the floor just knows it by now.")).toMatch(/slogan/);
+    expect(optionSoftProblem("sharp", "Payouts hit Friday. Size doubled by lunch time today.")).toMatch(/balanced|slogan/);
+  });
+
+  it("leaves ordinary specific lines and common phrases alone", () => {
+    expect(optionSoftProblem("sharp", SHARP)).toBeNull();
+    expect(optionSoftProblem("sharp", "Two payouts secured on a Friday, then double size by lunch. That Friday is worth a second look.")).toBeNull();
+    expect(optionSoftProblem("sharp", "Nobody knows where the floor sits on that firm until the third trade on Monday morning.")).toBeNull();
+    expect(optionSoftProblem("sharp", "I don't know any firm that resets the buffer on a Friday close, so check yours first.")).toBeNull();
+  });
+
+  it("the helpful option is not held to the slogan check", () => {
+    expect(optionSoftProblem("helpful", "The floor doesn't care. Check it.")).toBeNull();
+  });
+
+  it("the prompt asks for a trade-log lens without naming a tool", () => {
+    expect(PROSPECTING_TWO_OPTION_STYLE_BLOCK).toMatch(/trade log/);
+    expect(PROSPECTING_TWO_OPTION_STYLE_BLOCK).toMatch(/Do NOT write a slogan/);
+    expect(PROSPECTING_TWO_OPTION_STYLE_BLOCK).not.toMatch(/It just knows you did/);
+  });
+});
+
 describe("posted style tag", () => {
   const options = [
     { style: "sharp" as const, text: SHARP },

@@ -74,14 +74,18 @@ promise of profit, no ask to follow or like, no giveaway, plan or price unless t
 characters, no emoji or hashtags).
 Write TWO different replies to the SAME post in one answer and put them in "reply" and "helpfulReply":
 - OPTION A, "sharp" (the "reply" field): ONE line of ${SHARP_MIN_WORDS} to ${SHARP_MAX_WORDS} words that reacts to a specific detail in THEIR post.
-  It is a dry observation, a direct answer to what they asked, or the concrete consequence of their situation. No mechanic
-  lecture, no explainer, no product. Examples of the right shape (never copy them): "Two secured payouts in a day, both on a
-  Friday, both on tilt. Your brain knew the week was over and the rules stopped feeling real." / "The drawdown doesn't care
-  why you sized up. It just knows you did." For option A the "one thing a trader can keep" requirement does NOT apply: a
-  sharp, accurate reaction to their exact situation is enough.
+  It is a plain observation, a direct answer to what they asked, or the concrete consequence of their situation, said the way a
+  trader would text it to a friend. No mechanic lecture, no explainer, no product. Name something from THEIR post (a number, a
+  firm, a day, a size). Do NOT write a slogan: no tidy two-beat line where a short claim is followed by a short punchline ("X
+  doesn't care why. It just knows."), and do not give an abstract thing a mind ("the market punishes", "the drawdown doesn't
+  care", "the floor just wants"). One uneven, specific sentence beats a balanced one. The right shape (never copy it): "Two
+  payouts secured on a Friday, then double size by lunch. That Friday is worth a second look." For option A the "one thing
+  a trader can keep" requirement does NOT apply: an accurate reaction to their exact situation is enough.
 - OPTION B, "helpful" (the "helpfulReply" field): at most TWO sentences with one concrete thing (a number, a rule, or a
   situation) that is still tied to a specific detail of THEIR post. This is where "one thing a trader can keep" applies. Keep it
-  to the one point; no tidy mini-explainer, no list.
+  to the one point; no tidy mini-explainer, no list. Where it fits, say how that exact pattern would look in a trade log
+  (which column, which trades, what the numbers would be), because that is how a journaling team thinks about it. It is the
+  lens, not a product mention: do not name Fillbook, a screen, or a feature, and never say a tool would catch it.
 - The two options must differ in substance, not just wording.
 - Neither option names Fillbook, hints at it, or shows a Fillbook view, unless the person's post asked about Fillbook. Set
   mentionsFillbook=false, usesLink=false and showcase="none" in every ordinary case. Lines above that ask you to add a Fillbook
