@@ -203,6 +203,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "one-day-carries-month",
+    hook: { headline: "One day carried the month. Then?", caption: "A month total can look steady when one day made most of it.", say: "One day carried the whole month, so what is left without it?", take: "A month total can hide one big day." },
     source: "fresh-18-one-day-1788",
     title: "When one trading day carries your whole month",
     topic: "A sample account's month where one day made almost all of the profit",
@@ -215,6 +216,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "edge-score",
+    hook: { headline: "A win rate hides the risk. Why?", caption: "Profit, consistency, risk and rule-following each tell a different part.", say: "A win rate hides the risk, so what does a fuller score look at instead?", take: "One number rarely tells the whole story." },
     source: "fresh-21-edge-score-67",
     title: "One score for how you trade, and what drags it down",
     topic: "An Edge Score that blends profitability, consistency, risk control and rule adherence",
@@ -227,6 +229,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "normal-trade-count",
+    hook: { headline: "More trades isn't worse. Unless?", caption: "A normal pace gives a busy day something to be measured against.", say: "More trades isn't always worse, unless it is far past a normal pace.", take: "A normal pace makes a busy day visible." },
     source: "fresh-16-six-vs-norm",
     title: "How many trades a day is normal for you?",
     topic: "A session with far more trades than the account's own normal pace",
@@ -239,6 +242,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "weak-hour",
+    hook: { headline: "One hour loses. The day wins. Why?", caption: "A weak hour can hide inside a good session until results are split by the hour.", say: "One hour loses while the rest of the day wins, so why does it stay hidden?", take: "A weak hour can hide inside a good day." },
     source: "fresh-28-weak-hour",
     title: "The one hour of the day that loses",
     topic: "A sample account's weakest hour compared with its overall win rate",
@@ -251,6 +255,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "weekday-results",
+    hook: { headline: "One weekday loses. Which one?", caption: "Splitting results by weekday shows the one that loses.", say: "One weekday loses even when the others win, so which one is it?", take: "A weekday can hide behind the week." },
     source: "fresh-22-only-monday-lost",
     title: "Which weekday is losing you money?",
     topic: "A sample account's profit by day of the week, and the one weekday that lost money",
