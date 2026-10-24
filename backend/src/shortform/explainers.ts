@@ -1,6 +1,6 @@
 import { FRESH_PILOTS } from "./freshConcepts.js";
 import { FRESH2_PILOTS } from "./freshConcepts2.js";
-import type { Claim, SceneSpec, ScenePlan } from "./types.js";
+import { OFFICIAL_HANDLE, type Claim, type SceneSpec, type ScenePlan } from "./types.js";
 
 /**
  * Explainers (owner decision, 2026-10-17): 30 videos of about 30-45 seconds that teach ONE rule each, replacing the 11-13 second
@@ -48,6 +48,13 @@ export interface ExplainerInput {
    * hook would make the explainer a near-copy of a made video (conceptVariety.ts), and a follower has already seen that opening.
    */
   hook?: TeachBeat;
+  /**
+   * One verified Fillbook view that fits this rule, said in one short sentence on the closing card (2026-10-24: the closing card
+   * only said "Try it free", so a stranger never learned what Fillbook shows). Only views the reply and post voice rules already
+   * vet are used: Account Health buffer, Reports splits, the rule simulator, Edge Score. Leave it out when no vetted view fits;
+   * the card then keeps the original invitation.
+   */
+  view?: string;
 }
 
 const SOURCES = new Map([...FRESH_PILOTS, ...FRESH2_PILOTS].map((p) => [p.planId, p] as const));
@@ -91,6 +98,10 @@ function teachScene(t: TeachBeat, variationId: string, sceneId: string, template
   };
 }
 
+function withView(scene: SceneSpec, view: string | undefined): SceneSpec {
+  return view ? { ...scene, cta: `${view} Free for 14 days. ${OFFICIAL_HANDLE}` } : scene;
+}
+
 export function buildExplainer(n: number, input: ExplainerInput): ScenePlan {
   const source = SOURCES.get(input.source);
   if (!source) throw new Error(`Explainer "${input.slug}": source concept "${input.source}" is not a fresh concept.`);
@@ -105,7 +116,7 @@ export function buildExplainer(n: number, input: ExplainerInput): ScenePlan {
     retag(turn, variationId, sid(3)),
     ...input.teach.map((t, i) => teachScene(t, variationId, sid(4 + i), hook, TEACH_STEPS[i]!)),
     retag(product, variationId, sid(8)),
-    retag(close, variationId, sid(9)),
+    withView(retag(close, variationId, sid(9)), input.view),
   ];
   return {
     ...source,
@@ -131,6 +142,7 @@ export function isExplainerPlan(plan: ScenePlan): boolean {
 export const EXPLAINERS: readonly ExplainerInput[] = [
   {
     slug: "copy-trading-risk",
+    view: "Fillbook's Account Health shows each buffer.",
     source: "fresh-11-two-accounts-one-trade",
     title: "Copying one trade to two accounts copies the loss too",
     topic: "Copying a trade across prop accounts: the same size on each account means the same loss on each",
@@ -143,6 +155,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "consistency-rule",
+    view: "Fillbook replays your trades against firm rules.",
     source: "fresh-03-one-day-46",
     title: "The consistency rule: when your best day is too big",
     topic: "A prop firm consistency rule caps how much of the total profit one day can make",
@@ -167,6 +180,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "time-of-day",
+    view: "Fillbook splits results by time of day.",
     source: "fresh-15-open-vs-late-morning",
     title: "Your best and worst time of day to trade",
     topic: "Splitting a sample account's trades by time of day: the open against late morning",
@@ -191,6 +205,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "drawdown-vs-loss-limit",
+    view: "Fillbook's Account Health shows your buffer.",
     source: "fresh-17-690-left",
     title: "Drawdown buffer vs daily loss limit on a funded account",
     topic: "A funded account's drawdown buffer next to its daily loss limit, and which one runs out first",
@@ -203,6 +218,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "one-day-carries-month",
+    view: "Fillbook splits results by weekday.",
     source: "fresh-18-one-day-1788",
     title: "When one trading day carries your whole month",
     topic: "A sample account's month where one day made almost all of the profit",
@@ -215,6 +231,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "edge-score",
+    view: "Fillbook's Edge Score blends four areas into one.",
     hook: { headline: "A win rate hides the risk. Why?", caption: "Profit, consistency, risk and rule-following each tell a different part.", say: "A win rate hides the risk, so what does a fuller score look at instead?", take: "One number rarely tells the whole story." },
     source: "fresh-21-edge-score-67",
     title: "One score for how you trade, and what drags it down",
@@ -241,6 +258,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "weak-hour",
+    view: "Fillbook splits results by time of day.",
     hook: { headline: "One hour loses. The day wins. Why?", caption: "A weak hour can hide inside a good session until results are split by the hour.", say: "One hour loses while the rest of the day wins, so why does it stay hidden?", take: "A weak hour can hide inside a good day." },
     source: "fresh-28-weak-hour",
     title: "The one hour of the day that loses",
@@ -254,6 +272,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "weekday-results",
+    view: "Fillbook splits results by weekday.",
     hook: { headline: "One weekday loses. Which one?", caption: "Splitting results by weekday shows the one that loses.", say: "One weekday loses even when the others win, so which one is it?", take: "A weekday can hide behind the week." },
     source: "fresh-22-only-monday-lost",
     title: "Which weekday is losing you money?",
@@ -267,6 +286,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "losing-setup",
+    view: "Fillbook splits results by setup.",
     source: "fresh-04-setup-lost-422",
     title: "A good win rate can hide a losing setup",
     topic: "A sample account's setup report: its weakest setup inside a good overall win rate",
@@ -303,6 +323,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "multiple-accounts",
+    view: "Fillbook's Account Health shows each buffer.",
     source: "fresh-23-52-vs-13",
     title: "Trading two prop accounts: which one is behind?",
     topic: "Two sample prop accounts: progress to target and account health side by side",
@@ -327,6 +348,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "trading-plan-rules",
+    view: "Fillbook replays your trades against firm rules.",
     source: "fresh-24-92-on-plan",
     title: "Following your trading plan, rule by rule",
     topic: "Checking every trading plan rule against real trades to see which one slips",
@@ -351,6 +373,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "trailing-floor",
+    view: "Fillbook's Account Health shows your buffer.",
     source: "fresh-05-below-the-floor",
     title: "Trailing drawdown explained: how the floor moves",
     topic: "A trailing drawdown floor set by the account's peak, and an account that fell below it",
@@ -375,6 +398,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   },
   {
     slug: "best-setup-and-window",
+    view: "Fillbook splits results by setup and time.",
     source: "fresh-27-48-trades-88",
     title: "Finding your best setup and your best time",
     topic: "A sample account's strongest setup and strongest trading window",
