@@ -308,7 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // after 25 minutes with no update it is marked failed so the refill below can try again. See campaignRunSweep.ts.
     results.push(await runStep("campaign_run_sweep", () => expireStuckCampaignRuns(client)));
     // Keeps a few chart cards waiting in Approvals (owner request 2026-10-01). It only queues drafts; approving, and so
-    // rendering, stays the owner's action. Bounded: one request a day, at most 1 waiting at once, each concept requested once.
+    // rendering, stays the owner's action. Bounded: Tuesdays and Fridays only (two a week), one request a day, at most 1 waiting at once, each concept requested once.
     results.push(
       await runStep("chart_card_requests", () =>
         runDailyChartCardRequests({
@@ -316,6 +316,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const { data } = await client.from("system_settings").select("paused").eq("id", true).maybeSingle();
             return Boolean((data as { paused?: boolean } | null)?.paused);
           },
+          now: () => now,
           states: () => motionConceptStates(client),
           requestedToday: () => motionRequestedToday(client),
           request: async (conceptId) => {
