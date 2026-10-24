@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { LOW_VIEWS, NOISE_BAND, buildWeeklyDigest, runWeeklyDigestStep, weekStartDay, type OwnPostRow } from "../src/posting/weeklyDigest";
+import { LOW_VIEWS, NOISE_BAND, buildWeeklyDigest, replyReachSection, runWeeklyDigestStep, weekStartDay, type OwnPostRow, type ReplyTargetByCandidate } from "../src/posting/weeklyDigest";
 
 // Arizona is UTC-7 all year, so 12:00 UTC is 05:00 the same Arizona day.
 const at = (day: string, hh = "18:00:00") => `${day}T${hh}Z`;
@@ -148,3 +148,34 @@ describe("other platform counts in the weekly review", () => {
     expect(buildWeeklyDigest(today, x, []).body).not.toMatch(/TikTok|YouTube|Instagram/);
   });
 });
+
+describe("replyReachSection (2026-10-24)", () => {
+  const reply = (id: string, views: number, repliedAt: string): OwnPostRow => ({ tweetId: id, kind: "reply", text: "x", createdAt: repliedAt, impressions: views, prospectingCandidateId: id });
+
+  it("groups replies by author size and post age and shows a median only for groups of 3 or more", () => {
+    const targets: ReplyTargetByCandidate = new Map();
+    const posts: OwnPostRow[] = [];
+    // three replies under 30k+ authors, posted within an hour: 40, 60, 80 views
+    [40, 60, 80].forEach((v, i) => {
+      targets.set(`big${i}`, { authorFollowers: 50_000, postCreatedAt: "2026-10-20T17:30:00Z" });
+      posts.push(reply(`big${i}`, v, "2026-10-20T18:00:00Z"));
+    });
+    // two replies under small authors, 6h old: too few to show
+    [3, 5].forEach((v, i) => {
+      targets.set(`small${i}`, { authorFollowers: 200, postCreatedAt: "2026-10-20T10:00:00Z" });
+      posts.push(reply(`small${i}`, v, "2026-10-20T16:00:00Z"));
+    });
+    const lines = replyReachSection(posts, targets)!;
+    const text = lines.join(" | ");
+    expect(text).toMatch(/authors over 30k: 3 replies, median 60 views/);
+    expect(text).toMatch(/posts under 1h old when replied: 3 replies, median 60 views/);
+    expect(text).not.toMatch(/under 1k/);
+    expect(text).not.toMatch(/over 4h/);
+  });
+
+  it("is null when no group has enough replies, or when replies are not tied to a candidate", () => {
+    expect(replyReachSection([reply("a", 5, "2026-10-20T18:00:00Z")], new Map([["a", { authorFollowers: 100, postCreatedAt: "2026-10-20T17:00:00Z" }]]))).toBeNull();
+    expect(replyReachSection([{ ...reply("b", 5, "2026-10-20T18:00:00Z"), prospectingCandidateId: null }], new Map())).toBeNull();
+  });
+});
+

@@ -61,6 +61,51 @@ export function replyStyleSection(posts: OwnPostRow[], styles: PostedStyleByCand
   return lines;
 }
 
+/** What the digest needs to know about the post a reply sits under, from its Prospecting candidate. */
+export interface ReplyTarget {
+  authorFollowers: number | null;
+  postCreatedAt: string | null;
+}
+export type ReplyTargetByCandidate = Map<string, ReplyTarget>;
+
+const SIZE_BUCKETS: Array<{ label: string; test: (n: number) => boolean }> = [
+  { label: "authors under 1k followers", test: (n) => n < 1_000 },
+  { label: "authors 1k to 30k", test: (n) => n >= 1_000 && n <= 30_000 },
+  { label: "authors over 30k", test: (n) => n > 30_000 },
+];
+const AGE_BUCKETS: Array<{ label: string; test: (hours: number) => boolean }> = [
+  { label: "posts under 1h old when replied", test: (h) => h < 1 },
+  { label: "posts 1h to 4h old", test: (h) => h >= 1 && h < 4 },
+  { label: "posts over 4h old", test: (h) => h >= 4 },
+];
+
+/**
+ * "Where replies reached people" (2026-10-24): median views of replies grouped by how big the post's author is and how old the post
+ * was when we replied, for replies tied to a Prospecting candidate. A group needs STYLE_MIN_SAMPLE replies to show a median. Returns
+ * null until at least one group has that many. This is how the next weeks answer "which targets earn reach" instead of guessing.
+ */
+export function replyReachSection(posts: OwnPostRow[], targets: ReplyTargetByCandidate): string[] | null {
+  const rows = posts
+    .filter((p) => p.kind === "reply" && p.impressions !== null && p.prospectingCandidateId && targets.has(p.prospectingCandidateId))
+    .map((p) => ({ views: p.impressions as number, target: targets.get(p.prospectingCandidateId as string)!, repliedAt: p.createdAt }));
+  const lines: string[] = [];
+  const addGroup = (label: string, views: number[]) => {
+    if (views.length < STYLE_MIN_SAMPLE) return;
+    lines.push(`  ${label}: ${views.length} replies, median ${median(views)} views.`);
+  };
+  for (const b of SIZE_BUCKETS) addGroup(b.label, rows.filter((r) => r.target.authorFollowers !== null && b.test(r.target.authorFollowers)).map((r) => r.views));
+  for (const b of AGE_BUCKETS) {
+    addGroup(
+      b.label,
+      rows
+        .filter((r) => r.target.postCreatedAt !== null && b.test((Date.parse(r.repliedAt) - Date.parse(r.target.postCreatedAt as string)) / 3_600_000))
+        .map((r) => r.views),
+    );
+  }
+  if (lines.length === 0) return null;
+  return ["Where replies reached people (median views):", ...lines, "  Small groups are mostly noise; use it to pick which posts to answer first, not as proof."];
+}
+
 export interface DigestResult {
   title: string;
   body: string;
@@ -121,6 +166,7 @@ export function buildWeeklyDigest(
   posts: OwnPostRow[],
   others: Partial<Record<FollowerPlatform, FollowerSnapshotRow[]>> = {},
   styleByCandidate: PostedStyleByCandidate = new Map(),
+  targetByCandidate: ReplyTargetByCandidate = new Map(),
 ): DigestResult {
   const start = addDays(todayDay, -7);
   const inWindow = (d: string) => d >= start && d < todayDay;
@@ -196,6 +242,8 @@ export function buildWeeklyDigest(
   // 3b. Reply style experiment (only once a style has enough replies)
   const styleLines = replyStyleSection(posts, styleByCandidate);
   if (styleLines) lines.push(...styleLines);
+  const reachLines = replyReachSection(posts, targetByCandidate);
+  if (reachLines) lines.push(...reachLines);
 
   // 4. What did reach people
   const top = [...windowPosts].filter((p) => p.impressions !== null).sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))[0];
@@ -240,16 +288,23 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
 
   // Reply-style tags recorded by Prospecting (score_breakdown.posted_style). Optional: any failure only drops the section.
   const styleByCandidate: PostedStyleByCandidate = new Map();
+  const targetByCandidate: ReplyTargetByCandidate = new Map();
   try {
     const candRes = await client
       .from("prospecting_candidates")
-      .select("id, score_breakdown")
+      .select("id, score_breakdown, author_follower_count, post_created_at")
       .eq("status", "replied")
       .gte("replied_at", new Date(now.getTime() - 30 * DAY_MS).toISOString())
       .order("replied_at", { ascending: false });
     for (const r of candRes?.data ?? []) {
       const tag = (r.score_breakdown as Record<string, unknown> | null)?.posted_style;
       if (typeof tag === "string") styleByCandidate.set(String(r.id), tag);
+      const followers = (r as Record<string, unknown>).author_follower_count;
+      const postedAt = (r as Record<string, unknown>).post_created_at;
+      targetByCandidate.set(String(r.id), {
+        authorFollowers: typeof followers === "number" ? followers : null,
+        postCreatedAt: typeof postedAt === "string" ? postedAt : null,
+      });
     }
   } catch {
     // no style section this week
@@ -270,7 +325,7 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
     }
   }
 
-  const digest = buildWeeklyDigest(today, snapshots, posts, others, styleByCandidate);
+  const digest = buildWeeklyDigest(today, snapshots, posts, others, styleByCandidate, targetByCandidate);
   const existing = await client.from("notifications").select("id").eq("related_id", digest.relatedId).limit(1);
   if (existing.error) throw new Error(`weekly review: notification lookup failed: ${existing.error.message}`);
   if ((existing.data ?? []).length > 0) return `already sent (${digest.relatedId})`;

@@ -164,3 +164,22 @@ describe("scoreProspectingCandidate -- reach review (2026-09-21)", () => {
     expect(bigFresh.score).toBeGreaterThan(70);
   });
 });
+
+describe("thread traffic (2026-10-24)", () => {
+  it("a post that already has impressions outscores the same post with none, capped at +10", () => {
+    const quiet = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3 } }));
+    const seen = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3, impression_count: 400 } }));
+    const huge = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3, impression_count: 5_000_000 } }));
+    expect(seen.score).toBeGreaterThan(quiet.score);
+    expect(seen.breakdown.threadTraffic).toMatch(/400 impressions/);
+    expect(huge.score - quiet.score).toBeLessThanOrEqual(10.01);
+    expect(quiet.breakdown.threadTraffic).toBeUndefined();
+  });
+
+  it("a post with no impression count reported is not penalised", () => {
+    const a = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3 } }));
+    const b = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3, impression_count: 0 } }));
+    expect(b.score).toBe(a.score);
+  });
+});
+
