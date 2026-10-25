@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { refillProspectingQueue } from "../src/prospecting/prospectingRefill";
-import { BUFFER_TARGET, DAILY_SEARCH_CAP, MAX_TOPICS_BUFFER, MAX_TOPICS_MANUAL, MONTHLY_PROSPECTING_BUDGET_USD, VET_MAX_PER_RUN, planSearchBreadth } from "../src/prospecting/prospectingEligibility";
+import { BUFFER_TARGET, DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, MAX_TOPICS_BUFFER, MAX_TOPICS_MANUAL, MONTHLY_PROSPECTING_BUDGET_USD, VET_MAX_PER_RUN, planSearchBreadth } from "../src/prospecting/prospectingEligibility";
 import { getTodayXSearchCount } from "../src/cost/costTracking";
 import { prospectingRunExtras } from "../src/prospecting/prospectingRunDeps";
 
@@ -47,7 +47,8 @@ describe("refillProspectingQueue (2026-10-24)", () => {
 describe("search limits (2026-10-24)", () => {
   it("raises the monthly cap to $20 and sets the daily limit, buffer and vetting sizes", () => {
     expect(MONTHLY_PROSPECTING_BUDGET_USD).toBe(20);
-    expect(DAILY_SEARCH_CAP).toBe(10);
+    expect(DAILY_SEARCH_CAP).toBe(30);
+    expect(DAILY_SEARCH_BUDGET_USD).toBe(0.5);
     expect(BUFFER_TARGET).toBe(2);
     expect(VET_MAX_PER_RUN).toBe(8);
   });
@@ -87,6 +88,6 @@ describe("getTodayXSearchCount", () => {
 describe("prospectingRunExtras", () => {
   it("provides the spend gate, pause switch, daily count and relevance screen", () => {
     const extras = prospectingRunExtras(fakeClient);
-    expect(Object.keys(extras).sort()).toEqual(["getMonthSpendUsd", "getTodaySearchCount", "isPaused", "screenRelevance"]);
+    expect(Object.keys(extras).sort()).toEqual(["getMonthSpendUsd", "getTodaySearchCount", "getTodaySearchSpendUsd", "isPaused", "screenRelevance"]);
   });
 });

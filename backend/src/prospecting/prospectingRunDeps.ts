@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
-import { getProspectingMonthSpendUsd, getTodayXSearchCount } from "../cost/costTracking.js";
+import { getProspectingMonthSpendUsd, getTodayXSearchCount, getTodayXSearchSpendUsd } from "../cost/costTracking.js";
 import { checkRelevanceCheap } from "./prospectingReplyWriter.js";
 import type { ProspectingRunDeps } from "./prospectingSearch.js";
 
@@ -9,7 +9,7 @@ import type { ProspectingRunDeps } from "./prospectingSearch.js";
  * refill after a reply): the monthly spend gate, the pause switch, the daily search limit, and the cheap model relevance screen that
  * keeps posts that are not futures prop-firm or own-capital relevant from ever reaching the queue (2026-10-24).
  */
-export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRunDeps, "getMonthSpendUsd" | "isPaused" | "getTodaySearchCount" | "screenRelevance"> {
+export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRunDeps, "getMonthSpendUsd" | "isPaused" | "getTodaySearchCount" | "getTodaySearchSpendUsd" | "screenRelevance"> {
   let llm: ReturnType<typeof createRecordedLlmClient> | null = null;
   return {
     getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
@@ -18,6 +18,7 @@ export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRu
       return data?.paused ?? false;
     },
     getTodaySearchCount: () => getTodayXSearchCount(client),
+    getTodaySearchSpendUsd: () => getTodayXSearchSpendUsd(client),
     screenRelevance: (post) => {
       // Created on first use so a run that screens nothing never builds a model client; a missing key throws here and the run treats that as "relevant".
       llm ??= createRecordedLlmClient(client, { step: "prospecting-relevance-check", tier: "owner", context: { screenedAtDiscovery: true }, eventType: "prospecting_llm_call" });

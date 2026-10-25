@@ -387,6 +387,12 @@ export async function getTodayXSearchCount(client: SupabaseClient, now: Date = n
   return rows.length;
 }
 
+/** X search spend recorded today (Arizona day). Feeds Prospecting's daily search budget (2026-10-25). */
+export async function getTodayXSearchSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
+  const rows = await selectCostEvents(client, "cost_usd", { since: startOfDay(now).toISOString(), eventTypes: ["x_search_read"], label: "getTodayXSearchSpendUsd" });
+  return sumCostUsd(rows);
+}
+
 /** Real recorded spend today (any provider/event_type), created_at-based, UTC calendar day. Distinct from getProspectingMonthSpendUsd (that one is a budget gate scoped to one event_type over a month) -- this is what a "today's spend" display should actually query instead of an unfiltered lifetime sum. */
 export async function getTodaySpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();

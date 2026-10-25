@@ -265,9 +265,9 @@ const explicitFutures = (postText: string) => EXPLICIT_FUTURES_PATTERNS.some((p)
  * X search exclusions appended to every discovery query: asking X not to return crypto posts at all, so they never cost a read
  * or reach the filter. The query is wrapped in parentheses so an OR inside a topic query is excluded as a whole.
  */
-export const CRYPTO_QUERY_EXCLUSIONS = "-crypto -bitcoin -btc -ethereum -solana -memecoin -altcoin -airdrop -defi -nft";
+export const CRYPTO_QUERY_EXCLUSIONS = "-crypto -bitcoin -btc -ethereum -solana -memecoin -altcoin";
 /** The same for options (2026-10-24): asking X not to return them at all means they never cost a read. */
-export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit spread" -"covered call" -"options trading" -"options flow"';
+export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit spread" -"covered call"';
 /**
  * Futures only (2026-10-24): every discovery query also requires one futures or futures-prop-firm anchor, so X returns futures posts
  * in the first place instead of generic trading posts the relevance gate would then throw away after we had paid for the read. Each

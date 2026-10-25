@@ -232,8 +232,13 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   at a time, at most 2). An owner-tapped "Search now" keeps going, topic by topic, until it finds one more usable post, at most 3 topics.
 - **Refill after a reply.** Marking a reply posted starts a background refill (`prospectingRefill.ts`, `waitUntil`), so a fresh post is
   waiting when the 20-minute cooldown ends. It never throws and cannot delay saving the reply.
-- **Limits.** At most 10 X search requests a day (`DAILY_SEARCH_CAP`, counted from cost events, Arizona day) and a monthly cap of $20
-  (was $15). The Android app shows the new skip reason `daily_search_cap` as the raw text until it is next rebuilt.
+- **Limits.** Searches are limited by money, not count: at most $0.50 of X search spend a day (`DAILY_SEARCH_BUDGET_USD`, from cost
+  events, Arizona day), with 30 requests as a safety net, and a monthly cap of $20 (was $15). The first version capped requests at 10;
+  because the futures-anchored per-topic queries returned about 1.8 posts a search (down from 4 to 7), ten near-empty searches used the
+  whole day. The Android app shows the skip reasons `daily_search_budget` and `daily_search_cap` as raw text until it is next rebuilt.
+- **Denser searches (2026-10-25).** Each X request now ORs up to four topics (`groupedTopicQuery`, `TOPICS_PER_QUERY`), still behind the
+  futures anchor and exclusions, so a request returns more relevant posts; each post is scored against the topic it matched
+  (`topicForPost`).
 
 Why: October's real spend was about $0.63 a day ($15.17 by the 24th), 113 of 114 discovered posts were too old to use, and the owner's
 replies were reaching a median of 9 views. Revert switches: none needed; the old behavior is in git history (#227 and earlier).

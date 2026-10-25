@@ -5,6 +5,7 @@ import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.j
 import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
+  DAILY_SEARCH_BUDGET_USD,
   DAILY_SEARCH_CAP,
   RESULTS_PER_QUERY,
   VET_MAX_PER_RUN,
@@ -82,6 +83,8 @@ export interface ProspectingRunDeps {
   screenRelevance?: (post: { postText: string; discoveryQuery: string; authorHandle: string | null }) => Promise<boolean>;
   /** How many X search requests have been recorded today (Arizona day). Omitted means no daily limit is applied. */
   getTodaySearchCount?: () => Promise<number>;
+  /** X search dollars recorded today (Arizona day): the real daily limit (DAILY_SEARCH_BUDGET_USD). Omitted means no daily spend limit is applied. */
+  getTodaySearchSpendUsd?: () => Promise<number>;
   /**
    * Overrides which run-index's topic slice gets searched, bypassing the
    * normal day/schedule-slot rotation. Used by the owner-triggered manual
@@ -93,6 +96,37 @@ export interface ProspectingRunDeps {
   runIndexOverride?: number;
   /** Added to the run index so refills made between the scheduled slots start from a different topic than the last search (does not make the run a manual one). */
   runIndexOffset?: number;
+}
+
+/** Topics searched together in one X request (OR-ed): one near-empty request per narrow topic was burning the daily limit (2026-10-25). */
+export const TOPICS_PER_QUERY = 4;
+/** X allows 512 characters in a query; the wrapper (futures anchors, exclusions, -is:retweet -is:reply lang:en) takes about 270. */
+const MAX_GROUPED_QUERY_CHARS = 200;
+
+/** One X query that finds any of these topics: each topic's own query in parentheses, OR-ed, as many as fit. */
+export function groupedTopicQuery(topics: ProspectingTopic[]): { query: string; used: ProspectingTopic[] } {
+  const used: ProspectingTopic[] = [];
+  let query = "";
+  for (const topic of topics) {
+    const next = query ? `${query} OR (${topic.query})` : `(${topic.query})`;
+    if (next.length > MAX_GROUPED_QUERY_CHARS && used.length > 0) break;
+    query = next;
+    used.push(topic);
+  }
+  return { query, used };
+}
+
+/** Phrases a topic's query asks for: its quoted phrases, else its bare words. Lower-cased. */
+function topicTerms(topic: ProspectingTopic): string[] {
+  const quoted = [...topic.query.matchAll(/"([^"]+)"/g)].map((m) => m[1]!.toLowerCase());
+  if (quoted.length > 0) return quoted;
+  return topic.query.replace(/[()]/g, " ").split(/\s+/).filter((w) => w && !/^(OR|AND)$/i.test(w)).map((w) => w.toLowerCase());
+}
+
+/** Which topic of a grouped search a post matched: the first whose phrases appear in it, else the group's first (scoring and the "why it surfaced" label use it). */
+export function topicForPost(group: ProspectingTopic[], postText: string): ProspectingTopic {
+  const text = postText.toLowerCase();
+  return group.find((t) => topicTerms(t).some((term) => text.includes(term))) ?? group[0]!;
 }
 
 /**
@@ -154,11 +188,19 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // finer-grained.
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
   const runIndex = (deps.runIndexOverride ?? dayIndex * runSlotsPerDay() + currentRunSlot(now)) + (deps.runIndexOffset ?? 0);
-  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, breadth.maxTopics);
+  // breadth.maxTopics is how many X requests this run may make; each request covers up to TOPICS_PER_QUERY topics.
+  const wanted = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, breadth.maxTopics * TOPICS_PER_QUERY);
+  const groups: ProspectingTopic[][] = [];
+  for (let i = 0; i < wanted.length; i += TOPICS_PER_QUERY) groups.push(wanted.slice(i, i + TOPICS_PER_QUERY));
 
   let searchedToday = deps.getTodaySearchCount ? await deps.getTodaySearchCount() : 0;
   if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) {
     return { skipped: true, skipReason: `daily_search_cap (${searchedToday} searches today, the limit is ${DAILY_SEARCH_CAP})`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
+  }
+
+  let spentToday = deps.getTodaySearchSpendUsd ? await deps.getTodaySearchSpendUsd() : 0;
+  if (deps.getTodaySearchSpendUsd && spentToday >= DAILY_SEARCH_BUDGET_USD) {
+    return { skipped: true, skipReason: `daily_search_budget ($${spentToday.toFixed(2)} spent on searches today, the limit is $${DAILY_SEARCH_BUDGET_USD.toFixed(2)})`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
   }
 
   let postsRead = 0;
@@ -173,9 +215,10 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   const searched: string[] = [];
   const priorOutreachCache = new Map<string, boolean>();
 
-  // One topic at a time, stopping as soon as enough usable posts are waiting. Each topic costs one X search request.
-  for (const topic of topics) {
+  // One grouped request at a time, stopping as soon as enough usable posts are waiting.
+  for (const group of groups) {
     if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) break;
+    if (deps.getTodaySearchSpendUsd && spentToday >= DAILY_SEARCH_BUDGET_USD) break;
     // Bounded discovery-time freshness (2026-09-07 review): X's recent-search
     // endpoint supports a real start_time filter (see xAdapter.ts's own doc
     // comment), so this asks X itself to never return anything older than
@@ -183,15 +226,19 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     // time -- catching staleness at the source instead of only filtering it
     // out after paying to read it. A sparse topic returning fewer (or zero)
     // results under this bound is the correct, intended outcome.
-    const results = await deps.adapter.searchRecentPosts(withCryptoExclusions(topic.query), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+    const { query: groupQuery, used: groupTopics } = groupedTopicQuery(group);
+    const results = await deps.adapter.searchRecentPosts(withCryptoExclusions(groupQuery), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
     searchRequests++;
     searchedToday++;
-    searched.push(topic.key);
+    searched.push(...groupTopics.map((t) => t.key));
     postsRead += results.length;
-    costUsd += await recordXSearchCostEvent(deps.client, results.length, { topic: topic.key, query: topic.query });
+    const requestCost = await recordXSearchCostEvent(deps.client, results.length, { topics: groupTopics.map((t) => t.key), query: groupQuery });
+    costUsd += requestCost;
+    spentToday += requestCost;
 
     const created: Array<{ id: string; postText: string; discoveryQuery: string; authorHandle: string | null; score: number }> = [];
     for (const post of results) {
+      const topic = topicForPost(groupTopics, post.text);
       // Same $0 mechanical gate applied at queue-read time
       // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
       // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
