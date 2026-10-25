@@ -62,3 +62,19 @@ describe("draftContent proper capitalization (owner rule 2026-09-20)", () => {
     expect(client.callTool).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("draftContent first-two-lines rule (owner question 2026-10-25)", () => {
+  it("tells the writer the first two lines must stand alone, with the hook and the specific, because the timeline cuts a post", async () => {
+    const client = fakeClient();
+    await draftContent(client, "x", { title: "t", rationale: "r" }, "brand", "facts");
+    const [system] = client.callTool.mock.calls[0];
+    expect(system).toContain("The first two lines of an X post must stand on their own");
+    expect(system).toContain("Show more");
+    expect(system).toContain("the hook AND the one specific");
+    expect(system).toContain("the Fillbook line, must be optional");
+    // The existing layout and length rules stay.
+    expect(system).toContain("separated by one blank line");
+    expect(system).toContain("under 280 characters");
+  });
+});
+
