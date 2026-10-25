@@ -460,3 +460,24 @@ const AI_AGENT_PATTERNS: RegExp[] = [/\bAI (trading )?agents?\b/i, /\btrading ag
 export function isAiAgentHype(postText: string): boolean {
   return AI_AGENT_PATTERNS.some((p) => p.test(postText));
 }
+
+/**
+ * The first reason a post fails the free gate, or null when it passes (2026-10-25: two days of searches ended with no usable post and
+ * nothing recorded about where posts died). Mirrors isReplyWorthyPost, so a post is dropped exactly when this returns a reason.
+ */
+export function whyNotReplyWorthy(postText: string): string | null {
+  if (!isPlausiblyTradingRelated(postText)) {
+    const futures = explicitFutures(postText);
+    if (isOptionsPost(postText) && !futures) return "options";
+    if (OTHER_MARKET_PATTERNS.some((p) => p.test(postText)) && !futures) return "forex_stock";
+    if (CRYPTO_EXCLUSION_PATTERNS.some((p) => p.test(postText)) || hasCoinCashtag(postText)) return "crypto";
+    if (!TRADING_RELEVANCE_PATTERNS.some((p) => p.test(postText))) return "not_trading";
+    if (AUTOMATED_TRADING_EXCLUSION_PATTERNS.some((p) => p.test(postText))) return "automated_trading";
+    return "no_futures_evidence";
+  }
+  if (isAiAgentHype(postText)) return "ai_hype";
+  if (isBroadcastContent(postText)) return "broadcast";
+  if (isPromoContent(postText)) return "promo";
+  if (isSalesFunnelOrEmptyPost(postText)) return "sales_funnel";
+  return null;
+}

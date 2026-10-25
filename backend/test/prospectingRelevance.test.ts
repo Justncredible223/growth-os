@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CRYPTO_QUERY_EXCLUSIONS, FUTURES_QUERY_ANCHORS, OPTIONS_QUERY_EXCLUSIONS, isOptionsPost, MIN_PROSPECT_FOLLOWERS, isBroadcastContent, isPlausiblyTradingRelated, isPromoContent, isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
+import { whyNotReplyWorthy, CRYPTO_QUERY_EXCLUSIONS, FUTURES_QUERY_ANCHORS, OPTIONS_QUERY_EXCLUSIONS, isOptionsPost, MIN_PROSPECT_FOLLOWERS, isBroadcastContent, isPlausiblyTradingRelated, isPromoContent, isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
 
 /**
  * Regression coverage for a real, confirmed bug: Prospecting surfaced
@@ -315,3 +315,26 @@ describe("futures only (2026-10-24)", () => {
     expect(isPlausiblyTradingRelated("Moved from forex to ES futures, the pips mindset did not transfer. Funded account next.")).toBe(true);
   });
 });
+
+describe("whyNotReplyWorthy (2026-10-25 funnel log)", () => {
+  const cases: Array<[string, string | null]> = [
+    ["Selling covered calls on NVDA for weekly income. Trading risk is real.", "options"],
+    ["Passed my FTMO challenge on EURUSD, how do you manage the daily loss limit?", "forex_stock"],
+    ["Bitcoin futures leverage liquidations today, what a trading day", "crypto"],
+    ["Lovely weather today, going for a run", "not_trading"],
+    ["Video later today on how to pass prop firm challenges with a higher success rate", "no_futures_evidence"],
+    ["Alhamdulillah a $50K Funded account secured, trading day done", "no_futures_evidence"],
+    ["New video out now on how I pass Topstep combines on MNQ futures", "promo"],
+    ["Revenge trading cost me my funded NQ futures account again. How do you stop it?", null],
+  ];
+  for (const [text, expected] of cases) {
+    it(`${expected ?? "passes"}: ${text.slice(0, 50)}`, () => {
+      const why = whyNotReplyWorthy(text);
+      if (expected === "promo") expect(["promo", "sales_funnel", "broadcast"]).toContain(why);
+      else expect(why).toBe(expected);
+      // The reason must agree with the gate itself.
+      expect(isReplyWorthyPost(text)).toBe(expected === null);
+    });
+  }
+});
+
