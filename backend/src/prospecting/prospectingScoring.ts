@@ -16,6 +16,8 @@ export interface ProspectingScoreInput {
   authorVerified: boolean | null;
   /** From prospecting_outreach -- true if we've already replied to this author before via Prospecting. */
   previouslyEngaged: boolean;
+  /** True when the post came from the creator watchlist (an author already vetted as on topic). */
+  fromWatchlist?: boolean;
   now: Date;
 }
 
@@ -197,13 +199,17 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const opportunityPoints = (hasQuestion ? 8 : 0) + (longEnough ? 7 : 0) + (invites ? 4 : 0);
   breakdown.valueOpportunity = `${hasQuestion ? "asks a question" : "no question"}, ${longEnough ? "enough context" : "too short for context"}${invites ? ", invites replies" : ""} -> +${opportunityPoints}`;
 
+  // A creator we already vetted as on topic (watchlist, 2026-10-25): a small bonus, never enough to lift a weak post past the bar alone.
+  const watchlistPoints = input.fromWatchlist ? 6 : 0;
+  if (watchlistPoints > 0) breakdown.watchedCreator = "a creator already vetted as on topic -> +6";
+
   // Existing relationship -- a natural second touch beats a cold first one.
   const relationshipPoints = input.previouslyEngaged ? 10 : 0;
   breakdown.priorRelationship = input.previouslyEngaged
     ? "already replied to this author before -> +10"
     : "no prior Prospecting contact -> +0";
 
-  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + trafficPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints - crowdedPenalty;
+  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + trafficPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints + watchlistPoints - crowdedPenalty;
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 
   return { score, breakdown, excluded: false, exclusionReason: null };

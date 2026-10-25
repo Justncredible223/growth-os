@@ -1,3 +1,4 @@
+import type { WatchlistRow } from "./prospectingWatchlist.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFT_OPTIONS_KEY, POSTED_STYLE_KEY, parseDraftOptions, type PostedStyle } from "./prospectingDraftOptions.js";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "./types.js";
@@ -109,6 +110,23 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
       .order("replied_at", { ascending: false });
     if (error) throw new Error(`listRepliedSince failed: ${error.message}`);
     return (data ?? []).map(fromRow);
+  }
+
+  async listWatchlistRows(since: Date): Promise<WatchlistRow[]> {
+    const { data, error } = await this.client
+      .from("prospecting_candidates")
+      .select("author_handle, author_follower_count, status, opportunity_score")
+      .gte("discovered_at", since.toISOString())
+      .not("author_handle", "is", null)
+      .order("discovered_at", { ascending: false })
+      .limit(2000);
+    if (error) throw new Error(`listWatchlistRows failed: ${error.message}`);
+    return (data ?? []).map((r) => ({
+      authorHandle: (r.author_handle as string | null) ?? null,
+      authorFollowerCount: (r.author_follower_count as number | null) ?? null,
+      status: String(r.status ?? ""),
+      opportunityScore: Number(r.opportunity_score ?? 0),
+    }));
   }
 
   async listByStatus(statuses: ProspectingStatus[], limit = 50): Promise<ProspectingCandidate[]> {

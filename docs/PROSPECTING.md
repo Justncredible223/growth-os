@@ -270,3 +270,23 @@ platform, or a rule only futures prop accounts have (trailing drawdown, consiste
 list. Video and stream teasers, "new video", "going live" and "funded account secured" posts are treated as broadcasts. The model relevance
 prompts (screen at discovery, cheap check, draft schema and prompt) say the same: no futures evidence means not relevant. The queue applies
 the free filter on every read, so cards already waiting that fail it disappear without a redeploy of data.
+
+## The creator watchlist (2026-10-25)
+
+Searching by phrase finds about 3 usable posts per X request, because fresh futures-trader conversations are thin. The watchlist reads
+people instead (`prospectingWatchlist.ts`).
+
+- **Who is on it.** It builds itself from `prospecting_candidates`, no table and no migration: an author with at least one vetted post
+  (not turned away, opportunity score 50 or more, 1,000 to 300,000 followers, last 30 days) or one the owner has replied to. Authors whose
+  posts were mostly turned away, and anyone outside the follower range, are left off. Up to 45 creators. Hand-picked creators can be added
+  with the `PROSPECTING_WATCHLIST_HANDLES` environment variable (comma-separated, no @) or `PROSPECTING_SEED_CREATORS` in code; seeds come first.
+- **How it is read.** One X request per group of about 15 creators: `(from:a OR from:b ...)`, top-level posts only (the adapter adds
+  `-is:retweet -is:reply lang:en`), last 12 hours, same $0.005 a post read as any search and under the same daily budget. The search only uses
+  the watchlist once four or more creators are known.
+- **Order.** Scheduled and refill runs (2 requests) read the creators first, then topics. An owner-tapped "Search now" (up to 3) alternates
+  creators, topics, creators. Each run starts from a different group of creators.
+- **Same gates.** A creator's post is not trusted blindly: it needs futures evidence, must clear the promo and broadcast filters and the
+  model screen, and scores like any other post plus 6 points for being a vetted creator. It is labelled with the topic its words match,
+  else "Futures trader".
+- **Why.** Replies under the same few creators build a relationship, and the follower range (1k to 300k) is the size of account that reads
+  and answers replies.
