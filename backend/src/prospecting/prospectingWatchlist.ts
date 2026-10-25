@@ -61,7 +61,7 @@ export function parseHandleList(raw: string | undefined | null): string[] {
 
 /**
  * Pure: the ordered watchlist from vetted candidate rows. Seeds first, then creators the owner has replied to, then creators with the
- * most vetted posts. An author whose posts have mostly been turned away, or who is outside the follower range, is left off.
+ * most vetted posts. An author with any post turned away (unless the owner replied to them), or who is outside the follower range, is left off.
  */
 export function buildWatchlist(rows: WatchlistRow[], seeds: readonly string[] = []): WatchedCreator[] {
   const seen = new Set<string>();
@@ -94,7 +94,10 @@ export function buildWatchlist(rows: WatchlistRow[], seeds: readonly string[] = 
       if (seen.has(key)) return false;
       if (a.followers === null || a.followers < MIN_WATCH_FOLLOWERS || a.followers > MAX_WATCH_FOLLOWERS) return false;
       if (a.replied) return true;
-      return a.vetted >= 1 && a.best >= MIN_VETTED_SCORE && a.turnedAway <= a.vetted;
+      // One turned-away post is enough to drop an author (2026-10-25). The list used to keep anyone turned away no more often
+      // than vetted, and "vetted" includes posts no model has screened yet, so company accounts (a prop firm posting about its own
+      // drawdown rules) stayed on it, scored +6 and kept reaching the top of the queue only to be rejected on Draft reply.
+      return a.vetted >= 1 && a.best >= MIN_VETTED_SCORE && a.turnedAway === 0;
     })
     .sort(([, a], [, b]) => Number(b.replied) - Number(a.replied) || b.vetted - a.vetted || b.best - a.best || (b.followers ?? 0) - (a.followers ?? 0));
 

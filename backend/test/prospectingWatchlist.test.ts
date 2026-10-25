@@ -68,6 +68,18 @@ describe("buildWatchlist", () => {
     expect(buildWatchlist(rows).map((c) => c.handle)).toEqual(["ok"]);
   });
 
+  it("drops an author after a single turned-away post, unless the owner replied to them (2026-10-25)", () => {
+    const rows = [
+      row({ authorHandle: "firm_account" }),
+      row({ authorHandle: "firm_account" }),
+      row({ authorHandle: "firm_account" }),
+      row({ authorHandle: "firm_account", status: "not_relevant" }),
+      row({ authorHandle: "friend", status: "replied" }),
+      row({ authorHandle: "friend", status: "not_relevant" }),
+    ];
+    expect(buildWatchlist(rows).map((c) => c.handle)).toEqual(["friend"]);
+  });
+
   it("a skipped post does not count as vetted", () => {
     expect(buildWatchlist([row({ status: "skipped" })])).toEqual([]);
   });
