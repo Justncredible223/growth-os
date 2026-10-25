@@ -241,3 +241,26 @@ describe("the model relevance prompts need futures evidence (2026-10-25)", () =>
     expect(JSON.stringify(sent.tools)).toContain(RULE);
   });
 });
+
+describe("every model gate asks the same relevance test (2026-10-25)", () => {
+  it("the cheap check sees the author and the company-account rule, and the drafter's prompt and schema use the identical test", async () => {
+    const { checkRelevanceCheap, buildProspectingSystemPrompt, prospectingPlatformProfile, PROSPECTING_RELEVANCE_CRITERIA } = await import("../src/prospecting/prospectingReplyWriter");
+    expect(PROSPECTING_RELEVANCE_CRITERIA).toMatch(/COMPANY account/);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: "tool_use", name: "submit_relevance", input: { isRelevant: false } }] }),
+      text: async () => "",
+    } as Response);
+    await checkRelevanceCheap(new LlmClient("test-key", fetchMock), { platform: "x", authorHandle: "ifunds_io", postText: "Real question: why should your drawdown move UP after you make money?", discoveryQuery: "trailing_drawdown" });
+    const cheap = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    expect(JSON.stringify(cheap.messages)).toContain("From: @ifunds_io");
+    expect(JSON.stringify(cheap.system)).toContain(JSON.stringify(PROSPECTING_RELEVANCE_CRITERIA).slice(1, -1));
+    expect(buildProspectingSystemPrompt(prospectingPlatformProfile("x"), true)).toContain(PROSPECTING_RELEVANCE_CRITERIA);
+
+    const draftFetch = fetchFor(draft());
+    await draftProspectingReply(new LlmClient("test-key", draftFetch), { platform: "x", authorHandle: "t", postText: "hi", discoveryQuery: "drawdown" }, "", "");
+    const sent = JSON.parse((draftFetch.mock.calls[0]![1] as { body: string }).body);
+    expect(JSON.stringify(sent.tools)).toContain(JSON.stringify(PROSPECTING_RELEVANCE_CRITERIA).slice(1, -1));
+  });
+});

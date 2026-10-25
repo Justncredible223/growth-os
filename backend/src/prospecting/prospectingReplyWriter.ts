@@ -4,13 +4,31 @@ import { SHOWCASE_IDS, SHOWCASE_REPLY_GUIDANCE, formatShowcaseViews } from "../c
 import { formatStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { PROSPECTING_TWO_OPTION_DRAFTS, SHARP_MAX_WORDS, SHARP_MIN_WORDS } from "./prospectingDraftOptions.js";
 
+/**
+ * The ONE relevance test every model gate asks (2026-10-25). The discovery screen and the draft-time check (Haiku) and the
+ * drafter's own isRelevant (Sonnet) used to word it differently, and the Sonnet prompt was stricter: posts passed both cheap
+ * checks, showed up as top cards, and were then turned away by the expensive call on "Draft reply" (e.g. a prop firm's own
+ * account asking "why should your drawdown move up"). Same words everywhere means a post the cheap check lets through is one the
+ * drafter will also accept, so the expensive rejection becomes rare instead of the usual outcome.
+ */
+export const PROSPECTING_RELEVANCE_CRITERIA = `Relevant means: a TRADER's own post, genuinely about FUTURES trading (index or commodity futures) in a prop-firm or own-capital
+(self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling, that a short, specific
+reply could add something to.
+NOT relevant: crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and general trading talk with no futures angle.
+Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false.
+Announcements, video or stream teasers and brags are not conversations either: false.
+A post from a COMPANY account (a prop firm, broker, platform, course, signal service or tool, usually recognisable by the handle or
+by talking about "our" rules, accounts, payouts or plans) is marketing, not a trader's conversation, even when it is phrased as a
+question: false.
+Stories, memes, unrelated news and self-help posts that only borrow a trading word: false.`;
+
 const CHEAP_RELEVANCE_SCHEMA = {
   type: "object",
   properties: {
     isRelevant: {
       type: "boolean",
       description:
-        "True only if this post is genuinely about FUTURES trading (index or commodity futures such as ES, NQ, MNQ, CL, GC) in a prop-firm or own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling. False for crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and for general 'trading' talk with no futures or prop-firm angle, and false if it only superficially matched the search (a story, a meme, unrelated news, or a search word used in a non-trading sense). Judge honestly; false is the expected, correct answer for most candidates that reach this check. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false.",
+        `Apply this test exactly, before anything else:\n${PROSPECTING_RELEVANCE_CRITERIA}`,
     },
   },
   required: ["isRelevant"],
@@ -25,7 +43,7 @@ const DRAFT_SCHEMA = {
     isRelevant: {
       type: "boolean",
       description:
-        "True only if their post is genuinely about FUTURES trading (index or commodity futures) in a prop-firm or own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling. False for crypto, options, stocks, forex, or general trading talk with no futures or prop-firm angle, and false if it only superficially matched the search (e.g. it's a story, meme, unrelated news, or uses a search word in a non-trading sense). Judge this FIRST, honestly, before writing anything. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false.",
+        `Apply this test exactly, before anything else:\n${PROSPECTING_RELEVANCE_CRITERIA}`,
     },
     reply: {
       type: "string",
@@ -225,14 +243,10 @@ topic, but that match can be imprecise (a search word used in an unrelated sense
 superficially resembles trading content, etc.). Fillbook is a trading journal/analytics platform for
 futures day traders: prop-firm funded accounts and self-funded (own-money) futures accounts.
 
-FIRST, judge isRelevant honestly: is their post genuinely about FUTURES trading in a prop-firm or own-capital
-(self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling? Crypto,
-options (calls, puts, spreads, 0DTE), stocks, forex and general trading talk with no futures or prop-firm angle are
-NOT relevant. If it is NOT relevant -- or it's a story, a meme, unrelated
-news, or a generic self-help/life post that just happens to use a word like the search topic in a
-different sense -- set isRelevant=false, leave reply as an empty string, and do not attempt to force a
-connection to trading. A confident "this isn't relevant" is the correct, expected outcome for many
-candidates; it is never a failure. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false.
+FIRST, judge isRelevant honestly with this test (the same one the earlier screens used):
+${PROSPECTING_RELEVANCE_CRITERIA}
+If it is NOT relevant, set isRelevant=false, leave every reply field an empty string, and do not attempt to force a
+connection to trading. A confident "this isn't relevant" is the correct, expected outcome for many candidates; it is never a failure.
 Only if isRelevant is true, continue below.
 
 ${twoOptions ? PROSPECTING_COLD_NO_PITCH_GUIDANCE : profile.noPitchGuidance}
@@ -364,16 +378,13 @@ export async function draftProspectingReply(
 }
 
 const CHEAP_RELEVANCE_SYSTEM_PROMPT = `You are a fast relevance filter for a trading-journal company's outreach queue. A post matched an
-automated search for a trading-related topic, but that match can be imprecise (a search word used in
-an unrelated sense, a post that only superficially resembles trading content, a meme, a story, unrelated
-news, etc.).
+automated search for a trading-related topic (or came from a watched creator), but that match can be imprecise.
 
-Judge ONE thing: is this post genuinely about FUTURES trading (index or commodity futures) in a prop-firm or
-own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling?
-Crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and general trading talk with no futures or
-prop-firm angle are NOT relevant. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false. Answer honestly and quickly -- you are not writing a reply, only
-screening. A confident "not relevant" is the correct, expected answer for most posts that reach this
-check.`;
+Judge ONE thing with this test:
+${PROSPECTING_RELEVANCE_CRITERIA}
+
+Answer honestly and quickly -- you are not writing a reply, only screening. A confident "not relevant" is the correct, expected
+answer for most posts that reach this check.`;
 
 /**
  * Cheap ($0.80/mTok in, MODEL_HAIKU) relevance precheck -- runs AFTER the
@@ -392,7 +403,9 @@ check.`;
  * expensive call is made.
  */
 export async function checkRelevanceCheap(client: LlmClient, context: ProspectingDraftContext): Promise<boolean> {
-  const userMessage = [`Platform: ${context.platform}`, `Why this post surfaced: matched the "${context.discoveryQuery}" topic.`, "", "Their post:", context.postText].join("\n");
+  // The author handle matters: the drafter sees it, and a company account (a prop firm posting about its own rules) is the most
+  // common post the cheap check let through and the drafter then turned away.
+  const userMessage = [`Platform: ${context.platform}`, `From: @${context.authorHandle ?? "unknown"}`, `Why this post surfaced: matched the "${context.discoveryQuery}" topic.`, "", "Their post:", context.postText].join("\n");
 
   const { isRelevant } = await client.callTool<{ isRelevant: boolean }>(
     CHEAP_RELEVANCE_SYSTEM_PROMPT,
