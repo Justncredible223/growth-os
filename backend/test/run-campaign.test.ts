@@ -188,7 +188,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
     const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
     expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
-    expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe(OFFERED_DAILY_CONCEPT_IDS[0]);
+    expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe("strategy-01-orb-range-trigger"); // strategy videos first (2026-10-25)
     // No explainer is a near-copy of another, so none is hidden.
     expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toEqual([]);
   });

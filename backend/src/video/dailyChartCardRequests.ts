@@ -39,6 +39,31 @@ export function isVideoRequestDay(now: Date, days: readonly number[] = VIDEO_REQ
   return days.includes(weekdayInZone(now, zone));
 }
 
+/**
+ * Owner decision 2026-10-25: strategy-chart videos first. They earned the follower gain on TikTok (the opening-range and VWAP
+ * videos, Oct 19-24) where the demo-data explainers did not, so unused strategy concepts are requested ahead of explainers,
+ * with one explainer in every four requests so the product message keeps going out. The rule is stateless: it counts the
+ * strategy and explainer concepts already made or waiting, minus how many there were when it started (3 strategy, 6 explainer),
+ * so an explainer is due once the strategy videos since then reach three per explainer since then. Fixed day numbers and voice
+ * sheets are untouched; only the order of requests changes. To go back to day order, return `unused` unchanged below.
+ */
+export const STRATEGY_FIRST_BASELINE = { strategy: 3, explainer: 6 } as const;
+export const STRATEGY_PER_EXPLAINER = 3;
+
+const isStrategyConcept = (id: string): boolean => id.startsWith("strategy-");
+
+/** `unused` (already in day order) reordered for requesting: strategy first, an explainer when one is due or no strategy concept is left. */
+export function requestOrder<T extends { id: string }>(unused: readonly T[], usedIds: readonly string[]): T[] {
+  const strategyUsed = usedIds.filter(isStrategyConcept).length;
+  const explainerUsed = usedIds.length - strategyUsed;
+  const strategySince = Math.max(0, strategyUsed - STRATEGY_FIRST_BASELINE.strategy);
+  const explainerSince = Math.max(0, explainerUsed - STRATEGY_FIRST_BASELINE.explainer);
+  const explainerDue = strategySince >= STRATEGY_PER_EXPLAINER * (explainerSince + 1);
+  const strategy = unused.filter((c) => isStrategyConcept(c.id));
+  const others = unused.filter((c) => !isStrategyConcept(c.id));
+  return explainerDue || strategy.length === 0 ? [...others, ...strategy] : [...strategy, ...others];
+}
+
 export type ConceptState = "made" | "waiting" | "rejected";
 
 export interface DailyChartCardDeps {
@@ -86,13 +111,14 @@ export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promi
   const used = concepts.filter((c) => stateOf(c) === "made" || stateOf(c) === "waiting").map((c) => c.id);
   const unused = distinctConcepts(concepts.filter((c) => stateOf(c) === undefined), used, planOf);
 
+  const ordered = requestOrder(unused, used);
   if (unused.length === 0) return "no unused chart concepts left -- add more";
   const room = MAX_CHART_CARDS_WAITING - waiting;
   if (room <= 0) return `skipped -- ${waiting} chart cards already waiting (limit ${MAX_CHART_CARDS_WAITING})`;
 
   const requested: string[] = [];
   const failed: string[] = [];
-  for (const concept of unused.slice(0, Math.min(room, 1))) {
+  for (const concept of ordered.slice(0, Math.min(room, 1))) {
     try {
       await deps.request(concept.id);
       requested.push(concept.id);
