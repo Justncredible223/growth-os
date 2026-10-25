@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { runProspectingSearch } from "../src/prospecting/prospectingSearch";
-import { TOPICS_PER_SEARCH_RUN } from "../src/prospecting/prospectingEligibility";
+import { groupedTopicQuery, runProspectingSearch, topicForPost, TOPICS_PER_QUERY } from "../src/prospecting/prospectingSearch";
+import { PROSPECTING_TOPICS } from "../src/prospecting/prospectingTopics";
+import { withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
+import { DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, TOPICS_PER_SEARCH_RUN } from "../src/prospecting/prospectingEligibility";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFreshness";
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
@@ -440,7 +442,7 @@ describe("runProspectingSearch", () => {
 
     it("stops at the daily search limit, with a clear reason, before any X read", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
-      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => 10 });
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => DAILY_SEARCH_CAP });
       expect(result.skipped).toBe(true);
       expect(result.skipReason).toMatch(/daily_search_cap/);
       expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
@@ -448,9 +450,65 @@ describe("runProspectingSearch", () => {
 
     it("makes only the searches the daily limit still allows", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
-      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => 9, runIndexOverride: 5 });
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => DAILY_SEARCH_CAP - 1, runIndexOverride: 5 });
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
       expect(result.searchRequests).toBe(1);
+    });
+    it("stops at the daily search budget (dollars, not requests), with a clear reason, before any X read", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => DAILY_SEARCH_BUDGET_USD });
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toMatch(/daily_search_budget/);
+      expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+    });
+
+    it("near-empty searches do not use up the day: many requests are fine while the spend stays small", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => 10, getTodaySearchSpendUsd: async () => 0.09, runIndexOverride: 5 });
+      expect(result.skipped).toBe(false);
+      expect(adapter.searchRecentPosts).toHaveBeenCalled();
+    });
+
+    it("stops mid-run once this run's own spend reaches the daily budget", async () => {
+      const posts = Array.from({ length: 10 }, (_, i) => searchResult({ id: `junk-${i}`, text: "nothing relevant here at all", authorId: `a${i}` }));
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(posts) };
+      // 10 reads cost $0.05 each request; with $0.46 already spent only one more request fits.
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.46, runIndexOverride: 5 });
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
+      expect(result.searchRequests).toBe(1);
+    });
+  });
+
+  describe("grouped queries (2026-10-25: one near-empty request per narrow topic burned the day)", () => {
+    it("ORs several topics into one query, as many as fit, keeping each topic's own meaning", () => {
+      const { query, used } = groupedTopicQuery(PROSPECTING_TOPICS.slice(0, TOPICS_PER_QUERY));
+      expect(used.length).toBeGreaterThan(1);
+      expect(query).toContain(" OR ");
+      expect(query.startsWith("(")).toBe(true);
+      for (const t of used) expect(query).toContain(`(${t.query})`);
+    });
+
+    it("every rotation group, once wrapped with the futures anchor and exclusions, fits inside X's 512 characters", () => {
+      for (let start = 0; start < PROSPECTING_TOPICS.length; start++) {
+        const group = Array.from({ length: TOPICS_PER_QUERY }, (_, i) => PROSPECTING_TOPICS[(start + i) % PROSPECTING_TOPICS.length]!);
+        const { query } = groupedTopicQuery(group);
+        expect(withCryptoExclusions(query).length + " -is:retweet -is:reply lang:en".length, `group at ${start}`).toBeLessThanOrEqual(512);
+      }
+    });
+
+    it("assigns each post to the topic it matched, else the group's first", () => {
+      const group = PROSPECTING_TOPICS.filter((t) => ["revenge_trading", "trading_journal", "prop_firm"].includes(t.key));
+      expect(topicForPost(group, "Revenge trading cost me my funded account again").key).toBe("revenge_trading");
+      expect(topicForPost(group, "Which trading journal do you use for futures?").key).toBe("trading_journal");
+      expect(topicForPost(group, "Something unrelated to any phrase").key).toBe(group[0]!.key);
+    });
+
+    it("a request covers up to four topics, so a run's two requests cover up to eight", async () => {
+      const queries: string[] = [];
+      const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
+      const result = await runProspectingSearch({ adapter: adapter as any, repo: new FakeProspectingRepo(), client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now: new Date("2026-09-01T12:00:00Z") });
+      expect(queries).toHaveLength(2);
+      expect(result.topicsSearched.length).toBeGreaterThan(queries.length);
     });
   });
 });

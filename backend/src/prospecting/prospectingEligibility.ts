@@ -127,8 +127,14 @@ export const MONTHLY_PROSPECTING_BUDGET_USD = 20.0;
 export const BUFFER_TARGET = 2;
 export const MAX_TOPICS_BUFFER = TOPICS_PER_SEARCH_RUN;
 export const MAX_TOPICS_MANUAL = 3;
-/** At most this many X search requests a day (one per topic searched), counted from recorded cost events. About $0.26 a day at the observed $0.026 a request. */
-export const DAILY_SEARCH_CAP = 10;
+/** Safety net on X search requests a day, counted from recorded cost events. */
+export const DAILY_SEARCH_CAP = 30;
+/**
+ * The real daily limit is money, not requests (2026-10-25): the first version capped requests at 10, and because the futures-anchored
+ * queries returned almost nothing (about 1.8 posts a search, $0.009), ten near-empty searches used the whole day. Search spend is capped
+ * at this many dollars a day (October ran about $0.31 a day on searches); the request count above is only a safety net.
+ */
+export const DAILY_SEARCH_BUDGET_USD = 0.5;
 /** The top-scoring new posts per run that get the cheap model relevance check before they can reach the queue (about $0.001 each). */
 export const VET_MAX_PER_RUN = 8;
 
