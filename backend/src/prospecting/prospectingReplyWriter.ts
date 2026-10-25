@@ -10,7 +10,7 @@ const CHEAP_RELEVANCE_SCHEMA = {
     isRelevant: {
       type: "boolean",
       description:
-        "True only if this post is genuinely about FUTURES trading (index or commodity futures such as ES, NQ, MNQ, CL, GC) in a prop-firm or own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling. False for crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and for general 'trading' talk with no futures or prop-firm angle, and false if it only superficially matched the search (a story, a meme, unrelated news, or a search word used in a non-trading sense). Judge honestly; false is the expected, correct answer for most candidates that reach this check.",
+        "True only if this post is genuinely about FUTURES trading (index or commodity futures such as ES, NQ, MNQ, CL, GC) in a prop-firm or own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling. False for crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and for general 'trading' talk with no futures or prop-firm angle, and false if it only superficially matched the search (a story, a meme, unrelated news, or a search word used in a non-trading sense). Judge honestly; false is the expected, correct answer for most candidates that reach this check. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false.",
     },
   },
   required: ["isRelevant"],
@@ -25,7 +25,7 @@ const DRAFT_SCHEMA = {
     isRelevant: {
       type: "boolean",
       description:
-        "True only if their post is genuinely about FUTURES trading (index or commodity futures) in a prop-firm or own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling. False for crypto, options, stocks, forex, or general trading talk with no futures or prop-firm angle, and false if it only superficially matched the search (e.g. it's a story, meme, unrelated news, or uses a search word in a non-trading sense). Judge this FIRST, honestly, before writing anything.",
+        "True only if their post is genuinely about FUTURES trading (index or commodity futures) in a prop-firm or own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling. False for crypto, options, stocks, forex, or general trading talk with no futures or prop-firm angle, and false if it only superficially matched the search (e.g. it's a story, meme, unrelated news, or uses a search word in a non-trading sense). Judge this FIRST, honestly, before writing anything. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false.",
     },
     reply: {
       type: "string",
@@ -232,7 +232,8 @@ NOT relevant. If it is NOT relevant -- or it's a story, a meme, unrelated
 news, or a generic self-help/life post that just happens to use a word like the search topic in a
 different sense -- set isRelevant=false, leave reply as an empty string, and do not attempt to force a
 connection to trading. A confident "this isn't relevant" is the correct, expected outcome for many
-candidates; it is never a failure. Only if isRelevant is true, continue below.
+candidates; it is never a failure. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false.
+Only if isRelevant is true, continue below.
 
 ${twoOptions ? PROSPECTING_COLD_NO_PITCH_GUIDANCE : profile.noPitchGuidance}
 
@@ -370,7 +371,7 @@ news, etc.).
 Judge ONE thing: is this post genuinely about FUTURES trading (index or commodity futures) in a prop-firm or
 own-capital (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling?
 Crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and general trading talk with no futures or
-prop-firm angle are NOT relevant. Answer honestly and quickly -- you are not writing a reply, only
+prop-firm angle are NOT relevant. Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false. Announcements, video or stream teasers and brags are not conversations either: false. Answer honestly and quickly -- you are not writing a reply, only
 screening. A confident "not relevant" is the correct, expected answer for most posts that reach this
 check.`;
 

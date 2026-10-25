@@ -214,3 +214,30 @@ describe("the Fillbook option, option C (2026-10-25)", () => {
     expect(lines?.join(" ")).toMatch(/fillbook: 3 replies, median 20 views/);
   });
 });
+
+describe("the model relevance prompts need futures evidence (2026-10-25)", () => {
+  const RULE = "A mention of a prop firm or a funded account alone is NOT enough";
+
+  it("the cheap check, the draft schema and the draft prompt all say a bare prop firm mention is not enough", async () => {
+    const { checkRelevanceCheap, buildProspectingSystemPrompt, prospectingPlatformProfile } = await import("../src/prospecting/prospectingReplyWriter");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ type: "tool_use", name: "submit_relevance", input: { isRelevant: false } }] }),
+      text: async () => "",
+    } as Response);
+    const relevant = await checkRelevanceCheap(new LlmClient("test-key", fetchMock), { platform: "x", authorHandle: "t", postText: "Funded account secured", discoveryQuery: "funded_account" });
+    expect(relevant).toBe(false);
+    const cheap = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const cheapText = JSON.stringify(cheap.system) + JSON.stringify(cheap.tools);
+    expect(cheapText).toContain(RULE);
+    expect(cheapText).toContain("Announcements, video or stream teasers and brags are not conversations");
+
+    expect(buildProspectingSystemPrompt(prospectingPlatformProfile("x"), true)).toContain(RULE);
+
+    const draftFetch = fetchFor(draft());
+    await draftProspectingReply(new LlmClient("test-key", draftFetch), { platform: "x", authorHandle: "t", postText: "hi", discoveryQuery: "drawdown" }, "", "");
+    const sent = JSON.parse((draftFetch.mock.calls[0]![1] as { body: string }).body);
+    expect(JSON.stringify(sent.tools)).toContain(RULE);
+  });
+});

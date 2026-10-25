@@ -25,17 +25,27 @@ describe("isPlausiblyTradingRelated", () => {
     expect(isPlausiblyTradingRelated("Been trading MNQ futures for two years and still get nervous before the open.")).toBe(true);
   });
 
-  it("accepts a genuine prop-firm/drawdown post with no mention of 'futures' at all", () => {
+  it("accepts a genuine prop-firm post that has futures-only rules, even with no mention of 'futures' at all", () => {
     expect(isPlausiblyTradingRelated("Failed my prop firm evaluation because of a trailing drawdown rule I didn't fully understand.")).toBe(true);
     expect(isPlausiblyTradingRelated("My funded account got pulled today. Consistency rule got me again.")).toBe(true);
   });
 
-  it("does not require the literal word 'futures' when strong trading context is present", () => {
-    expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded accounts actually blow up.")).toBe(true);
+  it("a bare prop firm or funded account mention is not enough (2026-10-25: a forex funded-account brag and a creator's video teaser got through)", () => {
+    expect(isPlausiblyTradingRelated("Weekend vibes. Alhamdulillah a $50K Funded account secured with my favourite prop firm")).toBe(false);
+    expect(isPlausiblyTradingRelated("Video later today on how to pass prop firm challenges with a much higher success rate and at a much quicker pace")).toBe(false);
+    expect(isReplyWorthyPost("Video later today on how to pass prop firm challenges with a much higher success rate on ES futures")).toBe(false);
+    expect(isReplyWorthyPost("New video out now on how I pass Topstep combines on MNQ futures")).toBe(false);
+    expect(isReplyWorthyPost("Alhamdulillah a $50K Funded account secured with Topstep on MNQ futures")).toBe(false);
+  });
+
+  it("needs a futures signal: strong trading context with no futures evidence no longer qualifies", () => {
+    expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded accounts actually blow up.")).toBe(false);
+    expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded futures accounts actually blow up.")).toBe(true);
   });
 
   it("catches other real trading-discipline vocabulary with no 'futures' or 'trading' word present", () => {
-    expect(isPlausiblyTradingRelated("Hit my daily loss limit again. Same mistake, third time this month.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Hit my daily loss limit again on NQ. Same mistake, third time this month.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Hit my daily loss limit again. Same mistake, third time this month.")).toBe(false);
     // Futures only (2026-10-24): generic risk words with no futures or prop-firm signal no longer qualify.
     expect(isPlausiblyTradingRelated("Position sizing is the one thing nobody teaches new traders properly.")).toBe(false);
     expect(isPlausiblyTradingRelated("Position sizing is the one thing nobody teaches new futures traders properly.")).toBe(true);
@@ -84,8 +94,8 @@ describe("isPlausiblyTradingRelated -- crypto-only content", () => {
     expect(isPlausiblyTradingRelated("I really struggled with overtrading this week")).toBe(false);
   });
 
-  it("a genuine overtrading post still passes via its own other trading-discipline anchor", () => {
-    expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded accounts actually blow up.")).toBe(true);
+  it("a genuine overtrading post still passes via its own other trading-discipline anchor, with a futures signal", () => {
+    expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded futures accounts actually blow up.")).toBe(true);
   });
 
   it("no other generic word alone (volume, discipline, performance, entry, move, profits) is sufficient", () => {
@@ -201,7 +211,7 @@ describe("newsletters and articles are not conversations (2026-10-04)", () => {
   });
 
   it("keeps ordinary conversational posts", () => {
-    const post = "He keeps sabotaging progress, cutting winners, holding losers.\n\nLesson: old identity will hunt you. Funded trader here, still fighting it.";
+    const post = "He keeps sabotaging progress, cutting winners, holding losers.\n\nLesson: old identity will hunt you. Funded futures trader here, still fighting it.";
     expect(isBroadcastContent(post)).toBe(false);
     expect(isReplyWorthyPost(post)).toBe(true);
     expect(isBroadcastContent("Blew my funded account again on the open. Revenge trading is real.")).toBe(false);

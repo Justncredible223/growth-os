@@ -295,7 +295,7 @@ describe("listProspectingQueue -- filters out irrelevant candidates before they 
   it("excludes irrelevant candidates from totalConsidered -- they were never really 'considered' for today's selection at all", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "crypto-1", status: "new", postText: "$USELESS locked in the profits", authorExternalId: "a" }));
-    repo.seed(candidate({ id: "genuine-1", status: "new", opportunityScore: 70, postText: "My funded account got pulled today.", authorExternalId: "b" }));
+    repo.seed(candidate({ id: "genuine-1", status: "new", opportunityScore: 70, postText: "My funded account got pulled today on a trailing drawdown breach.", authorExternalId: "b" }));
 
     const { diagnostics } = await listProspectingQueue(fakeClient, NOW, { repo });
 

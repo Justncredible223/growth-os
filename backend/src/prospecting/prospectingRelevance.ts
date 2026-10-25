@@ -230,18 +230,17 @@ export function isOptionsPost(postText: string): boolean {
 
 /**
  * Futures only (2026-10-24, owner: "we should only really be looking for creators and posts that are futures trading, relevant to
- * either prop firms or self capital"). A post must carry at least one futures or futures-prop-firm signal: the word futures, a
- * futures contract ticker, a futures prop firm or platform, or a prop/evaluation rule that only futures prop firms use. General
- * trading words alone (trader, trading, risk management, stop loss) no longer qualify a post, because forex, stock and options
- * posts use them just as much.
+ * either prop firms or self capital"). A post must carry at least one FUTURES signal: the word futures, a futures contract ticker,
+ * a futures prop firm or platform, or a rule only futures prop accounts have (trailing drawdown, consistency rule, trading combine).
+ * General trading words (trader, trading, risk management, stop loss) and a bare "prop firm" or "funded account" do not qualify a
+ * post (2026-10-25: a forex "funded account secured" brag and a creator's "pass prop firm challenges" video teaser both got through
+ * on the bare prop-firm words), because forex, CFD, stock and options posts use them just as much.
  */
 const FUTURES_OR_PROP_SIGNAL_PATTERNS: RegExp[] = [
   /\bfutures?\b/i,
   /\b(MNQ|NQ|MES|ES|YM|MYM|RTY|M2K|MCL|MGC)\b/,
   /\b(ninjatrader|tradovate|rithmic|topstepx?|apex trader funding|apex funding|take profit trader|bulenox|myfundedfutures|tradeify|elite trader funding|alpha futures|lucid trading)\b/i,
-  /\bprop (firm|firms|trading|account|accounts)\b/i,
-  /\bfunded (account|accounts|trader|traders)\b/i,
-  /\b(evaluation account|trading combine|payout (request|split|approved|denied)|consistency (rule|cap)|trailing drawdown|daily loss limit)\b/i,
+  /\b(trading combine|consistency (rule|cap)|trailing drawdown)\b/i,
 ];
 
 /** Posts about other markets (forex, stocks): excluded unless the post also names futures explicitly. "Prop firm" is not enough, forex prop firms exist. */
@@ -273,7 +272,7 @@ export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit sp
  * in the first place instead of generic trading posts the relevance gate would then throw away after we had paid for the read. Each
  * anchor is one the gate itself accepts (FUTURES_OR_PROP_SIGNAL_PATTERNS), so a post that matches the query passes the gate.
  */
-export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR "prop firm" OR "funded account" OR "funded trader" OR topstep OR ninjatrader OR tradovate OR rithmic)';
+export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
 export function withCryptoExclusions(query: string): string {
   return `(${query}) ${FUTURES_QUERY_ANCHORS} ${CRYPTO_QUERY_EXCLUSIONS} ${OPTIONS_QUERY_EXCLUSIONS}`;
 }
@@ -394,6 +393,12 @@ export function isTooSmallToBeWorthIt(followerCount: number | null | undefined):
  * a broker is kept.
  */
 const SALES_FUNNEL_PATTERNS: RegExp[] = [
+  // Teasers and announcements (2026-10-25): a creator's "video later today", a stream notice, or a funded-account brag is a broadcast, not a conversation.
+  /\b(?:new|latest|next) (?:video|stream|episode|podcast|livestream)\b/i,
+  /\bvideo (?:later|tomorrow|today|tonight|coming|dropping|soon|out now)\b/i,
+  /\b(?:going |am |we'?re )?live (?:at|on|today|tonight|now|in)\b/i,
+  /\bwatch (?:my|the|our) (?:video|stream|full)\b/i,
+  /\bfunded account secured\b/i,
   /\bJOIN\b/, // shouted call to action ("... ACADEMY ... JOIN")
   /\b(?:join|enrol+|register for|sign ?up for|apply for|get access to) (?:the |our |my |this )?(?:\w+ ){0,3}(?:academy|course|mentorship|masterclass|bootcamp|webinar|community|group|channel|telegram|discord|vip)\b/i,
   /\b(?:live )?trading academy\b/i,

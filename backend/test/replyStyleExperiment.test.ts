@@ -318,8 +318,8 @@ describe("candidate filters", () => {
   ];
   const kept = [
     "Passed my eval then blew the funded account in two days. Does trailing drawdown lock once you are up?",
-    "Is it just me or does a prop firm daily loss limit make you trade worse? What do you do after the first loss?",
-    "Anyone else size up after two green days on a funded account?",
+    "Is it just me or does a futures prop firm daily loss limit make you trade worse? What do you do after the first loss?",
+    "Anyone else size up after two green days on a funded futures account?",
     "CFD vs futures for a prop firm funded account, what are the actual cost differences?",
     "My futures trading journal says I lose most on Fridays. Telling myself to stop after 11am is not working.",
   ];

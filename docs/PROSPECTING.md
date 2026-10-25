@@ -260,3 +260,13 @@ cold reply ever named Fillbook (the account's Results showed replies that did re
 - **Measured.** Posted text is matched back to the option (`posted_style = "fillbook"`), and the Monday review's "Reply style results"
   lists it with median views and likes next to sharp and helpful. The Android app labels any option style, so it shows as a
   "Fillbook" tab with no app rebuild.
+
+## Futures evidence is required, not just "prop firm" (2026-10-25)
+
+Two cards got through on the bare words "funded account" and "prop firm": a forex funded-account brag ("Alhamdulillah a $50K Funded account
+secured") and a creator's teaser ("Video later today on how to pass prop firm challenges"). A mention of a prop firm or funded account no
+longer counts as a futures signal (forex and CFD prop firms exist). A post needs the word futures, a futures ticker, a futures prop firm or
+platform, or a rule only futures prop accounts have (trailing drawdown, consistency rule, trading combine). The X query anchors use the same
+list. Video and stream teasers, "new video", "going live" and "funded account secured" posts are treated as broadcasts. The model relevance
+prompts (screen at discovery, cheap check, draft schema and prompt) say the same: no futures evidence means not relevant. The queue applies
+the free filter on every read, so cards already waiting that fail it disappear without a redeploy of data.
