@@ -651,7 +651,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     // postText passes the mechanical pre-filter (contains "trading"), but
     // the model itself determines the post isn't genuinely about trading
     // -- e.g. "trading cards" or "horse trading" style non-financial use.
-    repo.seed(candidate({ id: "x-modeljudged", status: "shown", draftReply: null, postText: "Spent the whole weekend trading Pokemon cards with my kid at the local shop." }));
+    repo.seed(candidate({ id: "x-modeljudged", status: "shown", draftReply: null, postText: "Spent the whole weekend trading Pokemon cards with my kid, the futures of this hobby look bright at the local shop." }));
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
       isRelevant: false,
       reply: "",
@@ -679,7 +679,7 @@ describe("draftProspectingCandidateReply -- cheap relevance precheck", () => {
 
   it("rejects a post the cheap check judges irrelevant before ever calling the expensive drafter", async () => {
     const repo = new InMemoryProspectingRepository();
-    repo.seed(candidate({ id: "x-cheap-reject", status: "shown", draftReply: null, postText: "Spent the whole weekend trading Pokemon cards with my kid." }));
+    repo.seed(candidate({ id: "x-cheap-reject", status: "shown", draftReply: null, postText: "Spent the whole weekend trading Pokemon cards with my kid, the futures of this hobby look bright." }));
     const cheapRelevanceCheck = vi.fn(async (_ctx: ProspectingDraftContext) => false);
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
 

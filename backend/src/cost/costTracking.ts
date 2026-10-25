@@ -1,3 +1,4 @@
+import { startOfDay } from "../video/dailyLimit.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LlmUsage } from "../content/llmClient.js";
 
@@ -374,6 +375,16 @@ export async function getProspectingMonthSpendUsd(client: SupabaseClient, now: D
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const rows = await selectCostEvents(client, "cost_usd", { since: monthStart, until: nextMonthStart, eventTypes: ["x_search_read", "prospecting_llm_call"], label: "getProspectingMonthSpendUsd" });
   return sumCostUsd(rows);
+}
+
+/**
+ * X search requests recorded today (Arizona day, the same day the one-a-day video limit uses). One cost_events row is written per
+ * search request (recordXSearchCostEvent), so the row count is the request count. Feeds Prospecting's daily search limit
+ * (2026-10-24), so a run of "Search now" taps or refills can never spend more than about DAILY_SEARCH_CAP requests a day.
+ */
+export async function getTodayXSearchCount(client: SupabaseClient, now: Date = new Date()): Promise<number> {
+  const rows = await selectCostEvents(client, "id", { since: startOfDay(now).toISOString(), eventTypes: ["x_search_read"], label: "getTodayXSearchCount" });
+  return rows.length;
 }
 
 /** Real recorded spend today (any provider/event_type), created_at-based, UTC calendar day. Distinct from getProspectingMonthSpendUsd (that one is a budget gate scoped to one event_type over a month) -- this is what a "today's spend" display should actually query instead of an unfiltered lifetime sum. */

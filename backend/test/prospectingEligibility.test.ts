@@ -22,17 +22,17 @@ describe("evaluateQueueCapacity", () => {
 });
 
 describe("evaluateMonthlyBudget", () => {
-  // Pins the owner-approved value (2026-09-18: "Raise the cap to $15") so an
+  // Pins the owner-approved value (2026-09-18: "Raise the cap to $15"; 2026-10-24: raised to $20 after the real spend) so an
   // accidental edit to the constant is caught rather than silently shipped.
   // The rest of this suite derives from the constant on purpose; this one
   // assertion is the deliberate exception.
-  it("uses the owner-approved $15.00 monthly cap", () => {
-    expect(MONTHLY_PROSPECTING_BUDGET_USD).toBe(15);
+  it("uses the owner-approved $20.00 monthly cap", () => {
+    expect(MONTHLY_PROSPECTING_BUDGET_USD).toBe(20);
   });
 
   it("reports the actual cap in the skip reason the UI surfaces", () => {
     const result = evaluateMonthlyBudget(MONTHLY_PROSPECTING_BUDGET_USD);
-    expect(result.reason).toContain("cap is $15.00");
+    expect(result.reason).toContain("cap is $20.00");
   });
 
   it("stays eligible under budget", () => {

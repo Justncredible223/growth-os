@@ -40,7 +40,8 @@ describe("PROSPECTING_TOPICS queries are guaranteed to pass isPlausiblyTradingRe
 
   for (const topic of unambiguousTopics) {
     it(`"${topic.key}" (query: ${topic.query})`, () => {
-      const text = minimalMatchingText(topic.query);
+      // Every discovery query also carries a futures anchor (FUTURES_QUERY_ANCHORS), so a matching post has the topic words plus a futures signal.
+      const text = `${minimalMatchingText(topic.query)} on MNQ futures`;
       expect(isPlausiblyTradingRelated(text)).toBe(true);
     });
   }

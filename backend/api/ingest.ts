@@ -11,7 +11,7 @@ import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsol
 import { requireAppAuth, constantTimeEquals } from "../src/lib/requireAppAuth.js";
 import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
-import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
+import { prospectingRunExtras } from "../src/prospecting/prospectingRunDeps.js";
 import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/lib/integrationHealth.js";
 import { recordConversionEvent, CONVERSION_EVENT_TYPES, type ConversionEventType } from "../src/attribution/conversionEvents.js";
 import { recordLinkClick, isAllowedRedirectTarget } from "../src/attribution/linkClicks.js";
@@ -216,11 +216,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           adapter,
           repo,
           client,
-          getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
-          isPaused: async () => {
-            const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
-            return data?.paused ?? false;
-          },
+          ...prospectingRunExtras(client),
           now,
           // Manual trigger: pick a topic slice independent of the current
           // scheduled slot so hitting "search now" right before/after a

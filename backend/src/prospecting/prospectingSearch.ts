@@ -5,9 +5,9 @@ import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.j
 import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
-  QUEUE_FULL_THRESHOLD,
+  DAILY_SEARCH_CAP,
   RESULTS_PER_QUERY,
-  TOPICS_PER_SEARCH_RUN,
+  VET_MAX_PER_RUN,
   currentRunSlot,
   evaluateMonthlyBudget,
   evaluateQueueCapacity,
@@ -16,7 +16,7 @@ import {
   selectTopicsForRun,
 } from "./prospectingEligibility.js";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
-import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
+import { MIN_DAILY_SET_SCORE, selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import type { ProspectingRepository } from "./types.js";
 
 export interface ProspectingRunResult {
@@ -43,6 +43,12 @@ export interface ProspectingRunResult {
   costUsd: number;
   /** Candidates already waiting in today's working set when this run started (null when the run stopped before counting). */
   selectableBefore?: number | null;
+  /** Candidates in today's working set when the run ended. */
+  selectableAfter?: number | null;
+  /** X search requests this run made (one per topic searched). */
+  searchRequests?: number;
+  /** New posts the cheap model relevance check turned away before they could reach the queue. */
+  screenedOut?: number;
 }
 
 /** Rows scanned to count what is waiting. Was QUEUE_FULL_THRESHOLD + 1; the selectable count needs the whole backlog (the queue endpoint reads up to 500). */
@@ -68,6 +74,15 @@ export interface ProspectingRunDeps {
   isPaused?: () => Promise<boolean>;
   now?: Date;
   /**
+   * The cheap model relevance check (about $0.001 a post), run on the best new posts BEFORE they can reach the queue, so everything
+   * the owner is shown is already vetted (2026-10-24: the owner was tapping Search now four or five times to get one post that
+   * was futures prop-firm or own-capital relevant). Returns false to turn a post away. Optional; omitted means no screening.
+   * A thrown error counts as relevant: a failed check must never hide a post.
+   */
+  screenRelevance?: (post: { postText: string; discoveryQuery: string; authorHandle: string | null }) => Promise<boolean>;
+  /** How many X search requests have been recorded today (Arizona day). Omitted means no daily limit is applied. */
+  getTodaySearchCount?: () => Promise<number>;
+  /**
    * Overrides which run-index's topic slice gets searched, bypassing the
    * normal day/schedule-slot rotation. Used by the owner-triggered manual
    * "search now" path (api/ingest.ts?source=x_prospecting) so a manual run
@@ -76,6 +91,8 @@ export interface ProspectingRunDeps {
    * its rotation is completely unaffected.
    */
   runIndexOverride?: number;
+  /** Added to the run index so refills made between the scheduled slots start from a different topic than the last search (does not make the run a manual one). */
+  runIndexOffset?: number;
 }
 
 /**
@@ -113,14 +130,18 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   }
 
   // How many of the waiting candidates the owner would actually be shown right now (same gate + selection the queue
-  // endpoint applies). Scheduled runs use it to skip or thin the search; an owner-triggered "search now" (runIndexOverride)
-  // always searches, as before.
-  const selectable = selectDailyWorkingSet(
-    backlog.filter((c) => isReplyWorthyPost(c.postText) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
-    now,
-  ).selected.length;
+  // endpoint applies). Scheduled and refill runs skip when the buffer is already met; an owner-tapped "search now"
+  // (runIndexOverride) always searches, and keeps going until it finds one more usable post.
+  const countSelectable = async (): Promise<number> => {
+    const rows = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], BACKLOG_SCAN_LIMIT);
+    return selectDailyWorkingSet(
+      rows.filter((c) => isReplyWorthyPost(c.postText) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
+      now,
+    ).selected.length;
+  };
+  const selectable = await countSelectable();
   const isManual = deps.runIndexOverride !== undefined;
-  const breadth = isManual ? ({ skip: false, topics: TOPICS_PER_SEARCH_RUN } as const) : planSearchBreadth(selectable);
+  const breadth = planSearchBreadth(selectable, isManual);
   if (breadth.skip) {
     return { skipped: true, skipReason: breadth.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
   }
@@ -130,43 +151,51 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // 13:00/18:00 America/Phoenix by default) this invocation is so the
   // rotation advances once per run instead of once per day -- same
   // topic-list cycling behavior as before the 3x/day split, just
-  // finer-grained. A thinned run (breadth.topics < TOPICS_PER_SEARCH_RUN) takes the FIRST topic(s) of the same slice,
-  // so the rotation position is unchanged and the skipped topic comes round again next cycle.
+  // finer-grained.
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
-  const runIndex = deps.runIndexOverride ?? dayIndex * runSlotsPerDay() + currentRunSlot(now);
-  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, TOPICS_PER_SEARCH_RUN).slice(0, breadth.topics);
+  const runIndex = (deps.runIndexOverride ?? dayIndex * runSlotsPerDay() + currentRunSlot(now)) + (deps.runIndexOffset ?? 0);
+  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, breadth.maxTopics);
+
+  let searchedToday = deps.getTodaySearchCount ? await deps.getTodaySearchCount() : 0;
+  if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) {
+    return { skipped: true, skipReason: `daily_search_cap (${searchedToday} searches today, the limit is ${DAILY_SEARCH_CAP})`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
+  }
 
   let postsRead = 0;
   let newCandidates = 0;
   let excludedAsSpam = 0;
   let excludedAsIrrelevant = 0;
+  let screenedOut = 0;
+  let screenedChecked = 0;
   let costUsd = 0;
+  let searchRequests = 0;
+  let selectableNow = selectable;
+  const searched: string[] = [];
   const priorOutreachCache = new Map<string, boolean>();
 
+  // One topic at a time, stopping as soon as enough usable posts are waiting. Each topic costs one X search request.
   for (const topic of topics) {
+    if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) break;
     // Bounded discovery-time freshness (2026-09-07 review): X's recent-search
     // endpoint supports a real start_time filter (see xAdapter.ts's own doc
     // comment), so this asks X itself to never return anything older than
     // the same window prospectingFreshness.ts enforces at selection
     // time -- catching staleness at the source instead of only filtering it
-    // out after paying to read it. Sharing the one MAX_AGE_FOR_DAILY_SELECTION_MS
-    // constant keeps discovery and selection aligned; a sparse topic
-    // returning fewer (or zero) results under this bound is the correct,
-    // intended outcome, not a bug -- a genuinely quiet topic this run just
-    // means fewer new candidates today, never stale ones let through.
+    // out after paying to read it. A sparse topic returning fewer (or zero)
+    // results under this bound is the correct, intended outcome.
     const results = await deps.adapter.searchRecentPosts(withCryptoExclusions(topic.query), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+    searchRequests++;
+    searchedToday++;
+    searched.push(topic.key);
     postsRead += results.length;
     costUsd += await recordXSearchCostEvent(deps.client, results.length, { topic: topic.key, query: topic.query });
 
+    const created: Array<{ id: string; postText: string; discoveryQuery: string; authorHandle: string | null; score: number }> = [];
     for (const post of results) {
       // Same $0 mechanical gate applied at queue-read time
       // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
-      // so an obviously off-topic post (crypto, prop-firm referral spam,
-      // stock-market newsletters, AI-trading-agent hype -- all confirmed
-      // real noise sources for broad topic queries like "drawdown" or
-      // "risk management") is never written to prospecting_candidates in
-      // the first place, instead of being stored and only reclassified
-      // 'not_relevant' the next time the queue happens to be fetched.
+      // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
+      // newsletters, AI-trading-agent hype) is never written to prospecting_candidates in the first place.
       if (!isReplyWorthyBase(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
         excludedAsIrrelevant++;
         continue;
@@ -204,7 +233,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
         continue;
       }
 
-      const { created } = await deps.repo.upsertIfNew({
+      const { id, created: isNew } = await deps.repo.upsertIfNew({
         platform: "x",
         externalId: post.id,
         discoveryQuery: topic.key,
@@ -222,18 +251,47 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
         creatorCandidate: (post.authorFollowerCount ?? 0) >= 2000,
         discoveredAt: now.toISOString(),
       });
-      if (created) newCandidates++;
+      if (isNew) {
+        newCandidates++;
+        created.push({ id, postText: post.text, discoveryQuery: topic.key, authorHandle: post.authorHandle, score: scoreResult.score });
+      }
     }
+
+    // Screen the best new posts with the cheap model check before they can be shown. Only posts that could clear the daily quality
+    // bar are worth the call; a turned-away post is stored as not_relevant (so it is never found and screened twice).
+    if (deps.screenRelevance) {
+      const candidates = created.filter((c) => c.score >= MIN_DAILY_SET_SCORE).sort((a, b) => b.score - a.score);
+      for (const c of candidates) {
+        if (screenedChecked >= VET_MAX_PER_RUN) break;
+        screenedChecked++;
+        let relevant = true;
+        try {
+          relevant = await deps.screenRelevance({ postText: c.postText, discoveryQuery: c.discoveryQuery, authorHandle: c.authorHandle });
+        } catch {
+          relevant = true; // a failed check never hides a post
+        }
+        if (!relevant) {
+          await deps.repo.updateStatus(c.id, "not_relevant", { skipReason: "screened_out_at_discovery" });
+          screenedOut++;
+        }
+      }
+    }
+
+    selectableNow = await countSelectable();
+    if (selectableNow >= breadth.target) break;
   }
 
   return {
     skipped: false,
-    topicsSearched: topics.map((t) => t.key),
+    topicsSearched: searched,
     postsRead,
     newCandidates,
     excludedAsSpam,
     excludedAsIrrelevant,
     costUsd,
     selectableBefore: selectable,
+    selectableAfter: selectableNow,
+    searchRequests,
+    screenedOut,
   };
 }

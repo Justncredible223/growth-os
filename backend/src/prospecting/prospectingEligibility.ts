@@ -111,30 +111,35 @@ export const STALE_EXPIRY_DAYS = 14;
  * bucket. What still keeps prospecting search inside the pool is the run rate
  * above (~$9.00/month search-only), not this ceiling.
  */
-export const MONTHLY_PROSPECTING_BUDGET_USD = 15.0;
+export const MONTHLY_PROSPECTING_BUDGET_USD = 20.0;
+// 2026-10-24: raised from $15 on the owner's instruction after October's real spend (about $0.63 a day, $15.17 by the 24th) tripped
+// the cap a week early. The search changes below (vet before queueing, search until one qualifies, a daily search limit) are what
+// bring the daily rate down; the cap is only the last line.
 
 /**
- * Search breadth by how much is already waiting (2026-10-14 cost cut). "Selectable" is the number of candidates that
- * would be in today's working set right now: reply-worthy, inside the 12h freshness window, past the quality bar, one
- * per author (prospectingDailySelection.ts). The owner can only ever be shown DAILY_SET_MAX of them, and works 8-15 a
- * day, so reading more posts when 15 are already waiting cannot add a card to the queue.
- *
- * - at or above SELECTABLE_SKIP_AT: skip the search (no X read at all);
- * - at or above SELECTABLE_THIN_AT (the daily minimum): search 1 topic instead of TOPICS_PER_SEARCH_RUN;
- * - below that: the normal TOPICS_PER_SEARCH_RUN.
- * Kept as literals (not imported from prospectingDailySelection.ts) for the same reason QUEUE_FULL_THRESHOLD is.
+ * Search breadth (2026-10-24 rewrite). The owner only works a reply every 20 minutes and replies to a fresh post, so a deep buffer
+ * just ages out unread (113 of 114 discovered posts were too old by the time they were looked at). A scheduled or refill search now
+ * only tops the queue up to BUFFER_TARGET fresh, vetted, selectable posts; at or above that it skips. It searches one topic at a time
+ * and stops as soon as the buffer is met (at most MAX_TOPICS_BUFFER topics). An owner-tapped "Search now" keeps going until it has
+ * found one MORE usable post than was waiting, up to MAX_TOPICS_MANUAL topics, so one tap gives a post or an honest "nothing right now"
+ * instead of the owner re-tapping four or five times.
  */
-export const SELECTABLE_SKIP_AT = 15; // DAILY_SET_MAX
-export const SELECTABLE_THIN_AT = 8; // DAILY_SET_MIN
+export const BUFFER_TARGET = 2;
+export const MAX_TOPICS_BUFFER = TOPICS_PER_SEARCH_RUN;
+export const MAX_TOPICS_MANUAL = 3;
+/** At most this many X search requests a day (one per topic searched), counted from recorded cost events. About $0.26 a day at the observed $0.026 a request. */
+export const DAILY_SEARCH_CAP = 10;
+/** The top-scoring new posts per run that get the cheap model relevance check before they can reach the queue (about $0.001 each). */
+export const VET_MAX_PER_RUN = 8;
 
-export type SearchBreadth = { skip: true; reason: string } | { skip: false; topics: number };
+export type SearchBreadth = { skip: true; reason: string } | { skip: false; maxTopics: number; target: number };
 
-export function planSearchBreadth(selectableCount: number): SearchBreadth {
-  if (selectableCount >= SELECTABLE_SKIP_AT) {
-    return { skip: true, reason: `enough_waiting (${selectableCount} selectable candidates already queued, the daily set shows at most ${SELECTABLE_SKIP_AT})` };
+export function planSearchBreadth(selectableCount: number, manual = false): SearchBreadth {
+  if (manual) return { skip: false, maxTopics: MAX_TOPICS_MANUAL, target: selectableCount + 1 };
+  if (selectableCount >= BUFFER_TARGET) {
+    return { skip: true, reason: `enough_waiting (${selectableCount} selectable candidates already queued, the buffer target is ${BUFFER_TARGET})` };
   }
-  if (selectableCount >= SELECTABLE_THIN_AT) return { skip: false, topics: 1 };
-  return { skip: false, topics: TOPICS_PER_SEARCH_RUN };
+  return { skip: false, maxTopics: MAX_TOPICS_BUFFER, target: BUFFER_TARGET };
 }
 
 export interface EligibilityCheckResult {

@@ -47,7 +47,10 @@ class FakeProspectingRepo implements ProspectingRepository {
     return this.rows.get(id) ?? null;
   }
   async markShown() {}
-  async updateStatus() {}
+  async updateStatus(id: string, status: ProspectingStatus) {
+    const row = this.rows.get(id);
+    if (row) row.status = status;
+  }
   async hasPriorOutreach(_platform: string, authorExternalId: string) {
     return this.outreach.has(authorExternalId);
   }
@@ -81,7 +84,7 @@ describe("runProspectingSearch", () => {
   const now = new Date("2026-09-01T12:00:00Z");
 
   it("inserts new candidates found via search, one call per selected topic", async () => {
-    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trading over time?" })]) };
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your futures trading over time?" })]) };
     const repo = new FakeProspectingRepo();
 
     const result = await runProspectingSearch({
@@ -108,7 +111,7 @@ describe("runProspectingSearch", () => {
   });
 
   it("never re-inserts a post already known from a prior run", async () => {
-    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trading over time?" })]) };
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your futures trading over time?" })]) };
     const repo = new FakeProspectingRepo();
     const deps = { adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now };
 
@@ -188,7 +191,7 @@ describe("runProspectingSearch", () => {
   });
 
   it("runs normally when isPaused resolves false, and when it's omitted entirely (existing callers' contract is unchanged)", async () => {
-    const post = searchResult({ id: "1", text: "how do you track your trading over time?" });
+    const post = searchResult({ id: "1", text: "how do you track your futures trading over time?" });
 
     const repoNotPaused = new FakeProspectingRepo();
     const adapterNotPaused = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
@@ -262,7 +265,7 @@ describe("runProspectingSearch", () => {
   });
 
   it("scores a previously-engaged author's post higher via the prior-outreach bonus", async () => {
-    const post = searchResult({ id: "1", text: "how do you actually review your trading journal weekly?", authorId: "known-author" });
+    const post = searchResult({ id: "1", text: "how do you actually review your futures trading journal weekly?", authorId: "known-author" });
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
     const repo = new FakeProspectingRepo();
     repo.outreach.add("known-author");
@@ -273,7 +276,7 @@ describe("runProspectingSearch", () => {
     expect(inserted.scoreBreakdown.priorRelationship).toMatch(/already replied/);
   });
 
-  describe("search breadth follows what is already selectable (2026-10-14 cost cut)", () => {
+  describe("search tops up a small fresh buffer and stops as soon as it is met (2026-10-24)", () => {
     async function seedSelectable(repo: FakeProspectingRepo, count: number) {
       for (let i = 0; i < count; i++) {
         await repo.upsertIfNew({
@@ -296,35 +299,44 @@ describe("runProspectingSearch", () => {
         });
       }
     }
+    /** A fresh futures post that scores above the daily bar: a question, a mid-sized author, posted an hour ago. */
+    function good(id: string, text = "how do you handle the trailing drawdown on your Topstep funded account on MNQ futures?") {
+      return searchResult({
+        id,
+        text,
+        authorId: `author-${id}`,
+        authorHandle: `h${id}`,
+        authorFollowerCount: 5000,
+        createdAt: new Date(now.getTime() - 60 * 60 * 1000),
+        publicMetrics: { reply_count: 2, like_count: 6, impression_count: 400 },
+      });
+    }
     const run = (repo: FakeProspectingRepo, adapter: any, extra: Record<string, unknown> = {}) =>
       runProspectingSearch({ adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
+    const trackingRepo = () => new FakeProspectingRepo();
 
-    it("makes no X read when a full daily set (15) is already waiting", async () => {
+    it("makes no X read when two usable posts are already waiting", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
       const repo = new FakeProspectingRepo();
-      await seedSelectable(repo, 15);
+      await seedSelectable(repo, 2);
       const result = await run(repo, adapter);
       expect(result.skipped).toBe(true);
       expect(result.skipReason).toMatch(/enough_waiting/);
-      expect(result.costUsd).toBe(0);
       expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
     });
 
-    it("searches one topic instead of two once the daily minimum (8) is waiting", async () => {
-      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
-      const repo = new FakeProspectingRepo();
-      await seedSelectable(repo, 8);
-      const result = await run(repo, adapter);
+    it("searches one topic and stops when that already fills the buffer", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([good("a"), good("b"), good("c")]) };
+      const result = await run(new FakeProspectingRepo(), adapter);
       expect(result.skipped).toBe(false);
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
-      expect(result.selectableBefore).toBe(8);
+      expect(result.searchRequests).toBe(1);
+      expect(result.selectableAfter).toBeGreaterThanOrEqual(2);
     });
 
-    it("searches the full slice when fewer than 8 are waiting", async () => {
+    it("moves to the next topic only when the first topic left the buffer short, and never past the slice", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
-      const repo = new FakeProspectingRepo();
-      await seedSelectable(repo, 7);
-      await run(repo, adapter);
+      await run(new FakeProspectingRepo(), adapter);
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(TOPICS_PER_SEARCH_RUN);
     });
 
@@ -338,23 +350,107 @@ describe("runProspectingSearch", () => {
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(TOPICS_PER_SEARCH_RUN);
     });
 
-    it("an owner-triggered search now (runIndexOverride) always searches the full slice", async () => {
-      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+    it("an owner-tapped search now keeps going, topic by topic, until it finds one more usable post (at most 3 topics)", async () => {
+      const calls: string[] = [];
+      const adapter = {
+        searchRecentPosts: vi.fn(async (q: string) => {
+          calls.push(q);
+          return calls.length === 2 ? [good("m1")] : [];
+        }),
+      };
       const repo = new FakeProspectingRepo();
-      await seedSelectable(repo, 15);
+      await seedSelectable(repo, 3);
       const result = await run(repo, adapter, { runIndexOverride: 3 });
-      expect(result.skipped).toBe(false);
-      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(TOPICS_PER_SEARCH_RUN);
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(2);
+      expect(result.selectableAfter).toBe(4);
     });
 
-    it("a thinned run searches the FIRST topic of the same slice, so rotation position is unchanged", async () => {
-      const full = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
-      await run(new FakeProspectingRepo(), full);
-      const thin = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+    it("an owner-tapped search now gives up after 3 topics and says so honestly", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { runIndexOverride: 3 });
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(3);
+      expect(result.skipped).toBe(false);
+      expect(result.selectableAfter).toBe(0);
+    });
+
+    it("asks X for futures posts only (crypto and options left out), and the query stays inside X's limit", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      await run(new FakeProspectingRepo(), adapter);
+      const query = adapter.searchRecentPosts.mock.calls[0]![0] as string;
+      expect(query).toContain("-crypto");
+      expect(query).toContain("-0dte");
+      expect(query).toContain("futures OR MNQ");
+      expect(query.length).toBeLessThan(480);
+    });
+
+    it("drops options, forex, stock and generic-trading posts before storing them", async () => {
+      const adapter = {
+        searchRecentPosts: vi.fn().mockResolvedValue([
+          good("o1", "Selling covered calls on NVDA, how do you size your trading risk?"),
+          good("f1", "Passed my FTMO challenge on EURUSD, how do you manage the daily loss limit?"),
+          good("g1", "How do you stay disciplined with trading psychology and risk management?"),
+          good("ok", "How do you manage the trailing drawdown on a funded account trading ES futures?"),
+        ]),
+      };
       const repo = new FakeProspectingRepo();
-      await seedSelectable(repo, 9);
-      await run(repo, thin);
-      expect(thin.searchRecentPosts.mock.calls[0]![0]).toBe(full.searchRecentPosts.mock.calls[0]![0]);
+      const result = await run(repo, adapter);
+      expect(result.newCandidates).toBe(1);
+      expect(result.excludedAsIrrelevant).toBeGreaterThanOrEqual(3);
+      expect([...repo.rows.values()].map((r) => r.externalId)).toEqual(["ok"]);
+    });
+
+    it("screens the best new posts with the model check, turns the irrelevant one away, and moves on to the next topic", async () => {
+      const repo = trackingRepo();
+      const posts = [good("keep1"), good("drop1", "how do you size positions on your funded account trading ES futures every day?")];
+      const calls = { n: 0 };
+      const adapter = {
+        searchRecentPosts: vi.fn(async () => {
+          calls.n++;
+          return calls.n === 1 ? posts : [good("later1"), good("later2")];
+        }),
+      };
+      const screenRelevance = vi.fn(async (post: { postText: string }) => !post.postText.includes("every day"));
+      const result = await run(repo, adapter, { screenRelevance });
+      expect(screenRelevance).toHaveBeenCalled();
+      expect(result.screenedOut).toBe(1);
+      expect([...repo.rows.values()].find((r) => r.externalId === "drop1")!.status).toBe("not_relevant");
+      expect([...repo.rows.values()].find((r) => r.externalId === "keep1")!.status).toBe("new");
+      expect(result.selectableAfter).toBeGreaterThanOrEqual(2);
+    });
+
+    it("a failed model check never hides a post", async () => {
+      const repo = trackingRepo();
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([good("x1"), good("x2")]) };
+      const screenRelevance = vi.fn(async () => {
+        throw new Error("model unavailable");
+      });
+      const result = await run(repo, adapter, { screenRelevance });
+      expect(result.screenedOut).toBe(0);
+      expect(result.selectableAfter).toBe(2);
+    });
+
+    it("only screens posts that clear the quality bar, and at most 8 a run", async () => {
+      const repo = trackingRepo();
+      const many = Array.from({ length: 12 }, (_, i) => good(`p${i}`));
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(many) };
+      const screenRelevance = vi.fn(async () => true);
+      await run(repo, adapter, { screenRelevance, runIndexOverride: 1 });
+      expect(screenRelevance.mock.calls.length).toBeLessThanOrEqual(8);
+    });
+
+    it("stops at the daily search limit, with a clear reason, before any X read", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => 10 });
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toMatch(/daily_search_cap/);
+      expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+    });
+
+    it("makes only the searches the daily limit still allows", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => 9, runIndexOverride: 5 });
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
+      expect(result.searchRequests).toBe(1);
     });
   });
 });
