@@ -214,3 +214,26 @@ and no credentials were ever obtained. Prospecting is X-only today.
   card that already has a draft returns it without a relevance check or model call.
 - Results' own-tweets read (`x_own_posts`) now runs once a day and asks X only for the tweets whose views can still change.
 - Step summaries for `x_prospecting` and `x_own_posts` end with `X reads: n posts $x; LLM: n calls $y`.
+
+## Futures only, vetted before it is shown, searched on demand (2026-10-24)
+
+Owner direction: Prospecting should only look for futures posts and creators in a prop-firm or own-capital context. Forex, stock,
+options and crypto posts were reaching the queue and the owner was tapping "Search now" four or five times to find one usable post.
+
+- **Futures only.** `prospectingRelevance.ts` now needs at least one futures or futures-prop-firm signal (the word futures, a futures
+  ticker, a futures prop firm or platform, a futures prop rule such as the trailing drawdown or consistency rule). Generic trading
+  words alone no longer qualify. Options, forex and stock posts are excluded unless they also name futures explicitly; "prop firm" alone
+  does not rescue them (forex prop firms exist). Every X query also requires a futures anchor and leaves crypto and options terms
+  out (`FUTURES_QUERY_ANCHORS`, `OPTIONS_QUERY_EXCLUSIONS`), so those posts are never read or paid for.
+- **Vetted before shown.** The cheap model relevance check (about $0.001 a post) now runs at discovery on the best new posts (at most 8 a
+  run, `screenRelevance`), so a post that is not futures prop-firm or own-capital relevant is stored as `not_relevant` and never reaches
+  the queue. A failed check never hides a post.
+- **Search until found.** A scheduled or refill search only tops the queue up to 2 usable posts and stops as soon as that is met (one topic
+  at a time, at most 2). An owner-tapped "Search now" keeps going, topic by topic, until it finds one more usable post, at most 3 topics.
+- **Refill after a reply.** Marking a reply posted starts a background refill (`prospectingRefill.ts`, `waitUntil`), so a fresh post is
+  waiting when the 20-minute cooldown ends. It never throws and cannot delay saving the reply.
+- **Limits.** At most 10 X search requests a day (`DAILY_SEARCH_CAP`, counted from cost events, Arizona day) and a monthly cap of $20
+  (was $15). The Android app shows the new skip reason `daily_search_cap` as the raw text until it is next rebuilt.
+
+Why: October's real spend was about $0.63 a day ($15.17 by the 24th), 113 of 114 discovered posts were too old to use, and the owner's
+replies were reaching a median of 9 views. Revert switches: none needed; the old behavior is in git history (#227 and earlier).

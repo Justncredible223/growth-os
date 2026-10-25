@@ -16,7 +16,7 @@ import { findCreatorIdByHandle } from "../src/creators/supabaseCreatorRepository
 import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/lib/integrationHealth.js";
 import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
-import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
+import { prospectingRunExtras } from "../src/prospecting/prospectingRunDeps.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/video/videoRenderReconciliation.js";
 import { runDailyChartCardRequests } from "../src/video/dailyChartCardRequests.js";
@@ -244,11 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             adapter,
             repo,
             client,
-            getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
-            isPaused: async () => {
-              const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
-              return data?.paused ?? false;
-            },
+            ...prospectingRunExtras(client),
             now,
           });
           if (result.skipped) {

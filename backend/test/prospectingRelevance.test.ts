@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CRYPTO_QUERY_EXCLUSIONS, MIN_PROSPECT_FOLLOWERS, isBroadcastContent, isPlausiblyTradingRelated, isPromoContent, isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
+import { CRYPTO_QUERY_EXCLUSIONS, FUTURES_QUERY_ANCHORS, OPTIONS_QUERY_EXCLUSIONS, isOptionsPost, MIN_PROSPECT_FOLLOWERS, isBroadcastContent, isPlausiblyTradingRelated, isPromoContent, isReplyWorthyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
 
 /**
  * Regression coverage for a real, confirmed bug: Prospecting surfaced
@@ -36,7 +36,9 @@ describe("isPlausiblyTradingRelated", () => {
 
   it("catches other real trading-discipline vocabulary with no 'futures' or 'trading' word present", () => {
     expect(isPlausiblyTradingRelated("Hit my daily loss limit again. Same mistake, third time this month.")).toBe(true);
-    expect(isPlausiblyTradingRelated("Position sizing is the one thing nobody teaches new traders properly.")).toBe(true);
+    // Futures only (2026-10-24): generic risk words with no futures or prop-firm signal no longer qualify.
+    expect(isPlausiblyTradingRelated("Position sizing is the one thing nobody teaches new traders properly.")).toBe(false);
+    expect(isPlausiblyTradingRelated("Position sizing is the one thing nobody teaches new futures traders properly.")).toBe(true);
   });
 
   it("rejects ordinary text that happens to contain short substrings without real trading meaning", () => {
@@ -159,7 +161,7 @@ describe("isPlausiblyTradingRelated -- cryptocurrency spelling and airdrop/KYC s
   });
 
   it("does not falsely exclude unrelated words that merely start with 'crypto' (e.g. cryptography)", () => {
-    expect(isPlausiblyTradingRelated("Learned some cryptography basics while building a trading journal app")).toBe(true);
+    expect(isPlausiblyTradingRelated("Learned some cryptography basics while building a futures trading journal app")).toBe(true);
   });
 });
 
@@ -183,7 +185,7 @@ describe("crypto leakage closed 2026-10-04", () => {
   });
 
   it("wraps each discovery query so the exclusions apply to the whole of an OR", () => {
-    expect(withCryptoExclusions('"a" OR "b"')).toBe('("a" OR "b") ' + CRYPTO_QUERY_EXCLUSIONS);
+    expect(withCryptoExclusions('"a" OR "b"')).toBe('("a" OR "b") ' + FUTURES_QUERY_ANCHORS + ' ' + CRYPTO_QUERY_EXCLUSIONS + ' ' + OPTIONS_QUERY_EXCLUSIONS);
   });
 });
 
@@ -237,5 +239,69 @@ describe("ads and tiny accounts (2026-10-04)", () => {
     expect(isTooSmallToBeWorthIt(0)).toBe(true);
     expect(isTooSmallToBeWorthIt(MIN_PROSPECT_FOLLOWERS)).toBe(false);
     expect(isTooSmallToBeWorthIt(null)).toBe(false);
+  });
+});
+
+describe("options posts are excluded like crypto posts (2026-10-24)", () => {
+  it("catches the options shapes that used to reach the queue", () => {
+    for (const post of [
+      "SPY 0DTE calls printing again, theta crush after the open. Trading risk is real.",
+      "Selling covered calls on NVDA for weekly income. Good trading psychology matters too.",
+      "Iron condor on SPX, max loss defined. Position sizing keeps me in the game as a trader.",
+      "Options trading taught me discipline. My drawdown after one bad week was brutal.",
+      "Bought TSLA puts and the trade went against me. Revenge trading is a killer.",
+      "Credit spreads look safe until implied volatility jumps. Daily loss limit saved me.",
+    ]) {
+      expect(isOptionsPost(post), post).toBe(true);
+      expect(isPlausiblyTradingRelated(post), post).toBe(false);
+    }
+  });
+
+  it("keeps futures and prop-firm posts, including words options traders also use", () => {
+    for (const post of [
+      "Hit my daily loss limit again on my funded account. Futures trading discipline is the real edge.",
+      "Got a margin call style warning on my ES futures account after sizing up. Drawdown matters.",
+      "Contract expiration rollover on NQ futures caught me off guard. Trading plan said to check.",
+      "Our prop firm payout was approved after the consistency rule review. Funded trader life.",
+    ]) {
+      expect(isOptionsPost(post), post).toBe(false);
+      expect(isPlausiblyTradingRelated(post), post).toBe(true);
+    }
+  });
+
+  it("a prop-firm word alone does not rescue an options post; naming futures does", () => {
+    expect(isPlausiblyTradingRelated("Blew my funded account trading 0DTE options. The prop firm drawdown rule was unforgiving for any trader.")).toBe(false);
+    expect(isPlausiblyTradingRelated("Sold 0DTE options for years, now I trade ES futures on a funded account. The drawdown rule is a different game.")).toBe(true);
+  });
+
+  it("the X query exclusions stay under X's 512-character limit for every topic", async () => {
+    const { PROSPECTING_TOPICS } = await import("../src/prospecting/prospectingTopics");
+    for (const topic of PROSPECTING_TOPICS) expect(withCryptoExclusions(topic.query).length + " -is:retweet -is:reply lang:en".length, topic.key).toBeLessThanOrEqual(512);
+  });
+});
+
+describe("futures only (2026-10-24)", () => {
+  it("rejects forex, stock and generic-trading posts, even prop-firm ones, unless they name futures", () => {
+    for (const post of [
+      "Passed my FTMO challenge on EURUSD, the pips added up fast. Prop firm life.",
+      "Forex trader here, my daily loss limit and drawdown rules keep me honest.",
+      "Day trading stocks, my stop loss discipline finally clicked this month.",
+      "Trading psychology is everything. Revenge trading cost me again.",
+      "Risk management and position sizing separate traders from gamblers.",
+    ]) expect(isPlausiblyTradingRelated(post), post).toBe(false);
+  });
+
+  it("keeps futures posts and futures prop-firm posts", () => {
+    for (const post of [
+      "Passed my Topstep combine on MNQ, the trailing drawdown nearly got me.",
+      "Funded account payout approved after the consistency rule review.",
+      "Revenge trading on ES futures cost me my daily loss limit again.",
+      "Apex evaluation reset again. Trailing drawdown is brutal on NQ.",
+      "Trading my own money on futures now, no prop firm. Sizing is the hard part.",
+    ]) expect(isPlausiblyTradingRelated(post), post).toBe(true);
+  });
+
+  it("a forex post that names futures too is kept", () => {
+    expect(isPlausiblyTradingRelated("Moved from forex to ES futures, the pips mindset did not transfer. Funded account next.")).toBe(true);
   });
 });

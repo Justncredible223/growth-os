@@ -53,15 +53,12 @@
 const TRADING_RELEVANCE_PATTERNS: RegExp[] = [
   // Direct domain anchors
   /\bfutures?\b/i,
-  /\bforex\b/i,
   /\btrader\b/i,
   /\btrading\b/i,
   /\bday ?trading\b/i,
   /\bswing trading\b/i,
   /\bscalp(ing|ed|er)?\b/i,
   /\bbacktest(ing|ed)?\b/i,
-  /\bstock market\b/i,
-  /\boptions? market\b/i,
   /\bmarket (maker|open|close)\b/i,
   /\bpremarket\b/i,
   /\bbrokerage\b/i,
@@ -206,12 +203,79 @@ function hasCoinCashtag(postText: string): boolean {
 }
 
 /**
+ * Options-trading posts (2026-10-24, owner: the posts that failed in the queue were crypto or options). Fillbook is a futures and
+ * prop-firm journal; a calls, puts, spreads or 0DTE post is a different audience and a different product, and the shared words
+ * ("trading", "risk", "premium", "stop loss") let them through. Same override as crypto: a post that also carries a clear
+ * futures or prop-firm signal survives. Deliberately specific phrases, not the bare words "call" or "put" or "expiry", which
+ * futures traders also use ("margin call", "contract expiry").
+ */
+const OPTIONS_EXCLUSION_PATTERNS: RegExp[] = [
+  /\b0 ?DTE\b/i,
+  /\b(1|2|3|7|14|30) ?DTE\b/i,
+  /\b(call|put) (option|options|spread|spreads|premium|debit|credit|buyers?|sellers?|writers?|wall|side)\b/i,
+  /\b(calls?|puts?) (on|for) \$?[A-Z]{2,5}\b/,
+  /\b(spy|qqq|iwm|tsla|nvda|aapl|amzn|meta|amd)\s+(calls?|puts?|options?)\b/i,
+  /\b(credit|debit|vertical|calendar|diagonal|bull|bear) (call |put )?spreads?\b/i,
+  /\b(iron|broken wing) (condor|butterfly)\b/i,
+  /\b(covered call|covered calls|cash[- ]secured put|poor man'?s covered call|the wheel strategy|wheel strategy)\b/i,
+  /\b(theta( decay)?|vega|gamma (squeeze|exposure)|implied volatility|IV (crush|rank|percentile)|delta hedg\w*)\b/i,
+  /\boptions? (trading|trader|traders|flow|chain|chains|contracts?|strategy|strategies|premium|premiums|seller|sellers|buyer|buyers|selling|buying|expiry|expiration|income|greeks)\b/i,
+  /\b(strike price|strikes)\b/i,
+  /\b(long|short) (calls?|puts?)\b/i,
+];
+
+export function isOptionsPost(postText: string): boolean {
+  return OPTIONS_EXCLUSION_PATTERNS.some((p) => p.test(postText));
+}
+
+/**
+ * Futures only (2026-10-24, owner: "we should only really be looking for creators and posts that are futures trading, relevant to
+ * either prop firms or self capital"). A post must carry at least one futures or futures-prop-firm signal: the word futures, a
+ * futures contract ticker, a futures prop firm or platform, or a prop/evaluation rule that only futures prop firms use. General
+ * trading words alone (trader, trading, risk management, stop loss) no longer qualify a post, because forex, stock and options
+ * posts use them just as much.
+ */
+const FUTURES_OR_PROP_SIGNAL_PATTERNS: RegExp[] = [
+  /\bfutures?\b/i,
+  /\b(MNQ|NQ|MES|ES|YM|MYM|RTY|M2K|MCL|MGC)\b/,
+  /\b(ninjatrader|tradovate|rithmic|topstepx?|apex trader funding|apex funding|take profit trader|bulenox|myfundedfutures|tradeify|elite trader funding|alpha futures|lucid trading)\b/i,
+  /\bprop (firm|firms|trading|account|accounts)\b/i,
+  /\bfunded (account|accounts|trader|traders)\b/i,
+  /\b(evaluation account|trading combine|payout (request|split|approved|denied)|consistency (rule|cap)|trailing drawdown|daily loss limit)\b/i,
+];
+
+/** Posts about other markets (forex, stocks): excluded unless the post also names futures explicitly. "Prop firm" is not enough, forex prop firms exist. */
+const OTHER_MARKET_PATTERNS: RegExp[] = [
+  /\bforex\b/i,
+  /\bFTMO\b/i,
+  /\b(pips?|lot size|metatrader|MT[45])\b/i,
+  /\b(EUR|GBP|USD|JPY|AUD|NZD|CAD|CHF|XAU)(USD|JPY|CAD|CHF|EUR|GBP)\b/,
+  /\b(stocks?|equities|penny stocks?|day trading stocks?|stock (market|picks?|trading))\b/i,
+];
+
+/** The signals that really mean futures (not just a prop firm): they override the other-market and options exclusions. */
+const EXPLICIT_FUTURES_PATTERNS: RegExp[] = [
+  /\b(futures?|MNQ|NQ|MES|ES|YM|MYM|RTY|M2K|MCL|MGC)\b/,
+  /\bfutures\b/i,
+  /\b(ninjatrader|tradovate|rithmic|topstepx?|take profit trader|bulenox|myfundedfutures|tradeify|elite trader funding|alpha futures|lucid trading)\b/i,
+];
+const explicitFutures = (postText: string) => EXPLICIT_FUTURES_PATTERNS.some((p) => p.test(postText));
+
+/**
  * X search exclusions appended to every discovery query: asking X not to return crypto posts at all, so they never cost a read
  * or reach the filter. The query is wrapped in parentheses so an OR inside a topic query is excluded as a whole.
  */
 export const CRYPTO_QUERY_EXCLUSIONS = "-crypto -bitcoin -btc -ethereum -solana -memecoin -altcoin -airdrop -defi -nft";
+/** The same for options (2026-10-24): asking X not to return them at all means they never cost a read. */
+export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit spread" -"covered call" -"options trading" -"options flow"';
+/**
+ * Futures only (2026-10-24): every discovery query also requires one futures or futures-prop-firm anchor, so X returns futures posts
+ * in the first place instead of generic trading posts the relevance gate would then throw away after we had paid for the read. Each
+ * anchor is one the gate itself accepts (FUTURES_OR_PROP_SIGNAL_PATTERNS), so a post that matches the query passes the gate.
+ */
+export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR "prop firm" OR "funded account" OR "funded trader" OR topstep OR ninjatrader OR tradovate OR rithmic)';
 export function withCryptoExclusions(query: string): string {
-  return `(${query}) ${CRYPTO_QUERY_EXCLUSIONS}`;
+  return `(${query}) ${FUTURES_QUERY_ANCHORS} ${CRYPTO_QUERY_EXCLUSIONS} ${OPTIONS_QUERY_EXCLUSIONS}`;
 }
 
 /**
@@ -253,6 +317,10 @@ export function isPlausiblyTradingRelated(postText: string): boolean {
     const hasFuturesSpecificOverride = FUTURES_SPECIFIC_OVERRIDE_PATTERNS.some((p) => p.test(postText));
     if (!hasFuturesSpecificOverride) return false;
   }
+  // Futures only: options and other-market posts need an explicit futures mention; everything needs a futures or prop signal.
+  if (isOptionsPost(postText) && !explicitFutures(postText)) return false;
+  if (OTHER_MARKET_PATTERNS.some((p) => p.test(postText)) && !explicitFutures(postText)) return false;
+  if (!FUTURES_OR_PROP_SIGNAL_PATTERNS.some((p) => p.test(postText))) return false;
   return true;
 }
 
