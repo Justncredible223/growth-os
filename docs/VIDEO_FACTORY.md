@@ -461,3 +461,12 @@ bubble and was reverted because normal viewers never see it; this one is for pro
 **Offered pool cleared and replaced (2026-10-07).** The 30 daily concepts and `chart-bars-conviction` are no longer offered: they all opened on "what the screen is" and averaged about 100 TikTok views with a 1.9-4.1 s average watch. `OFFERED_DAILY_CONCEPT_IDS` in `backend/src/shortform/motionPlans.ts` now holds only the 9 hook-first concepts of `backend/src/shortform/freshConcepts.ts` (ids `fresh-01-...` to `fresh-09-...`), and `EXTRA_OFFERED_CONCEPT_IDS` is empty. Each opens on a pain or a striking number in its first line, the screen is the proof, and the last line is a question. The old plans stay in the catalog, so a script already drafted or approved from one still renders. `npx tsx scripts/printVoiceScripts.ts` prints the new sheet; add `--legacy` for the older 30 (`docs/VOICE_SCRIPTS.md` is that legacy sheet).
 
 **Thirty-day pool (2026-10-07).** 21 more hook-first concepts (`backend/src/shortform/freshConcepts2.ts`, ids `fresh-10-...` to `fresh-30-...`) join the 9, so `OFFERED_DAILY_CONCEPT_IDS` is now one explicit ordered array of 30 ids (the recording-variants PR swaps fresh-02, fresh-04 and fresh-06 for fresh-02b, 04b, 06b in place). The order puts the strongest hooks in days 1-10, never repeats a recording back to back, and never runs more than two of one lane (prop-firm rule pain / own-money discipline) in a row; the documented list is at the top of `freshConcepts2.ts`. A concept drawn on an older `ui.*` capture carries that capture's own "EXAMPLE DATA" label (`Daily.dataLabel`); every other concept says "Demo data".
+
+## Request order: strategy videos first (2026-10-25)
+
+Strategy-chart videos earned the TikTok follower gain (Oct 19-24); the demo-data explainers did not. The daily refill
+(`src/video/dailyChartCardRequests.ts`, `requestOrder`) therefore requests unused strategy concepts first, with one
+explainer in every four requests so the product message keeps going out. The rule is stateless: it counts strategy and
+explainer concepts already made or waiting, minus the counts when it started (3 strategy, 6 explainer). Day numbers and
+voice sheets do not change, and the app's concept list stays in day order; only the request order and `nextConceptId`
+change. To go back to day order, return `unused` unchanged in `runDailyChartCardRequests`.

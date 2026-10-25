@@ -5,6 +5,7 @@ import { distinctConcepts } from "../src/shortform/conceptVariety";
 import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
 import { DAILY_CONCEPT_ORDER } from "../src/shortform/dailyConcepts";
 import { EXTRA_OFFERED_CONCEPT_IDS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
+import { requestOrder } from "../src/video/dailyChartCardRequests";
 import { LOW_SUPPLY_AT, MAX_CHART_CARDS_WAITING, VIDEO_REQUEST_WEEKDAYS, isVideoRequestDay, offeredChartConcepts, runDailyChartCardRequests, type ConceptState, type DailyChartCardDeps } from "../src/video/dailyChartCardRequests";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
 
@@ -85,11 +86,12 @@ describe("runDailyChartCardRequests", () => {
     expect(requested).toEqual([]);
   });
 
-  it("requests ONE concept a day, the next in the daily order", async () => {
+  it("requests ONE concept a day, the first in the request order (strategy videos first)", async () => {
     expect(MAX_CHART_CARDS_WAITING).toBe(1);
     const { d, requested } = deps();
     const report = await runDailyChartCardRequests(d);
-    expect(requested).toEqual([concepts[0]!.id]);
+    expect(requested).toEqual([requestOrder(concepts, [])[0]!.id]);
+    expect(requested[0]).toMatch(/^strategy-/);
     expect(report).toContain("requested 1");
   });
 
@@ -152,5 +154,29 @@ describe("the daily refill stays wired in and stays inside its limits", () => {
   it("the one-a-day check only reads: it never writes or calls a procedure", () => {
     const code = strip(read("src/video/dailyLimit.ts"));
     expect(code).not.toMatch(/\.insert\(|\.update\(|\.upsert\(|\.delete\(|\.rpc\(/);
+  });
+});
+
+describe("requestOrder: strategy videos first, one explainer in four (2026-10-25)", () => {
+  const c = (id: string) => ({ id });
+  const unused = [c("explain-08"), c("strategy-02"), c("explain-09"), c("strategy-03"), c("strategy-05"), c("strategy-07")];
+  const used = (strategy: number, explainer: number) => [...Array.from({ length: strategy }, (_, i) => `strategy-u${i}`), ...Array.from({ length: explainer }, (_, i) => `explain-u${i}`)];
+
+  it("puts strategy concepts first, in day order, when no explainer is due", () => {
+    expect(requestOrder(unused, used(3, 6)).map((x) => x.id)).toEqual(["strategy-02", "strategy-03", "strategy-05", "strategy-07", "explain-08", "explain-09"]);
+  });
+
+  it("asks for an explainer after three strategy videos since the switch, then three more strategy videos", () => {
+    expect(requestOrder(unused, used(5, 6))[0]!.id).toBe("strategy-02");
+    expect(requestOrder(unused, used(6, 6))[0]!.id).toBe("explain-08");
+    expect(requestOrder(unused, used(6, 7))[0]!.id).toBe("strategy-02");
+    expect(requestOrder(unused, used(8, 7))[0]!.id).toBe("strategy-02");
+    expect(requestOrder(unused, used(9, 7))[0]!.id).toBe("explain-08");
+  });
+
+  it("falls back to explainers when no strategy concept is left, and keeps every concept", () => {
+    const onlyExplainers = [c("explain-08"), c("explain-09")];
+    expect(requestOrder(onlyExplainers, used(3, 6)).map((x) => x.id)).toEqual(["explain-08", "explain-09"]);
+    expect(requestOrder(unused, used(3, 6))).toHaveLength(unused.length);
   });
 });

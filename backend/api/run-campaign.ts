@@ -11,6 +11,7 @@ import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "..
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 import { motionRequestedToday, nextDayStart, oneADayMessage } from "../src/video/dailyLimit.js";
+import { requestOrder } from "../src/video/dailyChartCardRequests.js";
 import { MOTION_SCENE_PLANS, dailyPosition, isOfferedPlan } from "../src/shortform/motionPlans.js";
 import { distinctConcepts } from "../src/shortform/conceptVariety.js";
 import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
@@ -170,6 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const used = listMotionConcepts().filter((c) => isOffered(c.id) && ["made", "waiting"].includes(states.get(manualMotionConceptTitle(c)) ?? "")).map((c) => c.id);
       // Day order (1-30, then the extra offered concepts): the catalog order puts older concepts first, and nextConceptId is the first one listed.
       const motionConcepts = distinctConcepts(unused, used, planFor).sort((x, y) => dailyPosition(x.id) - dailyPosition(y.id));
+      // The list stays in day order; nextConceptId follows the request order (strategy videos first, one explainer in four; see requestOrder in dailyChartCardRequests.ts), so it matches what the refill requests next.
       const requestedToday = await motionRequestedToday(getServiceClient());
       const offeredIds = new Set(motionConcepts.map((c) => c.id));
       res.status(200).json({
@@ -177,7 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Each concept carries its day number (1-30, the fixed daily order); nextConceptId is the first one on offer, i.e. what the
         // daily refill will request next.
         motionConcepts: motionConcepts.map((c) => ({ ...c, day: dayOf(c.id) })),
-        nextConceptId: motionConcepts[0]?.id ?? null,
+        nextConceptId: requestOrder(motionConcepts, used)[0]?.id ?? null,
         // One request a day (owner rule, 2026-10-03): the concept already requested today, if any, and when the next request opens.
         dailyLimit: { requestedToday, nextRequestAt: requestedToday ? nextDayStart(new Date()).toISOString() : null },
         // Unused concepts left out because they are near-copies of one that is made, waiting or offered above.
