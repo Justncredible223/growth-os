@@ -594,3 +594,51 @@ describe("the creator watchlist in the search loop (2026-10-25)", () => {
     expect([...repo.rows.values()][0]!.discoveryQuery).toBe("futures_trader");
   });
 });
+
+describe("the funnel is recorded on each request's cost event (2026-10-25)", () => {
+  const now = new Date("2026-09-01T12:00:00Z");
+  const p = (id: string, text: string) =>
+    searchResult({ id, text, authorId: `a-${id}`, authorHandle: `h${id}`, authorFollowerCount: 5000, createdAt: new Date(now.getTime() - 60 * 60 * 1000), publicMetrics: { reply_count: 2, like_count: 6 } });
+
+  it("counts the posts dropped by each free gate, the ones kept and the ones the model turned away, with samples", async () => {
+    const events: any[] = [];
+    const client = { from: () => ({ insert: async (row: any) => (events.push(row), { error: null }) }) } as any;
+    const posts = [
+      p("o1", "Selling covered calls on NVDA, how do you size your trading risk?"),
+      p("f1", "Passed my FTMO challenge on EURUSD, how do you manage the daily loss limit?"),
+      p("n1", "Video later today on how to pass prop firm challenges with a higher success rate"),
+      p("k1", "How do you manage the trailing drawdown on a funded account trading ES futures?"),
+      p("k2", "Revenge trading cost me my funded NQ futures account again. How do you stop it?"),
+    ];
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(posts) };
+    const repo = new FakeProspectingRepo();
+    const screenRelevance = vi.fn(async (post: { postText: string }) => !post.postText.includes("Revenge"));
+    await runProspectingSearch({ adapter: adapter as any, repo, client, getMonthSpendUsd: async () => 0, now, screenRelevance, runIndexOverride: 1 });
+    expect(events.length).toBeGreaterThan(0);
+    const ev = events[0];
+    expect(ev.event_type).toBe("x_search_read");
+    expect(ev.context.read).toBe(5);
+    expect(ev.context.funnel.gate).toMatchObject({ options: 1, forex_stock: 1, no_futures_evidence: 1, model_screen: 1 });
+    expect(ev.context.funnel.inserted).toBe(2);
+    expect(ev.context.funnel.screenedOut).toBe(1);
+    expect(ev.context.funnel.kept.length).toBe(2);
+    const whys = ev.context.funnel.samples.map((s: { why: string }) => s.why);
+    expect(whys).toEqual(expect.arrayContaining(["options", "forex_stock", "no_futures_evidence", "model_screen"]));
+    expect(ev.context.funnel.samples[0].t.length).toBeLessThanOrEqual(110);
+    expect(ev.cost_usd).toBeCloseTo(5 * 0.005, 6);
+  });
+
+  it("still records the cost event if processing a request throws", async () => {
+    const events: any[] = [];
+    const client = { from: () => ({ insert: async (row: any) => (events.push(row), { error: null }) }) } as any;
+    const repo = new FakeProspectingRepo();
+    repo.upsertIfNew = async () => {
+      throw new Error("db down");
+    };
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([p("k1", "How do you manage the trailing drawdown on a funded account trading ES futures?")]) };
+    await expect(runProspectingSearch({ adapter: adapter as any, repo, client, getMonthSpendUsd: async () => 0, now, runIndexOverride: 1 })).rejects.toThrow("db down");
+    expect(events).toHaveLength(1);
+    expect(events[0].cost_usd).toBeCloseTo(0.005, 6);
+  });
+});
+

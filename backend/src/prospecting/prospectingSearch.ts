@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
-import { recordXSearchCostEvent } from "../cost/costTracking.js";
+import { X_SEARCH_COST_PER_READ_USD, recordXSearchCostEvent } from "../cost/costTracking.js";
 import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.js";
-import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, withCryptoExclusions } from "./prospectingRelevance.js";
+import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, whyNotReplyWorthy, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   DAILY_SEARCH_BUDGET_USD,
@@ -270,98 +270,126 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     searchedToday++;
     searched.push(...(fromWatchlist ? ["watchlist"] : groupTopics.map((t) => t.key)));
     postsRead += results.length;
-    const requestCost = await recordXSearchCostEvent(deps.client, results.length, fromWatchlist ? { watchlist: true, creators: request.kind === "creators" ? request.handles.length : 0, query: groupQuery } : { topics: groupTopics.map((t) => t.key), query: groupQuery });
+    const requestCost = results.length * X_SEARCH_COST_PER_READ_USD;
     costUsd += requestCost;
     spentToday += requestCost;
 
-    const created: Array<{ id: string; postText: string; discoveryQuery: string; authorHandle: string | null; score: number }> = [];
-    for (const post of results) {
-      // A watched creator's post is matched to the best topic by its words, else to the general futures-trader topic.
-      const topic = fromWatchlist ? topicForPost([...PROSPECTING_TOPICS.filter((t) => t.key === "futures_trader"), ...PROSPECTING_TOPICS], post.text) : topicForPost(groupTopics, post.text);
-      // Same $0 mechanical gate applied at queue-read time
-      // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
-      // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
-      // newsletters, AI-trading-agent hype) is never written to prospecting_candidates in the first place.
-      if (!isReplyWorthyBase(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
-        excludedAsIrrelevant++;
-        continue;
-      }
+    // What happened to each post of this request (2026-10-25): recorded on the same cost event, so it can be read back with
+    // GET /api/summary?view=prospecting-runs and nobody has to guess where posts die.
+    const funnel = { gate: {} as Record<string, number>, inserted: 0, duplicates: 0, screened: 0, screenedOut: 0, samples: [] as Array<{ t: string; why: string; a: string | null }>, kept: [] as string[] };
+    const brief = (text: string) => text.replace(/\s+/g, " ").slice(0, 110);
+    const drop = (why: string, post: { text: string; authorHandle?: string | null }) => {
+      funnel.gate[why] = (funnel.gate[why] ?? 0) + 1;
+      if (funnel.samples.length < 10) funnel.samples.push({ t: brief(post.text), why, a: post.authorHandle ?? null });
+    };
+    try {
 
-      let previouslyEngaged = false;
-      if (post.authorId) {
-        if (priorOutreachCache.has(post.authorId)) {
-          previouslyEngaged = priorOutreachCache.get(post.authorId)!;
-        } else {
-          previouslyEngaged = await deps.repo.hasPriorOutreach("x", post.authorId);
-          priorOutreachCache.set(post.authorId, previouslyEngaged);
+      const created: Array<{ id: string; postText: string; discoveryQuery: string; authorHandle: string | null; score: number }> = [];
+      for (const post of results) {
+        // A watched creator's post is matched to the best topic by its words, else to the general futures-trader topic.
+        const topic = fromWatchlist ? topicForPost([...PROSPECTING_TOPICS.filter((t) => t.key === "futures_trader"), ...PROSPECTING_TOPICS], post.text) : topicForPost(groupTopics, post.text);
+        // Same $0 mechanical gate applied at queue-read time
+        // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
+        // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
+        // newsletters, AI-trading-agent hype) is never written to prospecting_candidates in the first place.
+        if (!isReplyWorthyBase(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
+          excludedAsIrrelevant++;
+          drop(isTooSmallToBeWorthIt(post.authorFollowerCount) ? "small_author" : (whyNotReplyWorthy(post.text) ?? "other"), post);
+          continue;
+        }
+
+        let previouslyEngaged = false;
+        if (post.authorId) {
+          if (priorOutreachCache.has(post.authorId)) {
+            previouslyEngaged = priorOutreachCache.get(post.authorId)!;
+          } else {
+            previouslyEngaged = await deps.repo.hasPriorOutreach("x", post.authorId);
+            priorOutreachCache.set(post.authorId, previouslyEngaged);
+          }
+        }
+
+        const scoreResult = scoreProspectingCandidate({
+          topic,
+          postText: post.text,
+          postCreatedAt: post.createdAt,
+          publicMetrics: post.publicMetrics,
+          authorFollowerCount: post.authorFollowerCount,
+          authorVerified: post.authorVerified,
+          previouslyEngaged,
+          fromWatchlist,
+          now,
+        });
+
+        if (scoreResult.excluded) {
+          excludedAsSpam++;
+          drop("spam", post);
+          continue;
+        }
+        // Sales funnels (academy / course / signal seller / "DM me" / CFD-broker promo / hashtag- or link-only posts) are counted
+        // with spam: they are the same kind of post, and they never reach the queue.
+        if (isSalesFunnelOrEmptyPost(post.text)) {
+          excludedAsSpam++;
+          drop("sales_funnel", post);
+          continue;
+        }
+
+        const { id, created: isNew } = await deps.repo.upsertIfNew({
+          platform: "x",
+          externalId: post.id,
+          discoveryQuery: topic.key,
+          authorHandle: post.authorHandle,
+          authorExternalId: post.authorId,
+          authorName: post.authorName,
+          authorFollowerCount: post.authorFollowerCount,
+          authorVerified: post.authorVerified,
+          postText: post.text,
+          postUrl: `https://x.com/i/web/status/${post.id}`,
+          postCreatedAt: post.createdAt ? post.createdAt.toISOString() : null,
+          publicMetrics: post.publicMetrics ?? {},
+          opportunityScore: scoreResult.score,
+          scoreBreakdown: scoreResult.breakdown,
+          creatorCandidate: (post.authorFollowerCount ?? 0) >= 2000,
+          discoveredAt: now.toISOString(),
+        });
+        if (!isNew) funnel.duplicates++;
+        if (isNew) {
+          funnel.inserted++;
+          if (funnel.kept.length < 4) funnel.kept.push(brief(post.text));
+          newCandidates++;
+          created.push({ id, postText: post.text, discoveryQuery: topic.key, authorHandle: post.authorHandle, score: scoreResult.score });
         }
       }
 
-      const scoreResult = scoreProspectingCandidate({
-        topic,
-        postText: post.text,
-        postCreatedAt: post.createdAt,
-        publicMetrics: post.publicMetrics,
-        authorFollowerCount: post.authorFollowerCount,
-        authorVerified: post.authorVerified,
-        previouslyEngaged,
-        fromWatchlist,
-        now,
+      // Screen the best new posts with the cheap model check before they can be shown. Only posts that could clear the daily quality
+      // bar are worth the call; a turned-away post is stored as not_relevant (so it is never found and screened twice).
+      if (deps.screenRelevance) {
+        const candidates = created.filter((c) => c.score >= MIN_DAILY_SET_SCORE).sort((a, b) => b.score - a.score);
+        for (const c of candidates) {
+          if (screenedChecked >= VET_MAX_PER_RUN) break;
+          screenedChecked++;
+          funnel.screened++;
+          let relevant = true;
+          try {
+            relevant = await deps.screenRelevance({ postText: c.postText, discoveryQuery: c.discoveryQuery, authorHandle: c.authorHandle });
+          } catch {
+            relevant = true; // a failed check never hides a post
+          }
+          if (!relevant) {
+            await deps.repo.updateStatus(c.id, "not_relevant", { skipReason: "screened_out_at_discovery" });
+            screenedOut++;
+            funnel.screenedOut++;
+            drop("model_screen", { text: c.postText, authorHandle: c.authorHandle });
+          }
+        }
+      }
+
+    } finally {
+      await recordXSearchCostEvent(deps.client, results.length, {
+        ...(fromWatchlist ? { watchlist: true, creators: request.kind === "creators" ? request.handles.length : 0 } : { topics: groupTopics.map((t) => t.key) }),
+        query: groupQuery,
+        read: results.length,
+        funnel,
       });
-
-      if (scoreResult.excluded) {
-        excludedAsSpam++;
-        continue;
-      }
-      // Sales funnels (academy / course / signal seller / "DM me" / CFD-broker promo / hashtag- or link-only posts) are counted
-      // with spam: they are the same kind of post, and they never reach the queue.
-      if (isSalesFunnelOrEmptyPost(post.text)) {
-        excludedAsSpam++;
-        continue;
-      }
-
-      const { id, created: isNew } = await deps.repo.upsertIfNew({
-        platform: "x",
-        externalId: post.id,
-        discoveryQuery: topic.key,
-        authorHandle: post.authorHandle,
-        authorExternalId: post.authorId,
-        authorName: post.authorName,
-        authorFollowerCount: post.authorFollowerCount,
-        authorVerified: post.authorVerified,
-        postText: post.text,
-        postUrl: `https://x.com/i/web/status/${post.id}`,
-        postCreatedAt: post.createdAt ? post.createdAt.toISOString() : null,
-        publicMetrics: post.publicMetrics ?? {},
-        opportunityScore: scoreResult.score,
-        scoreBreakdown: scoreResult.breakdown,
-        creatorCandidate: (post.authorFollowerCount ?? 0) >= 2000,
-        discoveredAt: now.toISOString(),
-      });
-      if (isNew) {
-        newCandidates++;
-        created.push({ id, postText: post.text, discoveryQuery: topic.key, authorHandle: post.authorHandle, score: scoreResult.score });
-      }
-    }
-
-    // Screen the best new posts with the cheap model check before they can be shown. Only posts that could clear the daily quality
-    // bar are worth the call; a turned-away post is stored as not_relevant (so it is never found and screened twice).
-    if (deps.screenRelevance) {
-      const candidates = created.filter((c) => c.score >= MIN_DAILY_SET_SCORE).sort((a, b) => b.score - a.score);
-      for (const c of candidates) {
-        if (screenedChecked >= VET_MAX_PER_RUN) break;
-        screenedChecked++;
-        let relevant = true;
-        try {
-          relevant = await deps.screenRelevance({ postText: c.postText, discoveryQuery: c.discoveryQuery, authorHandle: c.authorHandle });
-        } catch {
-          relevant = true; // a failed check never hides a post
-        }
-        if (!relevant) {
-          await deps.repo.updateStatus(c.id, "not_relevant", { skipReason: "screened_out_at_discovery" });
-          screenedOut++;
-        }
-      }
     }
 
     selectableNow = await countSelectable();

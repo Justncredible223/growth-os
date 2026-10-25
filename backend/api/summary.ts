@@ -502,6 +502,28 @@ async function handleXFeedPostHistory(req: VercelRequest, res: VercelResponse): 
   }
 }
 
+/**
+ * `GET /api/summary?view=prospecting-runs` (2026-10-25): the latest X search requests Prospecting made, each with what happened to the
+ * posts it read (dropped by which free gate, kept, turned away by the model check) and a few short samples. Read-only, from the cost
+ * events the search already writes; no new table.
+ */
+async function handleProspectingRuns(res: VercelResponse): Promise<void> {
+  try {
+    const client = getServiceClient();
+    const { data, error } = await client
+      .from("cost_events")
+      .select("created_at, cost_usd, context")
+      .eq("event_type", "x_search_read")
+      .order("created_at", { ascending: false })
+      .limit(60);
+    if (error) throw new Error(error.message);
+    const runs = (data ?? []).map((r) => ({ at: r.created_at as string, costUsd: Number(r.cost_usd ?? 0), ...((r.context as Record<string, unknown> | null) ?? {}) }));
+    res.status(200).json({ runs });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
 async function handleCostSummary(res: VercelResponse): Promise<void> {
   try {
     const client = getServiceClient();
@@ -573,6 +595,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.method === "GET" && req.query.view === "cost") {
     await handleCostSummary(res);
+    return;
+  }
+  if (req.method === "GET" && req.query.view === "prospecting-runs") {
+    await handleProspectingRuns(res);
     return;
   }
 

@@ -290,3 +290,13 @@ people instead (`prospectingWatchlist.ts`).
   else "Futures trader".
 - **Why.** Replies under the same few creators build a relationship, and the follower range (1k to 300k) is the size of account that reads
   and answers replies.
+
+## The funnel log (2026-10-25)
+
+Two days in a row the daily search budget was spent and the queue still had nothing usable, with no record of where posts died. Each X
+search request now writes what happened to its posts on the same `x_search_read` cost event (`context.funnel`): posts dropped by each free
+gate (`options`, `forex_stock`, `crypto`, `no_futures_evidence`, `not_trading`, `promo`, `broadcast`, `ai_hype`, `small_author`, `spam`,
+`sales_funnel`), posts inserted, duplicates, how many the model check looked at and turned away (`model_screen`), up to 10 short samples
+of dropped posts with the reason, and up to 4 kept ones. Read it with `GET /api/summary?view=prospecting-runs` (latest 60 requests, newest
+first). The cost event is written after the request is processed, in a `finally`, so spend is still recorded if processing fails.
+`whyNotReplyWorthy` in `prospectingRelevance.ts` gives the first reason a post fails the free gate and agrees with `isReplyWorthyPost`.
