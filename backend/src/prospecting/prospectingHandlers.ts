@@ -13,6 +13,7 @@ import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance
 import { matchPostedStyle, optionSoftProblem, postMentionsFillbook, type DraftOption } from "./prospectingDraftOptions.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
+import { SHOWCASE_IDS, SHOWCASE_NONE } from "../content/fillbookShowcase.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
 import type { ProspectingCandidate, ProspectingRepository } from "./types.js";
 
@@ -161,6 +162,21 @@ export async function listProspectingHistory(client: SupabaseClient, limit = 100
 }
 
 /**
+ * Option C (the Fillbook option, 2026-10-25): returned only when it is allowed, names Fillbook, picks one vetted view, has no link and
+ * passes the same hard guardrails as the other options (banned phrases, unverified or profit claims, dashes, length). Anything else
+ * drops it quietly; it must never cost the owner options A and B.
+ */
+export function acceptedFillbookOption(candidate: ProspectingDraftResult, allowed: boolean): DraftOption | null {
+  const text = candidate.fillbookReply?.trim();
+  if (!allowed || !text) return null;
+  if (!namesFillbook(text)) return null;
+  if (candidate.usesLink || !candidate.showcase || candidate.showcase === SHOWCASE_NONE || !SHOWCASE_IDS.includes(candidate.showcase)) return null;
+  if (checkReplyGuardrails(text, false)) return null;
+  if (optionSoftProblem("fillbook", text)) return null;
+  return { style: "fillbook", text };
+}
+
+/**
  * Drafts exactly one reply for a human to review/edit/copy themselves --
  * same no-send guarantee as draftResponseForInbound. Persists the draft
  * and the model's own mentionsFillbook/usesLink flags (checked, not
@@ -242,6 +258,8 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   const mentionBudget = computeMentionBudget(await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
   if (!recovery.active && mentionBudget.exhausted) draftContext.recoveryNote = MENTION_BUDGET_DRAFT_NOTE;
   const mustOmitFillbook = recovery.active || mentionBudget.exhausted;
+  // Option C (the Fillbook option) is offered unless recovery mode or the mention budget says to leave Fillbook out.
+  draftContext.fillbookOption = !mustOmitFillbook;
   // A draft with a real problem (banned phrase, link, unverified claim, dash, over X's length limit) is
   // regenerated with the reason fed back, up to MAX_DRAFT_ATTEMPTS, and never shown. A draft with only a
   // soft style tell ("most traders", a question tacked on the end, too many sentences) gets ONE retry and
@@ -321,6 +339,9 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
         { style: "sharp", text: accepted.reply },
         { style: "helpful", text: accepted.helpfulReply },
       ];
+      // Option C never blocks A and B: if it is missing, not allowed, names no vetted view, or fails a hard check, it is simply left out.
+      const fillbook = acceptedFillbookOption(accepted, !mustOmitFillbook);
+      if (fillbook) options.push(fillbook);
     }
   } else {
     options = [bestPartial!.option];
@@ -338,7 +359,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   await repo.updateStatus(id, "ready", {
     draftReply: options ? options[0]!.text : finalReply,
     ...(options ? { draftOptions: options } : {}),
-    replyMentionsFillbook: draft.mentionsFillbook,
+    replyMentionsFillbook: options ? options.some((o) => o.style === "fillbook") || draft.mentionsFillbook : draft.mentionsFillbook,
     replyUsedLink: draft.usesLink,
   });
 

@@ -29,7 +29,7 @@ export type PostedStyleByCandidate = Map<string, string>;
 
 /** A style needs at least this many replies read back before its median is shown. */
 export const STYLE_MIN_SAMPLE = 3;
-const STYLE_ORDER = ["sharp", "helpful", "edited", "legacy"] as const;
+const STYLE_ORDER = ["sharp", "helpful", "fillbook", "edited", "legacy"] as const;
 
 /**
  * "Reply style results" (reply-style experiment, 2026-10-16): median views and likes per posted-style tag for replies that
@@ -44,7 +44,7 @@ export function replyStyleSection(posts: OwnPostRow[], styles: PostedStyleByCand
     groups.set(tag, [...(groups.get(tag) ?? []), p]);
   }
   const enough = (tag: string) => (groups.get(tag)?.length ?? 0) >= STYLE_MIN_SAMPLE;
-  if (!enough("sharp") && !enough("helpful")) return null;
+  if (!enough("sharp") && !enough("helpful") && !enough("fillbook")) return null;
   const lines = ["Reply style results (replies tied to a Prospecting post):"];
   for (const tag of STYLE_ORDER) {
     const rows = groups.get(tag);

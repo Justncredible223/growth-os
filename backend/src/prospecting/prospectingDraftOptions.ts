@@ -5,7 +5,7 @@ import { checkReplySoftStyle } from "../content/xReplyGuardrails.js";
  * call so the owner can pick, and which one was actually posted is recorded so the Monday review can compare
  * views and likes per style. Nothing here posts anything; the owner still posts every reply by hand.
  */
-export type DraftStyle = "sharp" | "helpful";
+export type DraftStyle = "sharp" | "helpful" | "fillbook";
 
 export interface DraftOption {
   style: DraftStyle;
@@ -74,6 +74,10 @@ export function optionSoftProblem(style: DraftStyle, text: string): string | nul
     return null;
   }
   const sentences = sentenceCount(text);
+  if (style === "fillbook") {
+    if (!/\bfillbook/i.test(text)) return "does not name Fillbook; the Fillbook option must name it and one view";
+    return sentences > HELPFUL_MAX_SENTENCES ? `runs ${sentences} sentences; the Fillbook option is at most ${HELPFUL_MAX_SENTENCES}` : null;
+  }
   if (sentences > HELPFUL_MAX_SENTENCES) return `runs ${sentences} sentences; the helpful option is at most ${HELPFUL_MAX_SENTENCES}`;
   return null;
 }
@@ -93,7 +97,7 @@ export function parseDraftOptions(raw: unknown): DraftOption[] | null {
   for (const item of value) {
     const style = (item as { style?: unknown })?.style;
     const text = (item as { text?: unknown })?.text;
-    if ((style === "sharp" || style === "helpful") && typeof text === "string" && text.trim()) out.push({ style, text });
+    if ((style === "sharp" || style === "helpful" || style === "fillbook") && typeof text === "string" && text.trim()) out.push({ style, text });
   }
   return out.length > 0 ? out : null;
 }

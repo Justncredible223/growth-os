@@ -242,3 +242,21 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
 
 Why: October's real spend was about $0.63 a day ($15.17 by the 24th), 113 of 114 discovered posts were too old to use, and the owner's
 replies were reaching a median of 9 views. Revert switches: none needed; the old behavior is in git history (#227 and earlier).
+
+## The Fillbook option, option C (2026-10-25)
+
+Owner direction: the replies should market Fillbook when it fits, not only talk to people. Since the Oct 16 two-option test, neither
+cold reply ever named Fillbook (the account's Results showed replies that did reached the fewest people, from a very small sample).
+
+- **A third draft option, "fillbook".** Alongside "sharp" and "helpful", the draft may carry `fillbookReply`: one useful point about their
+  situation, then ONE sentence naming Fillbook and what one vetted view would show them (Account Health buffer, the Reports splits, the
+  rule simulator, Edge Score; `formatShowcaseViews()`). Two sentences at most, no link, no pitch phrases, no promise. Sharp and helpful
+  still never name Fillbook unless the post asked about it.
+- **Offered only when allowed.** Not while recovery mode is on, and not once more than 1 in 5 of the last 12 posted replies named
+  Fillbook (`prospectingMentionBudget.ts`). The model is told ALLOWED or NOT ALLOWED in the user message and may leave it empty when no
+  view fits.
+- **Never costs the other two.** The handler keeps the option only if it names Fillbook, picks one real view, has no link and passes
+  the same guardrails (`acceptedFillbookOption`); otherwise it is dropped without a retry.
+- **Measured.** Posted text is matched back to the option (`posted_style = "fillbook"`), and the Monday review's "Reply style results"
+  lists it with median views and likes next to sharp and helpful. The Android app labels any option style, so it shows as a
+  "Fillbook" tab with no app rebuild.

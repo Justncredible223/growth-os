@@ -1,6 +1,6 @@
 import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
 import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
-import { SHOWCASE_IDS, SHOWCASE_REPLY_GUIDANCE } from "../content/fillbookShowcase.js";
+import { SHOWCASE_IDS, SHOWCASE_REPLY_GUIDANCE, formatShowcaseViews } from "../content/fillbookShowcase.js";
 import { formatStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { PROSPECTING_TWO_OPTION_DRAFTS, SHARP_MAX_WORDS, SHARP_MIN_WORDS } from "./prospectingDraftOptions.js";
 
@@ -55,10 +55,15 @@ const TWO_OPTION_DRAFT_SCHEMA = {
       type: "string",
       description: 'OPTION B, "helpful": at most two sentences with one concrete thing (a number, rule or situation) tied to a specific detail in THEIR post. Empty string when isRelevant is false.',
     },
-    mentionsFillbook: { type: "boolean", description: "True only if EITHER option actually names Fillbook (almost always false for a cold reply)." },
-    usesLink: { type: "boolean", description: "Always false for a cold reply: neither option may contain a link." },
+    fillbookReply: {
+      type: "string",
+      description:
+        'OPTION C, "fillbook": ONLY when the user message says option C is ALLOWED and one Fillbook view genuinely fits THEIR post. One useful point about their situation, then one sentence that names Fillbook and what that one view would show them. Two sentences at most, under 280 characters, no link. Empty string when not allowed, when no view fits, or when isRelevant is false.',
+    },
+    mentionsFillbook: { type: "boolean", description: "True only if an option actually names Fillbook (normally only the Fillbook option, option C). False in every other case." },
+    usesLink: { type: "boolean", description: "Always false for a cold reply: no option may contain a link." },
   },
-  required: ["isRelevant", "reply", "helpfulReply", "mentionsFillbook", "usesLink", "showcase"],
+  required: ["isRelevant", "reply", "helpfulReply", "fillbookReply", "mentionsFillbook", "usesLink", "showcase"],
 };
 
 /**
@@ -72,7 +77,7 @@ other rule above still applies to BOTH options: no em or en dashes, no praise op
 tacked onto the end, nothing about "most traders", no invented first-person trading experience or results, no links, no
 promise of profit, no ask to follow or like, no giveaway, plan or price unless they asked, proper capitalization, under 280
 characters, no emoji or hashtags).
-Write TWO different replies to the SAME post in one answer and put them in "reply" and "helpfulReply":
+Write TWO different replies to the SAME post in one answer and put them in "reply" and "helpfulReply", plus an optional third in "fillbookReply" (option C, see below):
 - OPTION A, "sharp" (the "reply" field): ONE line of ${SHARP_MIN_WORDS} to ${SHARP_MAX_WORDS} words that reacts to a specific detail in THEIR post.
   It is a plain observation, a direct answer to what they asked, or the concrete consequence of their situation, said the way a
   trader would text it to a friend. No mechanic lecture, no explainer, no product. Name something from THEIR post (a number, a
@@ -87,18 +92,31 @@ Write TWO different replies to the SAME post in one answer and put them in "repl
   (which column, which trades, what the numbers would be), because that is how a journaling team thinks about it. It is the
   lens, not a product mention: do not name Fillbook, a screen, or a feature, and never say a tool would catch it.
 - The two options must differ in substance, not just wording.
-- Neither option names Fillbook, hints at it, or shows a Fillbook view, unless the person's post asked about Fillbook. Set
-  mentionsFillbook=false, usesLink=false and showcase="none" in every ordinary case. Lines above that ask you to add a Fillbook
-  view or sentence do not apply to this cold reply.
+- OPTION A and OPTION B never name Fillbook, hint at it, or show a Fillbook view, unless the person's post asked about Fillbook.
+  Lines above that ask you to add a Fillbook view or sentence do not apply to A or B.
+- OPTION C, "fillbook" (the "fillbookReply" field), is the ONLY option that may market Fillbook, and only when the user message says
+  option C is ALLOWED and one of the Fillbook views below genuinely fits THIS post's exact problem. Then: first one specific, useful
+  point about their situation (the rule, the number, or what is likely going on), plain and short; then ONE sentence that names
+  Fillbook and says concretely what that one view would show them, in the terms of their post ("Fillbook's By setup view would put
+  that ORB on its own row with its own win rate and net P&L, so a green month can't hide it" is the shape; "we track that in
+  Fillbook" is too vague). Two sentences at most, under 280 characters, no link, no "check it out", no "try it", no discount, no
+  ask to follow, no promise or hint of profit or improvement, never an invented number about their account, never real-time
+  monitoring or alerts. Read whether they trade a prop firm or their own money and only show a view for that kind of trader; if you
+  cannot tell, choose a view for either or leave option C empty. Keep it about the view: no "we built it" and no first person.
+  If option C is NOT ALLOWED, or no view fits, set fillbookReply to an empty string, mentionsFillbook=false and showcase="none".
+  When you write option C, set mentionsFillbook=true and showcase to that view's id.
+  The Fillbook views you may show (the ONLY product capabilities you may describe):
+${formatShowcaseViews()}
+- usesLink is always false.
 - If you cannot write a genuinely specific option A or B for this post, set isRelevant=false rather than padding.`;
 
 /**
  * Replaces the platform's no-pitch guidance in two-option mode: cold replies almost never name Fillbook (the account's own data
  * shows the ones that do reach the fewest people).
  */
-export const PROSPECTING_COLD_NO_PITCH_GUIDANCE = `For this cold reply Fillbook is NOT part of the answer. Do not name it in either option, set mentionsFillbook=false and
-usesLink=false and showcase="none". The only exception is a post that asks about Fillbook itself. The existing mention cap and
-recovery-mode rule (when stated in the notes below) still apply and always mean: leave it out.`;
+export const PROSPECTING_COLD_NO_PITCH_GUIDANCE = `For this cold reply, options A and B leave Fillbook out entirely. Option C (the Fillbook option) may name Fillbook only when the
+user message says it is ALLOWED and a vetted view fits the post (see the option C rules). The existing mention cap and recovery-mode
+rule (when stated in the notes below) always mean option C is NOT ALLOWED.`;
 
 /**
  * Everything about a reply that legitimately differs by platform: what
@@ -259,6 +277,8 @@ export interface ProspectingDraftContext {
   retryFeedback?: string;
   /** Set while recovery mode is on (prospectingRecovery.ts). In the user message, so the cached system prompt stays identical. */
   recoveryNote?: string;
+  /** Whether option C (the Fillbook option) may be written for this post. False under recovery mode or an exhausted mention budget. In the user message, so the cached system prompt stays identical. */
+  fillbookOption?: boolean;
 }
 
 export interface ProspectingDraftResult {
@@ -270,6 +290,8 @@ export interface ProspectingDraftResult {
   showcase?: string;
   /** Option B ("helpful") of the two-option experiment; `reply` is then option A ("sharp"). Absent in single-style drafts. */
   helpfulReply?: string;
+  /** Option C ("fillbook"): one point plus one sentence naming Fillbook and one vetted view. Empty or absent when not offered. */
+  fillbookReply?: string;
 }
 
 /**
@@ -317,6 +339,8 @@ export async function draftProspectingReply(
     formatStyleExamples(context.styleExamples) || null,
     context.recoveryNote ? "" : null,
     context.recoveryNote ?? null,
+    context.fillbookOption === undefined ? null : "",
+    context.fillbookOption === undefined ? null : `Option C (the Fillbook option) is ${context.fillbookOption ? "ALLOWED" : "NOT ALLOWED"} for this post.`,
     context.retryFeedback ? "" : null,
     context.retryFeedback ?? null,
   ]
