@@ -1,5 +1,7 @@
 import type { DraftOption, PostedStyle } from "./prospectingDraftOptions.js";
 
+import type { WatchlistRow } from "./prospectingWatchlist.js";
+
 export type ProspectingStatus =
   | "new"
   | "shown"
@@ -89,6 +91,8 @@ export interface ProspectingRepository {
   /** True if this author has already been replied to via Prospecting before -- feeds both scoring and the Inbound relationship bridge. */
   hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean>;
   recordOutreach(platform: string, authorExternalId: string, authorHandle: string | null): Promise<void>;
+  /** Author and status columns of recent candidates, for building the creator watchlist (prospectingWatchlist.ts). Optional so simple fakes need not implement it. */
+  listWatchlistRows?(since: Date): Promise<WatchlistRow[]>;
   /** Marks non-terminal candidates older than the given cutoff as 'expired' -- run before each daily-set selection. Returns how many were expired. */
   expireStale(olderThan: Date): Promise<number>;
 }

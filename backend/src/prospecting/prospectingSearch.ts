@@ -18,6 +18,7 @@ import {
 } from "./prospectingEligibility.js";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
 import { MIN_DAILY_SET_SCORE, selectDailyWorkingSet } from "./prospectingDailySelection.js";
+import { MIN_WATCHLIST_SIZE, PROSPECTING_SEED_CREATORS, WATCHLIST_LOOKBACK_DAYS, buildWatchlist, chunkWatchlist, parseHandleList, watchlistQuery } from "./prospectingWatchlist.js";
 import type { ProspectingRepository } from "./types.js";
 
 export interface ProspectingRunResult {
@@ -50,6 +51,8 @@ export interface ProspectingRunResult {
   searchRequests?: number;
   /** New posts the cheap model relevance check turned away before they could reach the queue. */
   screenedOut?: number;
+  /** How many of this run's X requests read the creator watchlist instead of searching topics. */
+  creatorRequests?: number;
 }
 
 /** Rows scanned to count what is waiting. Was QUEUE_FULL_THRESHOLD + 1; the selectable count needs the whole backlog (the queue endpoint reads up to 500). */
@@ -96,6 +99,8 @@ export interface ProspectingRunDeps {
   runIndexOverride?: number;
   /** Added to the run index so refills made between the scheduled slots start from a different topic than the last search (does not make the run a manual one). */
   runIndexOffset?: number;
+  /** Creator handles always on the watchlist (no @), on top of PROSPECTING_SEED_CREATORS and the PROSPECTING_WATCHLIST_HANDLES environment variable. */
+  watchlistSeeds?: readonly string[];
 }
 
 /** Topics searched together in one X request (OR-ed): one near-empty request per narrow topic was burning the daily limit (2026-10-25). */
@@ -188,10 +193,36 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // finer-grained.
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
   const runIndex = (deps.runIndexOverride ?? dayIndex * runSlotsPerDay() + currentRunSlot(now)) + (deps.runIndexOffset ?? 0);
-  // breadth.maxTopics is how many X requests this run may make; each request covers up to TOPICS_PER_QUERY topics.
-  const wanted = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, breadth.maxTopics * TOPICS_PER_QUERY);
-  const groups: ProspectingTopic[][] = [];
-  for (let i = 0; i < wanted.length; i += TOPICS_PER_QUERY) groups.push(wanted.slice(i, i + TOPICS_PER_QUERY));
+  // The creator watchlist (2026-10-25): futures creators whose posts were already vetted, read with one `from:` search. Built from the
+  // database, so a failed read just means no watchlist this run.
+  let watchGroups: string[][] = [];
+  try {
+    const seeds = deps.watchlistSeeds ?? [...PROSPECTING_SEED_CREATORS, ...parseHandleList(process.env.PROSPECTING_WATCHLIST_HANDLES)];
+    const rows = deps.repo.listWatchlistRows ? await deps.repo.listWatchlistRows(new Date(now.getTime() - WATCHLIST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)) : [];
+    const watchlist = buildWatchlist(rows, seeds);
+    if (watchlist.length >= MIN_WATCHLIST_SIZE) watchGroups = chunkWatchlist(watchlist.map((w) => w.handle));
+  } catch {
+    watchGroups = [];
+  }
+
+  // breadth.maxTopics is how many X requests this run may make. With a watchlist, every other request (the first, the third) reads the
+  // creators and the rest search topics; each topic request covers up to TOPICS_PER_QUERY topics.
+  type PlannedRequest = { kind: "creators"; handles: string[] } | { kind: "topics"; group: ProspectingTopic[] };
+  const isCreatorSlot = (i: number) => watchGroups.length > 0 && i % 2 === 0;
+  const topicSlots = Array.from({ length: breadth.maxTopics }, (_, i) => i).filter((i) => !isCreatorSlot(i)).length;
+  const wanted = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, topicSlots * TOPICS_PER_QUERY);
+  const plan: PlannedRequest[] = [];
+  let creatorSeen = 0;
+  let topicSeen = 0;
+  for (let i = 0; i < breadth.maxTopics; i++) {
+    if (isCreatorSlot(i)) {
+      plan.push({ kind: "creators", handles: watchGroups[(runIndex + creatorSeen) % watchGroups.length]! });
+      creatorSeen++;
+    } else {
+      plan.push({ kind: "topics", group: wanted.slice(topicSeen * TOPICS_PER_QUERY, (topicSeen + 1) * TOPICS_PER_QUERY) });
+      topicSeen++;
+    }
+  }
 
   let searchedToday = deps.getTodaySearchCount ? await deps.getTodaySearchCount() : 0;
   if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) {
@@ -211,12 +242,13 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   let screenedChecked = 0;
   let costUsd = 0;
   let searchRequests = 0;
+  let creatorRequests = 0;
   let selectableNow = selectable;
   const searched: string[] = [];
   const priorOutreachCache = new Map<string, boolean>();
 
   // One grouped request at a time, stopping as soon as enough usable posts are waiting.
-  for (const group of groups) {
+  for (const request of plan) {
     if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) break;
     if (deps.getTodaySearchSpendUsd && spentToday >= DAILY_SEARCH_BUDGET_USD) break;
     // Bounded discovery-time freshness (2026-09-07 review): X's recent-search
@@ -226,19 +258,26 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     // time -- catching staleness at the source instead of only filtering it
     // out after paying to read it. A sparse topic returning fewer (or zero)
     // results under this bound is the correct, intended outcome.
-    const { query: groupQuery, used: groupTopics } = groupedTopicQuery(group);
-    const results = await deps.adapter.searchRecentPosts(withCryptoExclusions(groupQuery), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+    const fromWatchlist = request.kind === "creators";
+    const grouped = request.kind === "topics" ? groupedTopicQuery(request.group) : null;
+    const groupTopics = grouped?.used ?? [];
+    const groupQuery = request.kind === "creators" ? watchlistQuery(request.handles) : grouped!.query;
+    // A creator request reads the people, so the crypto and options exclusions and the futures anchor are left off (the same free and model
+    // gates below still decide every post); a topic request carries them.
+    const results = await deps.adapter.searchRecentPosts(request.kind === "creators" ? groupQuery : withCryptoExclusions(groupQuery), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
     searchRequests++;
+    if (fromWatchlist) creatorRequests++;
     searchedToday++;
-    searched.push(...groupTopics.map((t) => t.key));
+    searched.push(...(fromWatchlist ? ["watchlist"] : groupTopics.map((t) => t.key)));
     postsRead += results.length;
-    const requestCost = await recordXSearchCostEvent(deps.client, results.length, { topics: groupTopics.map((t) => t.key), query: groupQuery });
+    const requestCost = await recordXSearchCostEvent(deps.client, results.length, fromWatchlist ? { watchlist: true, creators: request.kind === "creators" ? request.handles.length : 0, query: groupQuery } : { topics: groupTopics.map((t) => t.key), query: groupQuery });
     costUsd += requestCost;
     spentToday += requestCost;
 
     const created: Array<{ id: string; postText: string; discoveryQuery: string; authorHandle: string | null; score: number }> = [];
     for (const post of results) {
-      const topic = topicForPost(groupTopics, post.text);
+      // A watched creator's post is matched to the best topic by its words, else to the general futures-trader topic.
+      const topic = fromWatchlist ? topicForPost([...PROSPECTING_TOPICS.filter((t) => t.key === "futures_trader"), ...PROSPECTING_TOPICS], post.text) : topicForPost(groupTopics, post.text);
       // Same $0 mechanical gate applied at queue-read time
       // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
       // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
@@ -266,6 +305,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
         authorFollowerCount: post.authorFollowerCount,
         authorVerified: post.authorVerified,
         previouslyEngaged,
+        fromWatchlist,
         now,
       });
 
@@ -340,5 +380,6 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     selectableAfter: selectableNow,
     searchRequests,
     screenedOut,
+    creatorRequests,
   };
 }

@@ -28,6 +28,12 @@ function candidateFrom(c: NewProspectingCandidate, id: string): ProspectingCandi
 
 class FakeProspectingRepo implements ProspectingRepository {
   rows = new Map<string, ProspectingCandidate>();
+  watchRows: Array<{ authorHandle: string | null; authorFollowerCount: number | null; status: string; opportunityScore: number }> = [];
+  watchFails = false;
+  async listWatchlistRows() {
+    if (this.watchFails) throw new Error("watchlist read failed");
+    return this.watchRows;
+  }
   outreach = new Set<string>();
   private nextId = 1;
 
@@ -510,5 +516,81 @@ describe("runProspectingSearch", () => {
       expect(queries).toHaveLength(2);
       expect(result.topicsSearched.length).toBeGreaterThan(queries.length);
     });
+  });
+});
+
+describe("the creator watchlist in the search loop (2026-10-25)", () => {
+  const now = new Date("2026-09-01T12:00:00Z");
+  const creators = (n: number) => Array.from({ length: n }, (_, i) => ({ authorHandle: `creator${i}`, authorFollowerCount: 6000, status: "ready", opportunityScore: 70 }));
+  const post = (id: string, text: string, authorId = `a-${id}`) =>
+    searchResult({ id, text, authorId, authorHandle: `h${id}`, authorFollowerCount: 5000, createdAt: new Date(now.getTime() - 60 * 60 * 1000), publicMetrics: { reply_count: 2, like_count: 6 } });
+  const run = (repo: FakeProspectingRepo, adapter: any, extra: Record<string, unknown> = {}) =>
+    runProspectingSearch({ adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
+
+  it("reads the creators first, then topics, when enough creators are known", async () => {
+    const queries: string[] = [];
+    const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
+    const repo = new FakeProspectingRepo();
+    repo.watchRows = creators(6);
+    const result = await run(repo, adapter);
+    expect(queries).toHaveLength(2);
+    expect(queries[0]).toMatch(/^\(from:creator\d/);
+    expect(queries[0]).toContain(" OR from:");
+    expect(queries[0]).not.toContain("-crypto"); // the people are already vetted; the gates below still judge every post
+    expect(queries[1]).toContain("futures OR MNQ"); // the second request is a topic search with the anchor
+    expect(result.creatorRequests).toBe(1);
+    expect(result.topicsSearched[0]).toBe("watchlist");
+  });
+
+  it("an owner-tapped search alternates creators, topics, creators", async () => {
+    const queries: string[] = [];
+    const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
+    const repo = new FakeProspectingRepo();
+    repo.watchRows = creators(6);
+    await run(repo, adapter, { runIndexOverride: 4 });
+    expect(queries).toHaveLength(3);
+    expect(queries.map((q) => q.startsWith("(from:"))).toEqual([true, false, true]);
+  });
+
+  it("falls back to topics only when fewer than four creators are known, or the list cannot be read", async () => {
+    for (const setup of [(r: FakeProspectingRepo) => (r.watchRows = creators(3)), (r: FakeProspectingRepo) => (r.watchFails = true)]) {
+      const queries: string[] = [];
+      const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
+      const repo = new FakeProspectingRepo();
+      setup(repo);
+      const result = await run(repo, adapter);
+      expect(queries.some((q) => q.startsWith("(from:"))).toBe(false);
+      expect(result.creatorRequests).toBe(0);
+    }
+  });
+
+  it("seeds from the deps are always watched, and count toward the minimum", async () => {
+    const queries: string[] = [];
+    const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
+    await run(new FakeProspectingRepo(), adapter, { watchlistSeeds: ["FuturesFox", "ES_Ed", "NQ_Nate", "MNQ_Mia"] });
+    expect(queries[0]).toContain("from:FuturesFox");
+    expect(queries[0]).toContain("from:MNQ_Mia");
+  });
+
+  it("a creator's post still has to show futures evidence; a clean futures post is stored, scored with the bonus, and labelled by its topic", async () => {
+    const generic = post("g1", "Rough week for everyone. Stay disciplined and manage your risk, traders.");
+    const futures = post("f1", "Revenge trading cost me my funded NQ futures account again. How do you stop it?");
+    const adapter = { searchRecentPosts: vi.fn(async (q: string) => (q.startsWith("(from:") ? [generic, futures] : [])) };
+    const repo = new FakeProspectingRepo();
+    repo.watchRows = creators(5);
+    const result = await run(repo, adapter);
+    const stored = [...repo.rows.values()];
+    expect(stored.map((r) => r.externalId)).toEqual(["f1"]);
+    expect(stored[0]!.scoreBreakdown.watchedCreator).toMatch(/already vetted/);
+    expect(stored[0]!.discoveryQuery).toBe("revenge_trading");
+    expect(result.excludedAsIrrelevant).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a creator's post with no matching topic is labelled with the general futures-trader topic", async () => {
+    const adapter = { searchRecentPosts: vi.fn(async (q: string) => (q.startsWith("(from:") ? [post("p1", "Took the opening range break on MNQ futures and let it run. What would you have done?")] : [])) };
+    const repo = new FakeProspectingRepo();
+    repo.watchRows = creators(5);
+    await run(repo, adapter);
+    expect([...repo.rows.values()][0]!.discoveryQuery).toBe("futures_trader");
   });
 });
