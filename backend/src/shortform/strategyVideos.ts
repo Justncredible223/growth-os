@@ -20,10 +20,11 @@ const VARIATION_PREFIX = "strategy";
 /**
  * The closing card (on screen only: the narration is already recorded, so this costs no voice credits). 2026-10-24: the strategy
  * videos earned the most followers but never said what Fillbook is. This names one verified view (Reports split results by
- * setup, weekday and time of day, from the trader's imported or synced trades) before the free-trial line. Kept to three lines on
+ * setup, weekday and time of day, from the trader's imported or synced trades) before the free-trial line. 2026-10-25: the view
+ * line is now specific to each video's setup (`view` on each input) instead of one line for all ten. Kept to three lines on
  * the card: at four the last line sat on the box border.
  */
-const CTA = `Fillbook splits results by setup and weekday. Free for 14 days. ${OFFICIAL_HANDLE}`;
+const closingCta = (view: string): string => `${view} Free for 14 days. ${OFFICIAL_HANDLE}`;
 
 export interface StrategyBeat {
   /** The label above the headline ("The setup"); empty on the opening card. */
@@ -41,6 +42,8 @@ export interface StrategyBeat {
 
 export interface StrategyInput {
   slug: string;
+  /** One sentence naming what Fillbook shows for THIS setup (2026-10-25); each is a verified view: By setup, By time of day. Up to about 55 characters so the card stays at three lines. */
+  view: string;
   title: string;
   topic: string;
   scenario: ScenarioId;
@@ -85,7 +88,7 @@ export function buildStrategyVideo(n: number, input: StrategyInput): ScenePlan {
   const id = String(n).padStart(2, "0");
   const variationId = `${VARIATION_PREFIX}-${id}`;
   const beats = input.beats.map((b, i) => scene(variationId, i + 1, b, input.scenario, null));
-  const close = scene(variationId, 9, { step: "Your turn", headline: input.close.headline, caption: "Test it on your own trades.", say: input.close.say, take: "Test the setup on your own trades." }, input.scenario, CTA);
+  const close = scene(variationId, 9, { step: "Your turn", headline: input.close.headline, caption: "Test it on your own trades.", say: input.close.say, take: "Test the setup on your own trades." }, input.scenario, closingCta(input.view));
   return {
     planId: `${VARIATION_PREFIX}-${id}-${input.slug}`,
     title: input.title,
@@ -125,6 +128,7 @@ const SUPPLY = band(9, -1, 63, 60, "Supply zone", "bad");
 export const STRATEGIES: readonly StrategyInput[] = [
   {
     slug: "orb-range-trigger",
+    view: "Fillbook shows your ORB win rate and net P&L.",
     title: "Opening range breakout explained: the range and the trigger",
     topic: "How the opening range breakout is commonly defined: the first 15 minutes' high and low, and a close outside them",
     scenario: "orbBreak",
@@ -142,6 +146,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "orb-fake-breakout",
+    view: "Fillbook shows what your breakouts net after fakes.",
     title: "Opening range breakout: spotting the fake breakout",
     topic: "An opening range breakout that closes back inside the range, and how traders who use the setup handle it",
     scenario: "orbFake",
@@ -159,6 +164,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "orb-stop-placement",
+    view: "Fillbook shows if your ORB stops hold, by setup.",
     title: "Opening range breakout: where the stop goes",
     topic: "Two common stop placements for an opening range breakout, and how each changes the risk",
     scenario: "orbBreak",
@@ -176,6 +182,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "vwap-pullback",
+    view: "Fillbook puts your VWAP pullbacks on their own row.",
     title: "VWAP pullback strategy explained",
     topic: "How a VWAP pullback is commonly defined on a trend day: the pullback to VWAP, the hold, the stop and the target",
     scenario: "vwapPullback",
@@ -193,6 +200,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "vwap-chop",
+    view: "Fillbook shows the hour your VWAP trades stop paying.",
     title: "When the VWAP pullback stops working",
     topic: "A range day where VWAP goes flat and price crosses it again and again, against a trend day",
     scenario: "vwapChop",
@@ -210,6 +218,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "break-and-retest",
+    view: "Fillbook puts your retests on their own row.",
     title: "Break and retest strategy explained",
     topic: "How a break and retest is commonly defined: a level, a close through it, a retest that holds, and the entry",
     scenario: "breakRetest",
@@ -227,6 +236,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "retest-stop-target",
+    view: "Fillbook shows your retest win rate and net P&L.",
     title: "Break and retest: where the stop and target go",
     topic: "Stop and target placement on a break and retest, and how the distance between them sets the trade's reward",
     scenario: "breakRetest",
@@ -244,6 +254,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "failed-retest",
+    view: "Fillbook shows what failed retests cost you.",
     title: "Break and retest: when the retest fails",
     topic: "A break and retest where the retest closes back below the level, and how a planned stop handles it",
     scenario: "breakFail",
@@ -261,6 +272,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "demand-zone",
+    view: "Fillbook shows if your zone trades pay, by setup.",
     title: "Supply and demand zones explained: the demand zone",
     topic: "How a demand zone is commonly marked from a base before a sharp move, and what a confirmation candle looks like",
     scenario: "demandSupply",
@@ -278,6 +290,7 @@ export const STRATEGIES: readonly StrategyInput[] = [
   },
   {
     slug: "supply-zone-target",
+    view: "Fillbook shows win rate and net P&L per zone setup.",
     title: "Supply and demand: why the target is the next zone",
     topic: "How supply and demand zones set a trade's stop and target, and the distance between them",
     scenario: "demandSupply",

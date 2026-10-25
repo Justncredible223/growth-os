@@ -99,10 +99,17 @@ describe("closing card names one Fillbook view (2026-10-24)", () => {
     for (const input of STRATEGIES) {
       const plan = buildStrategyVideo(1, input);
       const close = plan.scenes[plan.scenes.length - 1]!;
-      expect(close.cta).toMatch(/Fillbook splits results by setup and weekday/);
+      expect(close.cta).toBe(`${input.view} Free for 14 days. @fillbookhq`);
+      expect(close.cta).toMatch(/^Fillbook /);
       expect(close.cta).toMatch(/Free for 14 days/);
-      expect(close.cta).not.toMatch(/real.time|live|alert|before you|profit|guarantee/i);
+      expect(close.cta).not.toMatch(/real.time|live|alert|before you|profit|guarantee|improve/i);
+      // Short enough that the card stays at three lines (at four the last line sat on the box border).
+      expect(input.view.length).toBeLessThanOrEqual(55);
     }
+  });
+
+  it("each video names its own setup, so no two closing cards are the same", () => {
+    expect(new Set(STRATEGIES.map((i) => i.view)).size).toBe(STRATEGIES.length);
   });
 });
 
