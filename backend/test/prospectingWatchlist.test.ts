@@ -9,6 +9,7 @@ import {
   isValidHandle,
   parseHandleList,
   watchlistQuery,
+  WATCHLIST_TRADING_ANCHOR,
   type WatchlistRow,
 } from "../src/prospecting/prospectingWatchlist";
 import { scoreProspectingCandidate } from "../src/prospecting/prospectingScoring";
@@ -99,7 +100,14 @@ describe("buildWatchlist", () => {
 
 describe("watchlist queries", () => {
   it("builds a from: query that ORs the handles", () => {
-    expect(watchlistQuery(["a", "b_c"])).toBe("(from:a OR from:b_c)");
+    expect(watchlistQuery(["a", "b_c"])).toBe(`(from:a OR from:b_c) ${WATCHLIST_TRADING_ANCHOR}`);
+  });
+
+  it("also requires trading words, so a creator's off-topic posts are never read or paid for", () => {
+    const q = watchlistQuery(["a"]);
+    expect(q).toContain("(from:a)");
+    expect(q).toMatch(/\(futures OR NQ OR MNQ/);
+    expect(q.endsWith(")")).toBe(true);
   });
 
   it("splits a full list into groups that fit in one X request, never splitting a handle", () => {

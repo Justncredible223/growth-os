@@ -22,8 +22,15 @@ export const MIN_WATCHLIST_SIZE = 4;
 export const MAX_WATCHLIST_SIZE = 45;
 /** How far back vetted candidates count toward a place on the list. */
 export const WATCHLIST_LOOKBACK_DAYS = 30;
-/** Characters of `from:` terms in one query (X allows 512 in all; the adapter adds about 34 more). */
-const MAX_WATCHLIST_QUERY_CHARS = 330;
+/**
+ * Trading words every creator request must also match (2026-10-26). A bare `from:` request read each creator's whole timeline, and
+ * 64 of the ~94 posts the free gates dropped in three days were "not_trading" (Oct 23-26: 57 searches, $1.84, no usable prospect): the
+ * creators post plenty that is not about trading, and every other request in a run was a creator request. X ANDs this group with the
+ * `from:` group, so only a creator's trading posts are read (and paid for).
+ */
+export const WATCHLIST_TRADING_ANCHOR = "(futures OR NQ OR MNQ OR MES OR trading OR trader OR drawdown OR eval OR funded OR setup OR stop OR loss)";
+/** Characters of `from:` terms in one query: X allows 512 in all; the adapter adds about 34 more, and the trading anchor and a space come out of the same budget. */
+const MAX_WATCHLIST_QUERY_CHARS = Math.min(330, 512 - 34 - WATCHLIST_TRADING_ANCHOR.length - 1 - 12);
 /** A creator must have had a post with at least this opportunity score to earn a place by vetting alone. */
 const MIN_VETTED_SCORE = 50;
 
@@ -129,5 +136,5 @@ export function chunkWatchlist(handles: readonly string[]): string[][] {
 
 /** The X query for one group: the latest top-level posts from any of these creators (the adapter adds -is:retweet -is:reply lang:en). */
 export function watchlistQuery(handles: readonly string[]): string {
-  return `(${handles.map((h) => `from:${h}`).join(" OR ")})`;
+  return `(${handles.map((h) => `from:${h}`).join(" OR ")}) ${WATCHLIST_TRADING_ANCHOR}`;
 }
