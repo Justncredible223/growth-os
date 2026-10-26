@@ -177,7 +177,7 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
         ProspectingCandidate,
         "openedAt" | "draftReply" | "draftOptions" | "postedStyle" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
       >
-    >,
+    > & { breakdownPatch?: Record<string, string> },
   ): Promise<void> {
     const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
     if (fields?.openedAt !== undefined) update.opened_at = fields.openedAt;
@@ -187,13 +187,14 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     if (fields?.replyUsedLink !== undefined) update.reply_used_link = fields.replyUsedLink;
     if (fields?.repliedAt !== undefined) update.replied_at = fields.repliedAt;
     if (fields?.skipReason !== undefined) update.skip_reason = fields.skipReason;
-    if (fields?.draftOptions !== undefined || fields?.postedStyle !== undefined) {
+    if (fields?.draftOptions !== undefined || fields?.postedStyle !== undefined || fields?.breakdownPatch !== undefined) {
       // Merge into the existing score_breakdown JSON so the scoring keys survive.
       const { data: current, error: readError } = await this.client.from("prospecting_candidates").select("score_breakdown").eq("id", id).maybeSingle();
       if (readError) throw new Error(`updateStatus breakdown read failed: ${readError.message}`);
       const merged: Record<string, unknown> = { ...((current?.score_breakdown as Record<string, unknown> | null) ?? {}) };
       if (fields.draftOptions !== undefined) merged[DRAFT_OPTIONS_KEY] = fields.draftOptions === null ? undefined : JSON.stringify(fields.draftOptions);
       if (fields.postedStyle !== undefined) merged[POSTED_STYLE_KEY] = fields.postedStyle === null ? undefined : fields.postedStyle;
+      if (fields.breakdownPatch !== undefined) Object.assign(merged, fields.breakdownPatch);
       update.score_breakdown = merged;
     }
     const { error } = await this.client.from("prospecting_candidates").update(update).eq("id", id);

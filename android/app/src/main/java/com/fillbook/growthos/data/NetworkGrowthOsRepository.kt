@@ -571,6 +571,17 @@ class NetworkGrowthOsRepository(
         return json.toProspectingCandidate()
     }
 
+    override suspend fun draftScreenedOutProspectingPost(id: String): ProspectingCandidate {
+        val json = try {
+            post("/api/approvals?resource=prospecting", JSONObject().put("action", "draft-maybe").put("id", id))
+        } catch (e: NetworkException) {
+            val parsedError = extractServerActionErrorMessage(e.httpCode, e.message)
+            if (parsedError != null) throw DraftRejectedException(parsedError)
+            throw e
+        }
+        return json.toProspectingCandidate()
+    }
+
     override suspend fun openProspectingCandidate(id: String) {
         post("/api/approvals?resource=prospecting", JSONObject().put("action", "open").put("id", id))
     }
@@ -1082,8 +1093,15 @@ fun extractEngagementErrorMessage(httpCode: Int?, networkExceptionMessage: Strin
     return unescapeJsonString(raw).takeIf { it.isNotBlank() }
 }
 
-fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
-    if (httpCode != 404) return null
+fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? =
+    extractServerActionErrorMessage(httpCode, networkExceptionMessage, setOf(404))
+
+/**
+ * The server's own `{error: message}` text for the HTTP codes in [codes] (default: the 404 action error, 409 not-eligible and 500 such as
+ * "skipped -- daily LLM budget reached"), or null when the response has no readable message.
+ */
+fun extractServerActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?, codes: Set<Int> = setOf(404, 409, 500)): String? {
+    if (httpCode == null || httpCode !in codes) return null
     val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
     if (body.isBlank()) return null
     val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.TrendingUp
@@ -123,6 +125,10 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     var lastSearchNowRun by remember { mutableStateOf<ProspectingSearchRunResult?>(null) }
     var draftingId by remember { mutableStateOf<String?>(null) }
     var busyId by remember { mutableStateOf<String?>(null) }
+    // "Draft anyway" on a Maybe row: the row being drafted (one at a time, it costs a model call) and the card to bring into view afterwards.
+    var maybeDraftingId by remember { mutableStateOf<String?>(null) }
+    var scrollToId by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
     // Wide layout only: the candidate shown in the detail pane. Saveable so it survives a fold/unfold.
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val twoPane = LocalWindowLayout.current.twoPane
@@ -200,6 +206,36 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 actionError = "Couldn't draft a reply. Check your connection and try again."
             }
             draftingId = null
+        }
+    }
+
+    // Owner override of the AI screen. On success the queue is refreshed so the new card (with its options) is in `items`, then it is
+    // selected (two-pane detail) and scrolled to (one-pane list). On failure the server's reason is shown and the Maybe row stays as it was.
+    fun startDraftAnyway(item: ProspectingMaybeItem) {
+        scope.launch {
+            maybeDraftingId = item.id
+            try {
+                val drafted = repo.draftScreenedOutProspectingPost(item.id)
+                refresh()
+                if (drafted.draftOptions.isEmpty()) editedDrafts[drafted.id] = drafted.draftReply.orEmpty()
+                selectedId = drafted.id
+                scrollToId = drafted.id
+                actionError = null
+            } catch (e: DraftRejectedException) {
+                actionError = e.shortReason
+            } catch (e: Exception) {
+                actionError = "Couldn't draft that post. Check your connection and try again."
+            }
+            maybeDraftingId = null
+        }
+    }
+
+    LaunchedEffect(scrollToId, items) {
+        val id = scrollToId ?: return@LaunchedEffect
+        val index = items.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            listState.animateScrollToItem(index)
+            scrollToId = null
         }
     }
 
@@ -361,12 +397,15 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                                     subtitle = prospectingEmptyStateMessage(diagnostics),
                                 )
                             }
-                            maybeSection(maybe, maybeOpen, { maybeOpen = !maybeOpen }) { item ->
+                            maybeSection(
+                                maybe, maybeOpen, { maybeOpen = !maybeOpen }, maybeDraftingId, ::startDraftAnyway,
+                            ) { item ->
                                 openExternalUrl(context, ProspectingPostLink.buildOpenUrl("x", item.postUrl, item.authorHandle))
                             }
                         }
                     } else {
                         LazyColumn(
+                            state = listState,
                             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(if (twoPane) 8.dp else 12.dp),
                         ) {
@@ -388,7 +427,9 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                                     cardFor(candidate)
                                 }
                             }
-                            maybeSection(maybe, maybeOpen, { maybeOpen = !maybeOpen }) { item ->
+                            maybeSection(
+                                maybe, maybeOpen, { maybeOpen = !maybeOpen }, maybeDraftingId, ::startDraftAnyway,
+                            ) { item ->
                                 openExternalUrl(context, ProspectingPostLink.buildOpenUrl("x", item.postUrl, item.authorHandle))
                             }
                         }
@@ -427,13 +468,15 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
 
 /**
  * The collapsed "Maybe (n)" section at the end of the queue list (works in the one-pane and two-pane layouts, since both use this list):
- * posts the AI relevance screen turned away this week, read-only. Each row is the handle, the post text and "Open on X" -- no draft button,
- * so the drafting flow is untouched. Hidden when there is nothing to show.
+ * posts the AI relevance screen turned away this week. Each row is the handle, the post text, "Draft anyway" (owner override, one at a time) and
+ * "Open on X". Hidden when there is nothing to show.
  */
 private fun LazyListScope.maybeSection(
     maybe: List<ProspectingMaybeItem>,
     open: Boolean,
     onToggle: () -> Unit,
+    draftingId: String?,
+    onDraftAnyway: (ProspectingMaybeItem) -> Unit,
     onOpenOnX: (ProspectingMaybeItem) -> Unit,
 ) {
     if (maybe.isEmpty()) return
@@ -468,7 +511,14 @@ private fun LazyListScope.maybeSection(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(item.postText, style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                TextButton(onClick = { onOpenOnX(item) }) { Text("Open on X", color = Accent, maxLines = 1) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = { onDraftAnyway(item) },
+                        enabled = maybeDraftEnabled(draftingId),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text(maybeDraftLabel(draftingId == item.id), color = Accent, maxLines = 1) }
+                    TextButton(onClick = { onOpenOnX(item) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Open on X", color = Accent, maxLines = 1) }
+                }
             }
         }
     }
@@ -680,6 +730,11 @@ internal fun replyPacingLine(pacing: ProspectingPacing?, nowMillis: Long): Strin
         "Next reply ${waitLabel(waitMillis)}. Posting in bursts gets replies hidden on X."
     }
 }
+
+/** One "Draft anyway" at a time: it costs a model call, so every Maybe row is held while one is drafting. */
+internal fun maybeDraftEnabled(draftingId: String?): Boolean = draftingId == null
+
+internal fun maybeDraftLabel(thisRowDrafting: Boolean): String = if (thisRowDrafting) "Drafting..." else "Draft anyway"
 
 /** The label that replaces "Copy & open" while the next reply should wait, or null when it can go now. */
 internal fun replyHoldLabel(pacing: ProspectingPacing?, nowMillis: Long): String? {

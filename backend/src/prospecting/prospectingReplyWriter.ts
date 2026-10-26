@@ -292,6 +292,8 @@ export interface ProspectingDraftContext {
   retryFeedback?: string;
   /** Set while recovery mode is on (prospectingRecovery.ts). In the user message, so the cached system prompt stays identical. */
   recoveryNote?: string;
+  /** Set when the owner chose to reply to a post the relevance screen turned away. In the user message, so the cached system prompt stays identical. */
+  ownerOverrideNote?: string;
   /** Whether option C (the Fillbook option) may be written for this post. False under recovery mode or an exhausted mention budget. In the user message, so the cached system prompt stays identical. */
   fillbookOption?: boolean;
 }
@@ -354,6 +356,8 @@ export async function draftProspectingReply(
     formatStyleExamples(context.styleExamples) || null,
     context.recoveryNote ? "" : null,
     context.recoveryNote ?? null,
+    context.ownerOverrideNote ? "" : null,
+    context.ownerOverrideNote ?? null,
     context.fillbookOption === undefined ? null : "",
     context.fillbookOption === undefined ? null : `Option C (the Fillbook option) is ${context.fillbookOption ? "ALLOWED" : "NOT ALLOWED"} for this post.`,
     context.retryFeedback ? "" : null,
