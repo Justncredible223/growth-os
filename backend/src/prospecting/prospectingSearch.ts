@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import { X_SEARCH_COST_PER_READ_USD, recordXSearchCostEvent } from "../cost/costTracking.js";
-import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.js";
+import { PROSPECTING_TOPICS, topicsInSearchOrder, type ProspectingTopic } from "./prospectingTopics.js";
 import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, whyNotReplyWorthy, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
@@ -14,7 +14,7 @@ import {
   evaluateQueueCapacity,
   planSearchBreadth,
   runSlotsPerDay,
-  selectTopicsForRun,
+  selectPrioritizedTopicsForRun,
 } from "./prospectingEligibility.js";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
 import { MIN_DAILY_SET_SCORE, selectDailyWorkingSet } from "./prospectingDailySelection.js";
@@ -210,7 +210,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   type PlannedRequest = { kind: "creators"; handles: string[] } | { kind: "topics"; group: ProspectingTopic[] };
   const isCreatorSlot = (i: number) => watchGroups.length > 0 && i % 2 === 0;
   const topicSlots = Array.from({ length: breadth.maxTopics }, (_, i) => i).filter((i) => !isCreatorSlot(i)).length;
-  const wanted = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, topicSlots * TOPICS_PER_QUERY);
+  const wanted = selectPrioritizedTopicsForRun(topicsInSearchOrder(), runIndex, topicSlots * TOPICS_PER_QUERY);
   const plan: PlannedRequest[] = [];
   let creatorSeen = 0;
   let topicSeen = 0;

@@ -195,7 +195,7 @@ describe("crypto leakage closed 2026-10-04", () => {
   });
 
   it("wraps each discovery query so the exclusions apply to the whole of an OR", () => {
-    expect(withCryptoExclusions('"a" OR "b"')).toBe('("a" OR "b") ' + FUTURES_QUERY_ANCHORS + ' ' + CRYPTO_QUERY_EXCLUSIONS + ' ' + OPTIONS_QUERY_EXCLUSIONS);
+    expect(withCryptoExclusions('"a" OR "b"')).toBe('("a" OR "b") ' + FUTURES_QUERY_ANCHORS + ' ' + CRYPTO_QUERY_EXCLUSIONS + ' ' + OPTIONS_QUERY_EXCLUSIONS + ' -has:links');
   });
 });
 

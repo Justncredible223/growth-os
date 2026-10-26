@@ -134,7 +134,9 @@ export const DAILY_SEARCH_CAP = 30;
  * queries returned almost nothing (about 1.8 posts a search, $0.009), ten near-empty searches used the whole day. Search spend is capped
  * at this many dollars a day (October ran about $0.31 a day on searches); the request count above is only a safety net.
  */
-export const DAILY_SEARCH_BUDGET_USD = 0.5;
+export const DAILY_SEARCH_BUDGET_USD = 0.25;
+// TEMPORARY (2026-10-26, one week): lowered from 0.50 to 0.25 while the search yield is fixed (about $0.60 a day bought almost no usable
+// prospect). To raise it back, set the constant above to 0.5 (or higher) after about 2026-11-02.
 /** The top-scoring new posts per run that get the cheap model relevance check before they can reach the queue (about $0.001 each). */
 export const VET_MAX_PER_RUN = 8;
 
@@ -192,6 +194,21 @@ export function selectTopicsForRun<T>(topics: readonly T[], dayIndex: number, co
   const selected: T[] = [];
   for (let i = 0; i < Math.min(count, topics.length); i++) {
     selected.push(topics[(start + i) % topics.length]!);
+  }
+  return selected;
+}
+
+/**
+ * Like selectTopicsForRun, but tier by tier: topics must already be in priority order (lowest priority number first). The run's slots
+ * go to the first tier (rotating through it by runIndex); only slots the first tier cannot fill go to the next tier, and so on.
+ */
+export function selectPrioritizedTopicsForRun<T extends { priority?: number }>(topics: readonly T[], runIndex: number, count: number): T[] {
+  const tiers = [...new Set(topics.map((t) => t.priority ?? 2))].sort((a, b) => a - b);
+  const selected: T[] = [];
+  for (const tier of tiers) {
+    const room = count - selected.length;
+    if (room <= 0) break;
+    selected.push(...selectTopicsForRun(topics.filter((t) => (t.priority ?? 2) === tier), runIndex, room));
   }
   return selected;
 }
