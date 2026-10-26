@@ -16,6 +16,8 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 /**
  * Local reminder for the daily posting plan (owner request 2026-09-25; one a day, 12pm Arizona, from 2026-10-04), the same
@@ -45,6 +47,24 @@ object PostingReminders {
     fun reminderText(slotNumber: Int): Pair<String, String> =
         "Time to post today's video" to "If today's video is ready, post it to TikTok, YouTube and Instagram. Add each link in Video Status."
 
+    /**
+     * Whether the 12pm alarm should show anything (2026-10-26). Videos are requested twice a week now (Tuesday and Friday), so a
+     * fixed daily reminder nagged on days with nothing to post. The server's plan already says whether a ready video is waiting
+     * on some platform: a slot that is "due", has a video, and still has platforms left. When the plan could not be loaded the
+     * reminder is shown anyway (a missed reminder for a ready video costs more than one extra notification).
+     */
+    fun shouldRemind(plan: PostingPlan?): Boolean {
+        if (plan == null) return true
+        return plan.slots.any { it.status == "due" && it.video != null && it.remaining.isNotEmpty() }
+    }
+
+    /** The reminder text for a loaded plan: names the waiting video; falls back to the generic text when there is none. */
+    fun reminderTextFor(plan: PostingPlan?, slotNumber: Int): Pair<String, String> {
+        val slot = plan?.slots?.firstOrNull { it.status == "due" && it.video != null && it.remaining.isNotEmpty() }
+        val title = slot?.video?.title ?: return reminderText(slotNumber)
+        return "Video to post: $title" to "Still to post: ${slot.remaining.joinToString(", ") { it.label }}. Add each link in Video Status."
+    }
+
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(CHANNEL_ID, "Posting reminders", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -67,9 +87,9 @@ object PostingReminders {
         }
     }
 
-    fun show(context: Context, slotNumber: Int) {
+    fun show(context: Context, slotNumber: Int, plan: PostingPlan? = null) {
         createChannel(context)
-        val (title, body) = reminderText(slotNumber)
+        val (title, body) = reminderTextFor(plan, slotNumber)
         val open = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -97,8 +117,20 @@ object PostingReminders {
 /** Fires at a posting slot: shows the reminder, then arms the next slot. */
 class PostingReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        PostingReminders.show(context, intent.getIntExtra(EXTRA_SLOT, 1))
+        val slot = intent.getIntExtra(EXTRA_SLOT, 1)
+        // Arm the next slot first, so a slow or failed network call can never stop the reminders.
         PostingReminders.scheduleNext(context)
+        val pendingResult = goAsync()
+        Thread {
+            try {
+                val plan = runCatching {
+                    runBlocking { withTimeout(8_000) { AppConfig.buildRepository().getPostingOverview().plan } }
+                }.getOrNull()
+                if (PostingReminders.shouldRemind(plan)) PostingReminders.show(context, slot, plan)
+            } finally {
+                pendingResult.finish()
+            }
+        }.start()
     }
 
     companion object {
