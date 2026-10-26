@@ -51,15 +51,21 @@ jobs:
         # Hardened 2026-10-22: on 2026-10-22 this step hung for 14+ minutes (a stalled package download; it normally takes about
         # 20 seconds) and an approved render sat 'queued' until it was cancelled by hand. A step timeout plus per-command
         # timeouts and up to 3 attempts turns a stall into a quick retry, and a real failure into a fast, visible one.
-        timeout-minutes: 8
+        timeout-minutes: 10
         run: |
+          # Each attempt must fit its share of the step budget (2026-10-26: a single 240 s attempt used up the old 8 minutes
+          # twice in a row). Attempt 2 switches from the Azure mirror to archive.ubuntu.com; --no-install-recommends keeps the
+          # download smaller (ffmpeg's libx264/libass dependencies are not recommends).
           for attempt in 1 2 3; do
-            if sudo timeout 120 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update               && sudo timeout 240 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 install -y ffmpeg; then
+            if [ "$attempt" = "2" ]; then
+              sudo sed -i 's|http://azure.archive.ubuntu.com|http://archive.ubuntu.com|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+            fi
+            if sudo timeout 45 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 update               && sudo timeout 120 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 install -y --no-install-recommends ffmpeg; then
               ffmpeg -version | head -1
               exit 0
             fi
             echo "apt attempt $attempt failed or timed out"
-            sleep 10
+            sleep 5
           done
           echo "::error::ffmpeg could not be installed after 3 attempts"
           exit 1
