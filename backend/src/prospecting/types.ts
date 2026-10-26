@@ -86,7 +86,7 @@ export interface ProspectingRepository {
         ProspectingCandidate,
         "openedAt" | "draftReply" | "draftOptions" | "postedStyle" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
       >
-    >,
+    > & { /** Extra keys merged into the score_breakdown JSON (no migration), e.g. the owner override marker. */ breakdownPatch?: Record<string, string> },
   ): Promise<void>;
   /** True if this author has already been replied to via Prospecting before -- feeds both scoring and the Inbound relationship bridge. */
   hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean>;
@@ -101,3 +101,9 @@ export interface ProspectingRepository {
 
 /** The reason stored on a post the model relevance screen turned away (set in prospectingSearch.ts). */
 export const SCREENED_OUT_REASON = "screened_out_at_discovery";
+
+/** Keys stored inside score_breakdown when the owner chose to draft a post the screen turned away. */
+export const OWNER_OVERRIDE_KEY = "owner_override";
+export const OWNER_OVERRIDE_AT_KEY = "owner_override_at";
+/** An owner-chosen card stays in the queue this long regardless of the freshness window and score floor. */
+export const OWNER_OVERRIDE_VISIBLE_MS = 24 * 60 * 60 * 1000;

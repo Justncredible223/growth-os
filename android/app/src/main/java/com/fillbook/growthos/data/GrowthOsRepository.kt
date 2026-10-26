@@ -115,6 +115,8 @@ interface GrowthOsRepository {
     suspend fun getProspectingQueue(): ProspectingQueueResult
     /** Generates a reply draft via the LLM for one candidate -- never persisted as sent, never posted. Costs one real LLM call. */
     suspend fun draftProspectingReply(id: String): ProspectingCandidate
+    /** "Draft anyway" on a Maybe row: the owner overrides the AI screen. The server drafts it like a normal card (all reply rules still apply) and the next queue GET lists it as a card. Costs one real LLM call. */
+    suspend fun draftScreenedOutProspectingPost(id: String): ProspectingCandidate
     /** Records that the owner tapped "Open on X" for this candidate -- timestamp only, no status change. */
     suspend fun openProspectingCandidate(id: String)
     /** The ONLY action that sets status=replied -- an explicit confirmation the owner actually posted on X themselves. Also records outreach so Inbound recognizes this author if they reply back later. */

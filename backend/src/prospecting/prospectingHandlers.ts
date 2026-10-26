@@ -15,12 +15,26 @@ import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SHOWCASE_IDS, SHOWCASE_NONE } from "../content/fillbookShowcase.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
-import type { ProspectingCandidate, ProspectingRepository } from "./types.js";
+import { OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, SCREENED_OUT_REASON, type ProspectingCandidate, type ProspectingRepository } from "./types.js";
 
 /** Thrown from inside the draft-retry loop when the model says the post is irrelevant, so the loop stops without retrying. */
 class ProspectingIrrelevantSignal extends Error {}
 
 export class ProspectingActionError extends Error {}
+
+/** The request is well formed but the row is not in a state the action accepts (maps to HTTP 409). */
+export class ProspectingConflictError extends ProspectingActionError {}
+
+/** Added to the drafter's user message when the owner chose to reply to a post the relevance screen turned away. */
+export const OWNER_OVERRIDE_DRAFT_NOTE =
+  "The owner has chosen to reply to this post themselves, even though an automatic screen thought it a weak fit. Write the best reply you can under every rule above. If it is a poor fit, still write a short, specific, harmless reply rather than declining, and set isRelevant to true.";
+
+/** True for a card the owner pulled out of the Maybe list and that is still inside its 24-hour visibility window. */
+export function isOwnerOverrideActive(row: ProspectingCandidate, now: Date): boolean {
+  if (row.scoreBreakdown?.[OWNER_OVERRIDE_KEY] !== "true") return false;
+  const at = Date.parse(row.scoreBreakdown[OWNER_OVERRIDE_AT_KEY] ?? "");
+  return Number.isFinite(at) && now.getTime() - at < OWNER_OVERRIDE_VISIBLE_MS;
+}
 
 /**
  * Optional seams so the handlers can be exercised without a live Supabase
@@ -142,13 +156,16 @@ export async function listProspectingQueue(
   await repo.expireStale(staleCutoff);
 
   const nonTerminal = await repo.listByStatus([...NON_TERMINAL_STATUSES], 500);
-  const irrelevantIds = nonTerminal.filter((row) => !isReplyWorthyPost(row.postText) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
+  // Owner-chosen cards (Draft anyway on a Maybe post) skip the free spam gates, the freshness window and the score floor for 24 hours.
+  const overridden = nonTerminal.filter((row) => isOwnerOverrideActive(row, now));
+  const overriddenIds = new Set(overridden.map((row) => row.id));
+  const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
   if (irrelevantIds.length > 0) {
     await Promise.all(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant")));
   }
   const eligible = irrelevantIds.length > 0 ? nonTerminal.filter((row) => !irrelevantIds.includes(row.id)) : nonTerminal;
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, now);
-  const selection = selectDailyWorkingSet(eligible, now);
+  const selection = selectDailyWorkingSet(eligible.filter((row) => !overriddenIds.has(row.id)), now);
   const { deferred, belowQualityBar } = selection;
   let { selected, tooOldForToday } = selection;
   if (recovery.active && recovery.maxPostAgeHours !== null) {
@@ -158,6 +175,7 @@ export async function listProspectingQueue(
     tooOldForToday = [...tooOldForToday, ...selected.filter((c) => !fresh(c))];
     selected = selected.filter(fresh);
   }
+  selected = [...overridden, ...selected];
 
   const newIds = selected.filter((c) => c.status === "new").map((c) => c.id);
   await repo.markShown(newIds);
@@ -229,19 +247,50 @@ export function acceptedFillbookOption(candidate: ProspectingDraftResult, allowe
  * unrelated.
  */
 export async function draftProspectingCandidateReply(client: SupabaseClient, id: string, deps: ProspectingHandlerDeps = {}): Promise<ProspectingCandidate> {
+  return draftCandidateCore(client, id, deps, false);
+}
+
+/**
+ * "Draft anyway" (owner request 2026-10-26): the owner pulls a post out of the Maybe list that the AI relevance screen turned away.
+ * Only a model-screen rejection of the last MAYBE_WINDOW_DAYS days is accepted. The two model relevance gates (cheap precheck and the
+ * drafter's isRelevant) and the free regex pre-filter are skipped because the owner has judged the post; every other drafting rule
+ * (voice rules, no link, no Fillbook in cold replies, recovery and mention-budget rules, claims, dashes, 280 characters, retries,
+ * cost recording and the daily LLM ceiling) runs exactly as for a normal draft. Nothing is changed until a draft has been accepted:
+ * on any failure the row stays in the Maybe list untouched. On success it becomes a normal 'ready' card marked owner_override.
+ */
+export async function draftScreenedOutPost(client: SupabaseClient, id: string, deps: ProspectingHandlerDeps = {}, now: Date = new Date()): Promise<ProspectingCandidate> {
   const repo = repoFor(client, deps);
   const row = await repo.getById(id);
+  if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
+  // A double tap or retry after success: hand back the card that exists.
+  if (row.status === "ready" && row.draftReply && row.scoreBreakdown?.[OWNER_OVERRIDE_KEY] === "true") return row;
+  const since = now.getTime() - MAYBE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  if (row.status !== "not_relevant" || row.skipReason !== SCREENED_OUT_REASON || Date.parse(row.updatedAt) < since) {
+    throw new ProspectingConflictError("Only a post the AI screen turned away in the last 7 days can be drafted anyway.");
+  }
+  return draftCandidateCore(client, id, deps, true, row);
+}
+
+async function draftCandidateCore(
+  client: SupabaseClient,
+  id: string,
+  deps: ProspectingHandlerDeps,
+  ownerOverride: boolean,
+  preloaded?: ProspectingCandidate,
+): Promise<ProspectingCandidate> {
+  const repo = repoFor(client, deps);
+  const row = preloaded ?? (await repo.getById(id));
   if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
 
   // Never pay for the same post twice (2026-10-14 cost cut). The app only offers "Draft reply" on a card with no
   // draft, so a second call here is a double tap or a stale client: hand back the draft that already exists. A card the
   // owner has already closed out is refused outright. Both return before any relevance check or model call.
-  if (row.status === "ready" && row.draftReply) return row;
-  if (TERMINAL_STATUSES.includes(row.status)) {
+  if (!ownerOverride && row.status === "ready" && row.draftReply) return row;
+  if (!ownerOverride && TERMINAL_STATUSES.includes(row.status)) {
     throw new ProspectingActionError(`Not drafting -- this candidate is already ${row.status.replace("_", " ")}.`);
   }
 
-  if (!isReplyWorthyPost(row.postText)) {
+  if (!ownerOverride && !isReplyWorthyPost(row.postText)) {
     await repo.updateStatus(id, "not_relevant");
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",
@@ -265,7 +314,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   // Second, cheap (MODEL_HAIKU) relevance gate -- runs before the expensive
   // drafting call below so a post that clears the free regex filter but
   // isn't actually relevant gets rejected without paying for a full draft.
-  if (!(await cheapRelevanceCheck(draftContext))) {
+  if (!ownerOverride && !(await cheapRelevanceCheck(draftContext))) {
     await repo.updateStatus(id, "not_relevant");
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
   }
@@ -281,6 +330,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   draftContext.styleExamples = await (deps.loadStyleExamples ?? loadStyleExamples)(client);
   // Recovery mode: the draft must not name Fillbook at all while X is limiting the account's replies.
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, new Date());
+  if (ownerOverride) draftContext.ownerOverrideNote = OWNER_OVERRIDE_DRAFT_NOTE;
   if (recovery.active) draftContext.recoveryNote = RECOVERY_DRAFT_NOTE;
   // Mention budget: once recent posted replies name Fillbook too often, this one must leave it out (same effect as recovery mode).
   const mentionBudget = computeMentionBudget(await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
@@ -306,7 +356,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       // cheap Haiku check above (e.g. a post that uses real trading vocabulary
       // but in a fundamentally different, still-irrelevant context). Same
       // terminal status and no persisted draft as the earlier gates.
-      if (!candidate.isRelevant) {
+      if (!ownerOverride && !candidate.isRelevant) {
         throw new ProspectingIrrelevantSignal();
       }
       if (candidate.helpfulReply !== undefined) {
@@ -389,6 +439,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     ...(options ? { draftOptions: options } : {}),
     replyMentionsFillbook: options ? options.some((o) => o.style === "fillbook") || draft.mentionsFillbook : draft.mentionsFillbook,
     replyUsedLink: draft.usesLink,
+    ...(ownerOverride ? { breakdownPatch: { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } } : {}),
   });
 
   const updated = await repo.getById(id);

@@ -25,6 +25,8 @@ import { BrandConstitution } from "../src/knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../src/knowledge/supabaseRepositories.js";
 import {
   ProspectingActionError,
+  ProspectingConflictError,
+  draftScreenedOutPost,
   draftProspectingCandidateReply,
   listProspectingHistory,
   listProspectingQueue,
@@ -188,6 +190,9 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
       case "draft":
         res.status(200).json(toProspectingJson(await draftProspectingCandidateReply(client, id)));
         return;
+      case "draft-maybe":
+        res.status(200).json(toProspectingJson(await draftScreenedOutPost(client, id)));
+        return;
       case "open":
         await markProspectingOpened(client, id);
         res.status(200).json({ id, opened: true });
@@ -213,9 +218,13 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
         res.status(200).json({ id, status: "already_handled" });
         return;
       default:
-        res.status(400).json({ error: "action must be one of: draft, open, mark-replied, skip, not-relevant, already-handled" });
+        res.status(400).json({ error: "action must be one of: draft, draft-maybe, open, mark-replied, skip, not-relevant, already-handled" });
     }
   } catch (err) {
+    if (err instanceof ProspectingConflictError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     if (err instanceof ProspectingActionError) {
       res.status(404).json({ error: err.message });
       return;

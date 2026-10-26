@@ -256,4 +256,12 @@ class ReplyPacingTest {
     fun aWaitThatHasAlreadyPassedNoLongerHolds() {
         assertNull(replyHoldLabel(pacing(1, -1, "cooldown"), now))
     }
+
+    @Test
+    fun maybeDraftAnywayIsHeldWhileAnyRowIsDraftingAndLabelsOnlyThatRow() {
+        assertEquals(true, maybeDraftEnabled(null))
+        assertEquals(false, maybeDraftEnabled("m1"))
+        assertEquals("Draft anyway", maybeDraftLabel(false))
+        assertEquals("Drafting...", maybeDraftLabel(true))
+    }
 }

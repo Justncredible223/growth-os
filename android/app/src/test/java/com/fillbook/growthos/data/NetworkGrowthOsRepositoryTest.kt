@@ -211,4 +211,14 @@ class ExtractVideoScriptRequestErrorMessageTest {
     fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
         assertNull(extractVideoScriptRequestErrorMessage(400, "POST /api/run-campaign failed: HTTP 400 -- not json at all"))
     }
+
+    @Test
+    fun draftAnywayShowsTheServersMessageFor409And500ButNotForOtherCodes() {
+        val notEligible = networkExceptionMessage(409, """{"error":"Only a post the AI screen turned away in the last 7 days can be drafted anyway."}""")
+        assertEquals("Only a post the AI screen turned away in the last 7 days can be drafted anyway.", extractServerActionErrorMessage(409, notEligible))
+        val budget = networkExceptionMessage(500, """{"error":"skipped -- daily LLM budget reached"}""")
+        assertEquals("skipped -- daily LLM budget reached", extractServerActionErrorMessage(500, budget))
+        assertNull(extractServerActionErrorMessage(401, networkExceptionMessage(401, """{"error":"Unauthorized"}""")))
+        assertNull(extractServerActionErrorMessage(null, budget))
+    }
 }
