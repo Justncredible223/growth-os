@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { groupedTopicQuery, runProspectingSearch, topicForPost, TOPICS_PER_QUERY } from "../src/prospecting/prospectingSearch";
-import { PROSPECTING_TOPICS } from "../src/prospecting/prospectingTopics";
+import { PROSPECTING_TOPICS, topicsInSearchOrder } from "../src/prospecting/prospectingTopics";
 import { withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
-import { DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, TOPICS_PER_SEARCH_RUN } from "../src/prospecting/prospectingEligibility";
+import { DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, TOPICS_PER_SEARCH_RUN, selectPrioritizedTopicsForRun } from "../src/prospecting/prospectingEligibility";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFreshness";
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
@@ -478,8 +478,8 @@ describe("runProspectingSearch", () => {
     it("stops mid-run once this run's own spend reaches the daily budget", async () => {
       const posts = Array.from({ length: 10 }, (_, i) => searchResult({ id: `junk-${i}`, text: "nothing relevant here at all", authorId: `a${i}` }));
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(posts) };
-      // 10 reads cost $0.05 each request; with $0.46 already spent only one more request fits.
-      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.46, runIndexOverride: 5 });
+      // 10 reads cost $0.05 each request; with $0.21 already spent only one more request fits.
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.21, runIndexOverride: 5 });
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
       expect(result.searchRequests).toBe(1);
     });
@@ -500,6 +500,36 @@ describe("runProspectingSearch", () => {
         const { query } = groupedTopicQuery(group);
         expect(withCryptoExclusions(query).length + " -is:retweet -is:reply lang:en".length, `group at ${start}`).toBeLessThanOrEqual(512);
       }
+    });
+
+    it("every pain-phrase topic is searched before any noun topic, and every ordered rotation group still fits 512 characters with -has:links", () => {
+      const ordered = topicsInSearchOrder();
+      expect(ordered).toHaveLength(PROSPECTING_TOPICS.length);
+      const firstNoun = ordered.findIndex((t) => t.priority === 2);
+      expect(ordered.slice(0, firstNoun).every((t) => t.priority === 1)).toBe(true);
+      expect(ordered.slice(firstNoun).every((t) => t.priority === 2)).toBe(true);
+      for (const key of ["blown_account", "broke_rules", "why_i_lost", "revenge_trading", "losing_streak", "sized_up", "tilt", "holding_losers", "bad_trading_day", "first_loss", "plan_adherence", "overtrading", "trading_mistakes", "strategy_hopping", "daily_loss", "consistency_rule"]) {
+        expect(ordered.findIndex((t) => t.key === key), key).toBeLessThan(firstNoun);
+      }
+      for (const key of ["prop_firm", "funded_account", "trailing_drawdown", "drawdown", "self_funded", "own_capital_futures", "live_futures_account", "risk_management", "trading_journal", "expectancy", "futures_margin"]) {
+        expect(ordered.findIndex((t) => t.key === key), key).toBeGreaterThanOrEqual(firstNoun);
+      }
+      for (let start = 0; start < ordered.length; start++) {
+        const group = Array.from({ length: TOPICS_PER_QUERY }, (_, i) => ordered[(start + i) % ordered.length]!);
+        const wrapped = withCryptoExclusions(groupedTopicQuery(group).query);
+        expect(wrapped).toContain("-has:links");
+        expect(wrapped.length + " -is:retweet -is:reply lang:en".length, `ordered group at ${start}`).toBeLessThanOrEqual(512);
+      }
+    });
+
+    it("a run's first topic slots are all pain topics while there are enough of them", () => {
+      for (let run = 0; run < 12; run++) {
+        const picked = selectPrioritizedTopicsForRun(topicsInSearchOrder(), run, 8);
+        expect(picked.every((t) => t.priority === 1), `run ${run}`).toBe(true);
+      }
+      const wide = selectPrioritizedTopicsForRun(topicsInSearchOrder(), 0, 30);
+      expect(wide.slice(0, 5).every((t) => t.priority === 1)).toBe(true);
+      expect(wide.some((t) => t.priority === 2)).toBe(true);
     });
 
     it("assigns each post to the topic it matched, else the group's first", () => {

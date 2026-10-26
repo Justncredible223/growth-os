@@ -232,7 +232,7 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   at a time, at most 2). An owner-tapped "Search now" keeps going, topic by topic, until it finds one more usable post, at most 3 topics.
 - **Refill after a reply.** Marking a reply posted starts a background refill (`prospectingRefill.ts`, `waitUntil`), so a fresh post is
   waiting when the 20-minute cooldown ends. It never throws and cannot delay saving the reply.
-- **Limits.** Searches are limited by money, not count: at most $0.50 of X search spend a day (`DAILY_SEARCH_BUDGET_USD`, from cost
+- **Limits.** Searches are limited by money, not count: at most $0.25 (temporarily, see below; $0.50 before 2026-10-26) of X search spend a day (`DAILY_SEARCH_BUDGET_USD`, from cost
   events, Arizona day), with 30 requests as a safety net, and a monthly cap of $20 (was $15). The first version capped requests at 10;
   because the futures-anchored per-topic queries returned about 1.8 posts a search (down from 4 to 7), ten near-empty searches used the
   whole day. The Android app shows the skip reasons `daily_search_budget` and `daily_search_cap` as raw text until it is next rebuilt.
@@ -241,6 +241,17 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   (`topicForPost`).
 
 - **Maybe list (2026-10-26).** `GET /api/approvals?resource=prospecting` also returns an optional `maybe` array: posts the AI relevance screen turned away (status `not_relevant`, `skip_reason = screened_out_at_discovery`) in the last 7 days, newest first, at most 15 (`id, authorHandle, postText, postUrl, score, at`). Read-only, no migration. The app shows a collapsed "Maybe (n)" section at the end of the queue with "Open on X" only. There is no "This was fine" button: no existing flag or audit mechanism records that judgement safely, and the post is already stored as `not_relevant`.
+
+- **Search yield pass (2026-10-26).** Four "Search now" runs in a morning produced nothing (57 searches, $1.84 in three days, 5 kept, all 5
+  rejected by the AI check): topic nouns such as "prop firm" and "trailing drawdown" pull in brand and content accounts. Three temporary,
+  reversible changes: (1) `DAILY_SEARCH_BUDGET_USD` is $0.25 for one week (back to 0.5 in `prospectingEligibility.ts` after about
+  2026-11-02; the 30-request safety net is unchanged); (2) every topic request ends in `-has:links` (`NO_LINKS_QUERY_EXCLUSION`), so
+  stream teasers and promo posts are never read; creator `from:` requests are left without it because a vetted creator's useful posts
+  may legitimately carry a link or media and the creator gate is already narrow; (3) topics have a `priority`: pain phrases (blown
+  account, broke rules, why I lost, revenge trading, losing streak, sized up, tilt, ...; `PAIN_TOPIC_KEYS`) get every slot first and noun
+  topics (prop firm, funded account, drawdown, journal, ...) only fill slots the pain topics cannot (`selectPrioritizedTopicsForRun`,
+  `topicsInSearchOrder`). To undo (3), call `selectTopicsForRun(PROSPECTING_TOPICS, ...)` again in `prospectingSearch.ts`. Watch: pain
+  phrases still sit behind the futures anchor, so they may return few posts; see the variant proposal in the PR.
 
 Why: October's real spend was about $0.63 a day ($15.17 by the 24th), 113 of 114 discovered posts were too old to use, and the owner's
 replies were reaching a median of 9 views. Revert switches: none needed; the old behavior is in git history (#227 and earlier).

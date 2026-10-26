@@ -273,8 +273,10 @@ export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit sp
  * anchor is one the gate itself accepts (FUTURES_OR_PROP_SIGNAL_PATTERNS), so a post that matches the query passes the gate.
  */
 export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
+/** Topic requests skip any post that carries a link (2026-10-26): stream teasers, promo and content posts are never read or paid for. */
+export const NO_LINKS_QUERY_EXCLUSION = "-has:links";
 export function withCryptoExclusions(query: string): string {
-  return `(${query}) ${FUTURES_QUERY_ANCHORS} ${CRYPTO_QUERY_EXCLUSIONS} ${OPTIONS_QUERY_EXCLUSIONS}`;
+  return `(${query}) ${FUTURES_QUERY_ANCHORS} ${CRYPTO_QUERY_EXCLUSIONS} ${OPTIONS_QUERY_EXCLUSIONS} ${NO_LINKS_QUERY_EXCLUSION}`;
 }
 
 /**
