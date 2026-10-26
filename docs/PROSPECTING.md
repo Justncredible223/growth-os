@@ -240,6 +240,8 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   futures anchor and exclusions, so a request returns more relevant posts; each post is scored against the topic it matched
   (`topicForPost`).
 
+- **Maybe list (2026-10-26).** `GET /api/approvals?resource=prospecting` also returns an optional `maybe` array: posts the AI relevance screen turned away (status `not_relevant`, `skip_reason = screened_out_at_discovery`) in the last 7 days, newest first, at most 15 (`id, authorHandle, postText, postUrl, score, at`). Read-only, no migration. The app shows a collapsed "Maybe (n)" section at the end of the queue with "Open on X" only. There is no "This was fine" button: no existing flag or audit mechanism records that judgement safely, and the post is already stored as `not_relevant`.
+
 - **Search yield pass (2026-10-26).** Four "Search now" runs in a morning produced nothing (57 searches, $1.84 in three days, 5 kept, all 5
   rejected by the AI check): topic nouns such as "prop firm" and "trailing drawdown" pull in brand and content accounts. Three temporary,
   reversible changes: (1) `DAILY_SEARCH_BUDGET_USD` is $0.25 for one week (back to 0.5 in `prospectingEligibility.ts` after about

@@ -95,4 +95,9 @@ export interface ProspectingRepository {
   listWatchlistRows?(since: Date): Promise<WatchlistRow[]>;
   /** Marks non-terminal candidates older than the given cutoff as 'expired' -- run before each daily-set selection. Returns how many were expired. */
   expireStale(olderThan: Date): Promise<number>;
+  /** Posts the AI relevance screen turned away at discovery (status not_relevant, skip_reason screened_out_at_discovery), updated at or after `since`, newest first. Optional so simple fakes need not implement it. */
+  listScreenedOut?(since: Date, limit: number): Promise<ProspectingCandidate[]>;
 }
+
+/** The reason stored on a post the model relevance screen turned away (set in prospectingSearch.ts). */
+export const SCREENED_OUT_REASON = "screened_out_at_discovery";

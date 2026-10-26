@@ -106,11 +106,36 @@ export interface ProspectingSelectionDiagnostics {
  * retroactively sweeps any already-discovered irrelevant backlog the next
  * time the queue is fetched.
  */
+/** A post the AI relevance screen turned away, shown read-only in the app's "Maybe" list so the owner can judge whether the screen is too strict. */
+export interface ProspectingMaybeItem {
+  id: string;
+  authorHandle: string | null;
+  postText: string;
+  postUrl: string;
+  score: number;
+  /** When the screen turned it away (ISO). */
+  at: string;
+}
+
+export const MAYBE_WINDOW_DAYS = 7;
+export const MAYBE_MAX_ITEMS = 15;
+
+/** Model-screen rejections of the last 7 days, newest first, up to 15. Never throws: the Maybe list must not break the queue. */
+export async function listScreenedOutPosts(repo: ProspectingRepository, now: Date = new Date()): Promise<ProspectingMaybeItem[]> {
+  if (!repo.listScreenedOut) return [];
+  try {
+    const rows = await repo.listScreenedOut(new Date(now.getTime() - MAYBE_WINDOW_DAYS * 24 * 60 * 60 * 1000), MAYBE_MAX_ITEMS);
+    return rows.slice(0, MAYBE_MAX_ITEMS).map((c) => ({ id: c.id, authorHandle: c.authorHandle, postText: c.postText, postUrl: c.postUrl, score: c.opportunityScore, at: c.updatedAt }));
+  } catch {
+    return [];
+  }
+}
+
 export async function listProspectingQueue(
   client: SupabaseClient,
   now: Date = new Date(),
   deps: ProspectingHandlerDeps = {},
-): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics; pacing: ReplyPacing; recovery: RecoveryState }> {
+): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics; pacing: ReplyPacing; recovery: RecoveryState; maybe: ProspectingMaybeItem[] }> {
   const repo = repoFor(client, deps);
 
   const staleCutoff = new Date(now.getTime() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -142,10 +167,13 @@ export async function listProspectingQueue(
   const recentReplies = await repo.listRepliedSince(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000));
   const pacing = computeReplyPacing(recentReplies.map((c) => c.repliedAt), now, recovery.dailyCap ?? undefined, recovery.active ? RECOVERY_REPLY_COOLDOWN_MS : undefined);
 
+  const maybe = await listScreenedOutPosts(repo, now);
+
   return {
     candidates,
     pacing,
     recovery,
+    maybe,
     diagnostics: {
       totalConsidered: eligible.length,
       selected: selected.length,

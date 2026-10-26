@@ -545,8 +545,18 @@ class NetworkGrowthOsRepository(
             // API response" fallback case this is meant to represent.
             diagnostics = json.optJSONObject("diagnostics")?.toProspectingDiagnostics(),
             pacing = json.optJSONObject("pacing")?.toProspectingPacing(),
+            maybe = json.optJSONArray("maybe")?.map { it.toProspectingMaybeItem() } ?: emptyList(),
         )
     }
+
+    private fun JSONObject.toProspectingMaybeItem() = ProspectingMaybeItem(
+        id = getString("id"),
+        authorHandle = optStringOrNull("authorHandle"),
+        postText = getString("postText"),
+        postUrl = getString("postUrl"),
+        score = optDouble("score", 0.0),
+        at = optStringOrNull("at"),
+    )
 
     private fun JSONObject.toProspectingPacing() = ProspectingPacing(
         repliedLast24h = optInt("repliedLast24h"),
