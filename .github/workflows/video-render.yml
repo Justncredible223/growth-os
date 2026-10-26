@@ -36,31 +36,36 @@ jobs:
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
+      - name: Cache ffmpeg packages
+        # The apt download from the Azure mirror hangs often enough to fail merges (2026-10-22, three times on 2026-10-26). The
+        # .deb files are cached after one successful install and installed offline on later runs; the network install below is
+        # only the fallback (first run, a new runner image, or a cache miss). The key includes the runner image version, so a
+        # new image refreshes the cache instead of installing stale dependency versions.
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-debs
+          key: ffmpeg-debs-v1-${{ runner.os }}-${{ env.ImageVersion }}
+
       - name: Install ffmpeg
-        # Was FedericoCarboni/setup-ffmpeg@v3, which broke (2026-09-10):
-        # "AssertionError: Failed to read version from readme" -- that
-        # action scrapes a version number out of a GitHub README to decide
-        # what to download, and stopped parsing correctly, failing every
-        # render before it ever reached render-single.ts (so the render
-        # sat stuck at 'queued' forever -- nothing ever wrote 'failed').
-        # apt's ffmpeg on ubuntu-latest already ships with libx264/libass/
-        # libfreetype built in (verified needed for this pipeline's caption
-        # burn-in), so this avoids depending on a third-party action's own
-        # fragile version-detection logic entirely.
-        # Hardened 2026-10-22: on 2026-10-22 this step hung for 14+ minutes (a stalled package download; it normally takes about
-        # 20 seconds) and an approved render sat 'queued' until it was cancelled by hand. A step timeout plus per-command
-        # timeouts and up to 3 attempts turns a stall into a quick retry, and a real failure into a fast, visible one.
         timeout-minutes: 10
         run: |
-          # Each attempt must fit its share of the step budget (2026-10-26: a single 240 s attempt used up the old 8 minutes
-          # twice in a row). Attempt 2 switches from the Azure mirror to archive.ubuntu.com; --no-install-recommends keeps the
-          # download smaller (ffmpeg's libx264/libass dependencies are not recommends).
+          mkdir -p "$HOME/ffmpeg-debs"
+          if ls "$HOME"/ffmpeg-debs/*.deb >/dev/null 2>&1; then
+            echo "installing ffmpeg from the cached packages"
+            if sudo dpkg -i "$HOME"/ffmpeg-debs/*.deb && ffmpeg -version | head -1; then exit 0; fi
+            echo "cached install failed, falling back to the network"
+          fi
+          # Keep the downloaded .deb files (the runner image deletes them after install by default) so they can be cached.
+          sudo rm -f /etc/apt/apt.conf.d/docker-clean
           for attempt in 1 2 3; do
             if [ "$attempt" = "2" ]; then
               sudo sed -i 's|http://azure.archive.ubuntu.com|http://archive.ubuntu.com|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
             fi
             if sudo timeout 45 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 update               && sudo timeout 120 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 install -y --no-install-recommends ffmpeg; then
               ffmpeg -version | head -1
+              sudo cp /var/cache/apt/archives/*.deb "$HOME/ffmpeg-debs/" 2>/dev/null || true
+              sudo chown -R "$USER" "$HOME/ffmpeg-debs" 2>/dev/null || true
               exit 0
             fi
             echo "apt attempt $attempt failed or timed out"
