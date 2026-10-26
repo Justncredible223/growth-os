@@ -240,6 +240,8 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   futures anchor and exclusions, so a request returns more relevant posts; each post is scored against the topic it matched
   (`topicForPost`).
 
+- **Maybe list (2026-10-26).** `GET /api/approvals?resource=prospecting` also returns an optional `maybe` array: posts the AI relevance screen turned away (status `not_relevant`, `skip_reason = screened_out_at_discovery`) in the last 7 days, newest first, at most 15 (`id, authorHandle, postText, postUrl, score, at`). Read-only, no migration. The app shows a collapsed "Maybe (n)" section at the end of the queue with "Open on X" only. There is no "This was fine" button: no existing flag or audit mechanism records that judgement safely, and the post is already stored as `not_relevant`.
+
 Why: October's real spend was about $0.63 a day ($15.17 by the 24th), 113 of 114 discovered posts were too old to use, and the owner's
 replies were reaching a median of 9 views. Revert switches: none needed; the old behavior is in git history (#227 and earlier).
 

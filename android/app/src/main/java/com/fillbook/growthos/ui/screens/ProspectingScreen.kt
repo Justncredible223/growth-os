@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,6 +51,7 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.ProspectingCandidate
 import com.fillbook.growthos.data.ProspectingDiagnostics
+import com.fillbook.growthos.data.ProspectingMaybeItem
 import com.fillbook.growthos.data.ProspectingPacing
 import com.fillbook.growthos.data.ProspectingSearchRunResult
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -109,6 +112,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     var items by remember { mutableStateOf<List<ProspectingCandidate>>(emptyList()) }
     var diagnostics by remember { mutableStateOf<ProspectingDiagnostics?>(null) }
     var pacing by remember { mutableStateOf<ProspectingPacing?>(null) }
+    var maybe by remember { mutableStateOf<List<ProspectingMaybeItem>>(emptyList()) }
+    var maybeOpen by rememberSaveable { mutableStateOf(false) }
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -138,6 +143,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             items = result.candidates
             diagnostics = result.diagnostics
             pacing = result.pacing
+            maybe = result.maybe
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = authErrorMessage(e) ?: "Couldn't load Prospecting. Check your connection and try again."
@@ -355,6 +361,9 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                                     subtitle = prospectingEmptyStateMessage(diagnostics),
                                 )
                             }
+                            maybeSection(maybe, maybeOpen, { maybeOpen = !maybeOpen }) { item ->
+                                openExternalUrl(context, ProspectingPostLink.buildOpenUrl("x", item.postUrl, item.authorHandle))
+                            }
                         }
                     } else {
                         LazyColumn(
@@ -378,6 +387,9 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                                 } else {
                                     cardFor(candidate)
                                 }
+                            }
+                            maybeSection(maybe, maybeOpen, { maybeOpen = !maybeOpen }) { item ->
+                                openExternalUrl(context, ProspectingPostLink.buildOpenUrl("x", item.postUrl, item.authorHandle))
                             }
                         }
                     }
@@ -410,6 +422,55 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         }
     }
     SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/**
+ * The collapsed "Maybe (n)" section at the end of the queue list (works in the one-pane and two-pane layouts, since both use this list):
+ * posts the AI relevance screen turned away this week, read-only. Each row is the handle, the post text and "Open on X" -- no draft button,
+ * so the drafting flow is untouched. Hidden when there is nothing to show.
+ */
+private fun LazyListScope.maybeSection(
+    maybe: List<ProspectingMaybeItem>,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onOpenOnX: (ProspectingMaybeItem) -> Unit,
+) {
+    if (maybe.isEmpty()) return
+    item(key = "maybe-header") {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Maybe (${maybe.size})", style = MaterialTheme.typography.titleMedium, color = TextSecondary, modifier = Modifier.weight(1f))
+            Text(if (open) "Hide" else "Show", style = MaterialTheme.typography.labelLarge, color = Accent)
+        }
+    }
+    if (open) {
+        item(key = "maybe-hint") {
+            Text(
+                "Turned away by the AI check in the last 7 days. If many of these look fine, the check is too strict.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+            )
+        }
+        items(maybe, key = { "maybe-${it.id}" }) { item ->
+            GrowthCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "@${item.authorHandle ?: "unknown"}",
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    item.at?.let { relativeTime(it) }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = TextTertiary) }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(item.postText, style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                TextButton(onClick = { onOpenOnX(item) }) { Text("Open on X", color = Accent, maxLines = 1) }
+            }
+        }
     }
 }
 

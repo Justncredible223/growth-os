@@ -63,6 +63,13 @@ class InMemoryProspectingRepository implements ProspectingRepository {
   async expireStale(): Promise<number> {
     return 0;
   }
+
+  async listScreenedOut(since: Date, limit: number): Promise<ProspectingCandidate[]> {
+    return [...this.rows.values()]
+      .filter((r) => r.status === "not_relevant" && r.skipReason === "screened_out_at_discovery" && new Date(r.updatedAt) >= since)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit);
+  }
 }
 
 function candidate(overrides: Partial<ProspectingCandidate>): ProspectingCandidate {
@@ -814,5 +821,32 @@ describe("draftProspectingCandidateReply -- never pays for the same post twice (
     expect(out.status).toBe("ready");
     expect(d.cheapRelevanceCheck).toHaveBeenCalledTimes(1);
     expect(d.drafter).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("listProspectingQueue -- the Maybe list (model-screen rejections)", () => {
+  const NOW = new Date("2026-10-26T12:00:00Z");
+  const daysAgo = (d: number) => new Date(NOW.getTime() - d * 24 * 60 * 60 * 1000).toISOString();
+
+  it("lists only this week's model-screen rejections, newest first, capped at 15, in the documented shape", async () => {
+    const repo = new InMemoryProspectingRepository();
+    for (let i = 0; i < 17; i++) {
+      repo.seed(candidate({ id: `screened-${i}`, status: "not_relevant", skipReason: "screened_out_at_discovery", authorHandle: `h${i}`, postText: `post ${i}`, opportunityScore: 40 + i, updatedAt: new Date(NOW.getTime() - i * 60 * 1000).toISOString(), authorExternalId: `a${i}` }));
+    }
+    repo.seed(candidate({ id: "old", status: "not_relevant", skipReason: "screened_out_at_discovery", updatedAt: daysAgo(8), authorExternalId: "old" }));
+    repo.seed(candidate({ id: "owner-irrelevant", status: "not_relevant", skipReason: null, updatedAt: daysAgo(0), authorExternalId: "oi" }));
+    repo.seed(candidate({ id: "other-reason", status: "not_relevant", skipReason: "gate", updatedAt: daysAgo(0), authorExternalId: "or" }));
+
+    const { maybe } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(maybe).toHaveLength(15);
+    expect(maybe.map((m) => m.id)).toEqual(Array.from({ length: 15 }, (_, i) => `screened-${i}`));
+    expect(maybe[0]).toEqual({ id: "screened-0", authorHandle: "h0", postText: "post 0", postUrl: "https://x.com/i/web/status/123", score: 40, at: NOW.toISOString() });
+  });
+
+  it("is empty (and the queue still works) when the repository cannot list them or throws", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.listScreenedOut = async () => { throw new Error("boom"); };
+    expect((await listProspectingQueue(fakeClient, NOW, { repo })).maybe).toEqual([]);
   });
 });

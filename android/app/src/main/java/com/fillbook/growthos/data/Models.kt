@@ -318,6 +318,19 @@ data class ProspectingQueueResult(
     val candidates: List<ProspectingCandidate>,
     val diagnostics: ProspectingDiagnostics?,
     val pacing: ProspectingPacing? = null,
+    /** Posts the AI relevance screen turned away this week (read-only "Maybe" list); empty when the API response predates the field. */
+    val maybe: List<ProspectingMaybeItem> = emptyList(),
+)
+
+/** A post the AI relevance screen turned away -- shown read-only so the owner can judge whether the screen is too strict. Open on X only; no draft. */
+data class ProspectingMaybeItem(
+    val id: String,
+    val authorHandle: String?,
+    val postText: String,
+    val postUrl: String,
+    val score: Double,
+    /** When the screen turned it away (ISO timestamp). */
+    val at: String?,
 )
 
 /** The result of one Prospecting search run (scheduled or owner-triggered "Search now") -- see backend/src/prospecting/prospectingSearch.ts's ProspectingRunResult. */

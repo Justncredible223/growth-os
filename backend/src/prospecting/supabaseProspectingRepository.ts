@@ -1,7 +1,7 @@
 import type { WatchlistRow } from "./prospectingWatchlist.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFT_OPTIONS_KEY, POSTED_STYLE_KEY, parseDraftOptions, type PostedStyle } from "./prospectingDraftOptions.js";
-import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "./types.js";
+import { SCREENED_OUT_REASON, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
 
 /** The experiment's two fields live inside the existing score_breakdown JSON (no migration); this splits them back out. */
 function splitBreakdown(raw: unknown): { scoreBreakdown: Record<string, string>; draftOptions: ProspectingCandidate["draftOptions"]; postedStyle: PostedStyle | null } {
@@ -127,6 +127,19 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
       status: String(r.status ?? ""),
       opportunityScore: Number(r.opportunity_score ?? 0),
     }));
+  }
+
+  async listScreenedOut(since: Date, limit: number): Promise<ProspectingCandidate[]> {
+    const { data, error } = await this.client
+      .from("prospecting_candidates")
+      .select()
+      .eq("status", "not_relevant")
+      .eq("skip_reason", SCREENED_OUT_REASON)
+      .gte("updated_at", since.toISOString())
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`listScreenedOut failed: ${error.message}`);
+    return (data ?? []).map(fromRow);
   }
 
   async listByStatus(statuses: ProspectingStatus[], limit = 50): Promise<ProspectingCandidate[]> {
