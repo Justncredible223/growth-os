@@ -38,9 +38,25 @@ export interface ProspectingTopic {
   label: string;
   /** A = direct fit, B = adjacent fit, C = relationship fit -- see file doc comment. Drives scoring weight (scoreProspectingCandidate). */
   replyClass: "A" | "B" | "C";
+  /**
+   * Search priority (2026-10-26): 1 = a first-person PAIN phrase (a trader describing their own loss or rule break), 2 = a topic NOUN
+   * (prop firm, drawdown, margin...). Lower is searched first: noun topics mostly return brand and content accounts, pain phrases are
+   * where individual traders in trouble post. Set from PAIN_TOPIC_KEYS below.
+   */
+  priority?: 1 | 2;
 }
 
-export const PROSPECTING_TOPICS: ProspectingTopic[] = [
+/** Topics whose query is a pain phrase: searched before every noun topic (see ProspectingTopic.priority). */
+export const PAIN_TOPIC_KEYS: ReadonlySet<string> = new Set([
+  "revenge_trading", "overtrading", "plan_adherence", "trading_mistakes", "first_loss", "why_i_lost", "blown_account", "broke_rules",
+  "consistency_rule", "sized_up", "tilt", "losing_streak", "daily_loss", "strategy_hopping", "holding_losers", "bad_trading_day",
+  "hesitation_trading", "gave_back_profits", "too_many_trades", "fomo_trading",
+]);
+
+type TopicInput = Omit<ProspectingTopic, "priority">;
+const withPriority = (topics: TopicInput[]): ProspectingTopic[] => topics.map((t) => ({ ...t, priority: PAIN_TOPIC_KEYS.has(t.key) ? 1 : 2 }));
+
+export const PROSPECTING_TOPICS: ProspectingTopic[] = withPriority([
   // ---- CLASS A -- direct fit ----
   { key: "revenge_trading", query: '"revenge trading"', label: "Revenge trading", replyClass: "A" },
   // "trading" is appended (not just bare "overtrading") so a matching post is guaranteed
@@ -95,7 +111,12 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
 
   // ---- CLASS C -- relationship fit (credible futures traders/creators, no Fillbook fit required) ----
   { key: "futures_trader", query: '"futures trader" (process OR psychology)', label: "Futures trader", replyClass: "C" },
-];
+]);
+
+/** The rotation order: pain topics first, noun topics after; within a tier the list order above is kept (stable). */
+export function topicsInSearchOrder(topics: readonly ProspectingTopic[] = PROSPECTING_TOPICS): ProspectingTopic[] {
+  return [...topics].sort((a, b) => (a.priority ?? 2) - (b.priority ?? 2));
+}
 
 /**
  * Topics taken out of the daily search rotation (owner review 2026-09-20). X bills $0.005 per post
@@ -106,7 +127,7 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
  * reply class (see discoveryLabelForKey / replyClassForKey), and a topic can be moved back into
  * PROSPECTING_TOPICS in one edit if its yield changes.
  */
-export const PARKED_PROSPECTING_TOPICS: ProspectingTopic[] = [
+export const PARKED_PROSPECTING_TOPICS: ProspectingTopic[] = withPriority([
   { key: "trade_review", query: '"trade review"', label: "Trade review", replyClass: "A" },
   { key: "trading_routine", query: '"trading routine" OR "trading process"', label: "Trading routine", replyClass: "B" },
   { key: "hesitation_trading", query: '"hesitate to enter" OR "entry hesitation" trading', label: "Hesitation", replyClass: "B" },
@@ -123,7 +144,7 @@ export const PARKED_PROSPECTING_TOPICS: ProspectingTopic[] = [
   // every candidate this topic found (confirmed live 2026-09-07: 4 of 4) was silently
   // reclassified 'not_relevant' the instant the app fetched the queue.
   { key: "too_many_trades", query: '"too many trades" trading', label: "Overtrading volume", replyClass: "B" },
-];
+]);
 
 const TOPIC_BY_KEY = new Map([...PROSPECTING_TOPICS, ...PARKED_PROSPECTING_TOPICS].map((t) => [t.key, t]));
 
