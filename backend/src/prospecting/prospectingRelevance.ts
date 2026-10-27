@@ -383,7 +383,7 @@ export function isPromoContent(postText: string): boolean {
 }
 
 /** Accounts this small get a reply seen by almost nobody (owner, 2026-10-04); an unknown follower count is not penalised. */
-export const MIN_PROSPECT_FOLLOWERS = 50; // lowered from 100 on 2026-10-27: a small trader's own loss story was dropped here while replies elsewhere reached 1k+ views
+export const MIN_PROSPECT_FOLLOWERS = 0; // gate off 2026-10-27: a ~30-follower account's thread, tagged to a big account, got a reply 10k views and gained ~70 followers; reach comes from the thread, not the author // lowered from 100 on 2026-10-27: a small trader's own loss story was dropped here while replies elsewhere reached 1k+ views
 export function isTooSmallToBeWorthIt(followerCount: number | null | undefined): boolean {
   return typeof followerCount === "number" && followerCount < MIN_PROSPECT_FOLLOWERS;
 }

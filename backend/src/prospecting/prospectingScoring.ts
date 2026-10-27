@@ -155,6 +155,10 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const impressionCount = metrics.impression_count ?? 0;
   const trafficPoints = impressionCount > 0 ? Math.min(Math.log10(impressionCount + 1) * 3, 10) : 0;
   if (trafficPoints > 0) breakdown.threadTraffic = `${impressionCount} impressions on the post -> +${trafficPoints.toFixed(1)} (capped at 10)`;
+  // Breakout thread (owner, 2026-10-27): a ~30-follower account tagged a big account, the thread blew up, and a reply under it got 10k views
+  // and ~70 new followers overnight. A post seen by far more people than follow its author is where a reply travels, so it earns +12.
+  const breakoutPoints = impressionCount >= 500 && impressionCount >= followers * 10 ? 12 : 0;
+  if (breakoutPoints > 0) breakdown.breakoutThread = `${impressionCount} impressions on a ${followers}-follower account (10x or more) -> +${breakoutPoints}`;
 
   // Recency -- hour-scale, not a 7-day slope (2026-09-21 reach review): on X
   // a reply lands near the top of a thread only if it is among the first
@@ -209,7 +213,7 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
     ? "already replied to this author before -> +10"
     : "no prior Prospecting contact -> +0";
 
-  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + trafficPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints + watchlistPoints - crowdedPenalty;
+  const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + trafficPoints + breakoutPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints + watchlistPoints - crowdedPenalty;
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 
   return { score, breakdown, excluded: false, exclusionReason: null };

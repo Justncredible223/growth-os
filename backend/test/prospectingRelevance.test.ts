@@ -244,10 +244,10 @@ describe("ads and tiny accounts (2026-10-04)", () => {
     expect(isReplyWorthyPost("One of the biggest problems with AI agents is proving that they work. Evaluate the trading agent beyond max drawdown.")).toBe(false);
   });
 
-  it("treats accounts under the follower floor as not worth it, and an unknown count as fine", () => {
-    expect(isTooSmallToBeWorthIt(MIN_PROSPECT_FOLLOWERS - 1)).toBe(true);
-    expect(isTooSmallToBeWorthIt(0)).toBe(true);
-    expect(isTooSmallToBeWorthIt(MIN_PROSPECT_FOLLOWERS)).toBe(false);
+  it("no longer rejects small accounts (2026-10-27: a 30-follower thread gave a reply 10k views); an unknown count is fine", () => {
+    expect(MIN_PROSPECT_FOLLOWERS).toBe(0);
+    expect(isTooSmallToBeWorthIt(0)).toBe(false);
+    expect(isTooSmallToBeWorthIt(30)).toBe(false);
     expect(isTooSmallToBeWorthIt(null)).toBe(false);
   });
 });
