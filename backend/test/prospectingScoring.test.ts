@@ -172,8 +172,16 @@ describe("thread traffic (2026-10-24)", () => {
     const huge = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3, impression_count: 5_000_000 } }));
     expect(seen.score).toBeGreaterThan(quiet.score);
     expect(seen.breakdown.threadTraffic).toMatch(/400 impressions/);
-    expect(huge.score - quiet.score).toBeLessThanOrEqual(10.01);
+    expect(huge.breakdown.threadTraffic).toMatch(/capped at 10/);
     expect(quiet.breakdown.threadTraffic).toBeUndefined();
+  });
+
+  it("a thread seen by 10x its author's followers gets the breakout bonus (+12), a normal one does not", () => {
+    const small = baseInput({ authorFollowerCount: 30, publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3, impression_count: 5_000 } });
+    const breakout = scoreProspectingCandidate(small);
+    const normal = scoreProspectingCandidate(baseInput({ authorFollowerCount: 30_000, publicMetrics: { reply_count: 1, quote_count: 0, like_count: 3, impression_count: 5_000 } }));
+    expect(breakout.breakdown.breakoutThread).toMatch(/\+12/);
+    expect(normal.breakdown.breakoutThread).toBeUndefined();
   });
 
   it("a post with no impression count reported is not penalised", () => {
