@@ -134,7 +134,7 @@ export const DAILY_SEARCH_CAP = 30;
  * queries returned almost nothing (about 1.8 posts a search, $0.009), ten near-empty searches used the whole day. Search spend is capped
  * at this many dollars a day (October ran about $0.31 a day on searches); the request count above is only a safety net.
  */
-export const DAILY_SEARCH_BUDGET_USD = 0.25;
+export const DAILY_SEARCH_BUDGET_USD = 1.0; // TEMP 2026-10-26: one-off owner run, revert to 0.25 right after
 // TEMPORARY (2026-10-26, one week): lowered from 0.50 to 0.25 while the search yield is fixed (about $0.60 a day bought almost no usable
 // prospect). To raise it back, set the constant above to 0.5 (or higher) after about 2026-11-02.
 /** The top-scoring new posts per run that get the cheap model relevance check before they can reach the queue (about $0.001 each). */

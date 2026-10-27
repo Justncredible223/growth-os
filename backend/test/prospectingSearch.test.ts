@@ -479,7 +479,7 @@ describe("runProspectingSearch", () => {
       const posts = Array.from({ length: 10 }, (_, i) => searchResult({ id: `junk-${i}`, text: "nothing relevant here at all", authorId: `a${i}` }));
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(posts) };
       // 10 reads cost $0.05 each request; with $0.21 already spent only one more request fits.
-      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.21, runIndexOverride: 5 });
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.96, runIndexOverride: 5 });
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
       expect(result.searchRequests).toBe(1);
     });
