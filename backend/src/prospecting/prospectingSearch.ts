@@ -103,6 +103,8 @@ export interface ProspectingRunDeps {
   watchlistSeeds?: readonly string[];
   /** Whether authors with merely vetted posts join the watchlist (default true); production turns it off so only seeds and replied-to creators remain. */
   watchlistIncludeVetted?: boolean;
+  /** Whether the creator watchlist is read at all (default true). Production turns it off (2026-10-27): its streams were forex, crypto and news accounts, nearly all dropped, so the whole budget goes to topic searches. */
+  watchlistEnabled?: boolean;
 }
 
 /** Topics searched together in one X request (OR-ed): one near-empty request per narrow topic was burning the daily limit (2026-10-25). */
@@ -202,7 +204,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     const seeds = deps.watchlistSeeds ?? [...PROSPECTING_SEED_CREATORS, ...parseHandleList(process.env.PROSPECTING_WATCHLIST_HANDLES)];
     const rows = deps.repo.listWatchlistRows ? await deps.repo.listWatchlistRows(new Date(now.getTime() - WATCHLIST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)) : [];
     const watchlist = buildWatchlist(rows, seeds, deps.watchlistIncludeVetted ?? true);
-    if (watchlist.length >= MIN_WATCHLIST_SIZE) watchGroups = chunkWatchlist(watchlist.map((w) => w.handle));
+    if ((deps.watchlistEnabled ?? true) && watchlist.length >= MIN_WATCHLIST_SIZE) watchGroups = chunkWatchlist(watchlist.map((w) => w.handle));
   } catch {
     watchGroups = [];
   }
