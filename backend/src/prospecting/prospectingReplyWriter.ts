@@ -193,7 +193,7 @@ export const PROSPECTING_PLATFORM_PROFILES: Record<string, ProspectingPlatformPr
     trackableLink: PROSPECTING_TRACKABLE_LINK,
     styleRules:
       "A real X reply is usually one or two sentences. No hashtags, no thread-length essays, no @-mentioning " +
-      "other accounts to pull them in. It reads like a person typing a quick, sharp reply under someone's post.",
+      "other accounts to pull them in (the only exception is when the user message says tagging is ALLOWED for this post and names the account). It reads like a person typing a quick, sharp reply under someone's post.",
     linkPolicy:
       "If -- and only if -- a link genuinely belongs, use exactly this trackable link and no other: " +
       `${PROSPECTING_TRACKABLE_LINK}. Put it at the end of the reply, never as the reply's main point.`,
@@ -296,6 +296,8 @@ export interface ProspectingDraftContext {
   ownerOverrideNote?: string;
   /** Whether option C (the Fillbook option) may be written for this post. False under recovery mode or an exhausted mention budget. In the user message, so the cached system prompt stays identical. */
   fillbookOption?: boolean;
+  /** Set when tagging one account the post already names is allowed for this draft (prospectingTagging.ts). In the user message. */
+  tagNote?: string;
 }
 
 export interface ProspectingDraftResult {
@@ -360,6 +362,8 @@ export async function draftProspectingReply(
     context.ownerOverrideNote ?? null,
     context.fillbookOption === undefined ? null : "",
     context.fillbookOption === undefined ? null : `Option C (the Fillbook option) is ${context.fillbookOption ? "ALLOWED" : "NOT ALLOWED"} for this post.`,
+    context.tagNote ? "" : null,
+    context.tagNote ?? null,
     context.retryFeedback ? "" : null,
     context.retryFeedback ?? null,
   ]
