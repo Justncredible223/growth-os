@@ -14,8 +14,8 @@ import { PROSPECTING_TWO_OPTION_DRAFTS, SHARP_MAX_WORDS, SHARP_MIN_WORDS } from 
 export const PROSPECTING_RELEVANCE_CRITERIA = `Relevant means: a TRADER's own post, genuinely about FUTURES trading (index or commodity futures) in a prop-firm or own-capital
 (self-funded) context, including that futures trader's psychology, discipline, risk rules or journaling, that a short, specific
 reply could add something to.
-NOT relevant: crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and general trading talk with no futures angle.
-Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist: if the post shows no futures evidence, answer false.
+NOT relevant: crypto, options (calls, puts, spreads, 0DTE), stocks or ETFs, forex, and posts clearly about one of those markets.
+Futures evidence means the word futures, a futures ticker (ES, NQ, MNQ, MES, CL, GC), a futures prop firm (Topstep, Apex, Take Profit Trader, Bulenox, Tradeify), a futures platform (NinjaTrader, Tradovate, Rithmic), or rules only futures prop accounts have (trailing drawdown, consistency rule, trading combine). A mention of a prop firm or a funded account alone is NOT enough, because forex and CFD prop firms exist. Posts with futures evidence are relevant. Also lean toward true when a trader's own post is about day-trading psychology, discipline, revenge trading, overtrading, risk rules, drawdown, a failed or passed eval, or journaling and does NOT name a market, as long as nothing points to crypto, options, stocks or forex: a reply from a futures journaling tool still fits. Answer false only when the post clearly points to another market or fails the other tests below.
 Announcements, video or stream teasers and brags are not conversations either: false.
 A post from a COMPANY account (a prop firm, broker, platform, course, signal service or tool, usually recognisable by the handle or
 by talking about "our" rules, accounts, payouts or plans) is marketing, not a trader's conversation, even when it is phrased as a
@@ -387,8 +387,8 @@ automated search for a trading-related topic (or came from a watched creator), b
 Judge ONE thing with this test:
 ${PROSPECTING_RELEVANCE_CRITERIA}
 
-Answer honestly and quickly -- you are not writing a reply, only screening. A confident "not relevant" is the correct, expected
-answer for most posts that reach this check.`;
+Answer honestly and quickly -- you are not writing a reply, only screening. When a trader's post is close to the test and a short
+reply could help, answer true: the owner reviews every draft, and a missed good conversation costs more than an extra one to skip.`;
 
 /**
  * Cheap ($0.80/mTok in, MODEL_HAIKU) relevance precheck -- runs AFTER the
