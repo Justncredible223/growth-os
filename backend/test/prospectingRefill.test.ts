@@ -48,7 +48,7 @@ describe("search limits (2026-10-24)", () => {
   it("raises the monthly cap to $20 and sets the daily limit, buffer and vetting sizes", () => {
     expect(MONTHLY_PROSPECTING_BUDGET_USD).toBe(20);
     expect(DAILY_SEARCH_CAP).toBe(30);
-    expect(DAILY_SEARCH_BUDGET_USD).toBe(1.0); // TEMP one-off; temporary one-week setting from 2026-10-26 (was 0.5)
+    expect(DAILY_SEARCH_BUDGET_USD).toBe(0.25); // temporary one-week setting from 2026-10-26 (was 0.5)
     expect(BUFFER_TARGET).toBe(2);
     expect(VET_MAX_PER_RUN).toBe(8);
   });
