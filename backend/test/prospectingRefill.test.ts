@@ -88,6 +88,6 @@ describe("getTodayXSearchCount", () => {
 describe("prospectingRunExtras", () => {
   it("provides the spend gate, pause switch, daily count and relevance screen", () => {
     const extras = prospectingRunExtras(fakeClient);
-    expect(Object.keys(extras).sort()).toEqual(["getMonthSpendUsd", "getTodaySearchCount", "getTodaySearchSpendUsd", "isPaused", "screenRelevance"]);
+    expect(Object.keys(extras).sort()).toEqual(["getMonthSpendUsd", "getTodaySearchCount", "getTodaySearchSpendUsd", "isPaused", "screenRelevance", "watchlistIncludeVetted"]);
   });
 });

@@ -70,7 +70,7 @@ export function parseHandleList(raw: string | undefined | null): string[] {
  * Pure: the ordered watchlist from vetted candidate rows. Seeds first, then creators the owner has replied to, then creators with the
  * most vetted posts. An author with any post turned away (unless the owner replied to them), or who is outside the follower range, is left off.
  */
-export function buildWatchlist(rows: WatchlistRow[], seeds: readonly string[] = []): WatchedCreator[] {
+export function buildWatchlist(rows: WatchlistRow[], seeds: readonly string[] = [], includeVetted = true): WatchedCreator[] {
   const seen = new Set<string>();
   const out: WatchedCreator[] = [];
   for (const raw of seeds) {
@@ -104,7 +104,9 @@ export function buildWatchlist(rows: WatchlistRow[], seeds: readonly string[] = 
       // One turned-away post is enough to drop an author (2026-10-25). The list used to keep anyone turned away no more often
       // than vetted, and "vetted" includes posts no model has screened yet, so company accounts (a prop firm posting about its own
       // drawdown rules) stayed on it, scored +6 and kept reaching the top of the queue only to be rejected on Draft reply.
-      return a.vetted >= 1 && a.best >= MIN_VETTED_SCORE && a.turnedAway === 0;
+      // includeVetted is off in production (2026-10-27): "vetted" admitted forex, crypto, Indian-market and firm-marketing accounts, and their
+      // streams cost $0.90 over four days for one new prospect while topic searches found five for $1.04. Only seeds and creators the owner replied to stay.
+      return includeVetted && a.vetted >= 1 && a.best >= MIN_VETTED_SCORE && a.turnedAway === 0;
     })
     .sort(([, a], [, b]) => Number(b.replied) - Number(a.replied) || b.vetted - a.vetted || b.best - a.best || (b.followers ?? 0) - (a.followers ?? 0));
 

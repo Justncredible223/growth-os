@@ -101,6 +101,8 @@ export interface ProspectingRunDeps {
   runIndexOffset?: number;
   /** Creator handles always on the watchlist (no @), on top of PROSPECTING_SEED_CREATORS and the PROSPECTING_WATCHLIST_HANDLES environment variable. */
   watchlistSeeds?: readonly string[];
+  /** Whether authors with merely vetted posts join the watchlist (default true); production turns it off so only seeds and replied-to creators remain. */
+  watchlistIncludeVetted?: boolean;
 }
 
 /** Topics searched together in one X request (OR-ed): one near-empty request per narrow topic was burning the daily limit (2026-10-25). */
@@ -199,7 +201,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   try {
     const seeds = deps.watchlistSeeds ?? [...PROSPECTING_SEED_CREATORS, ...parseHandleList(process.env.PROSPECTING_WATCHLIST_HANDLES)];
     const rows = deps.repo.listWatchlistRows ? await deps.repo.listWatchlistRows(new Date(now.getTime() - WATCHLIST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)) : [];
-    const watchlist = buildWatchlist(rows, seeds);
+    const watchlist = buildWatchlist(rows, seeds, deps.watchlistIncludeVetted ?? true);
     if (watchlist.length >= MIN_WATCHLIST_SIZE) watchGroups = chunkWatchlist(watchlist.map((w) => w.handle));
   } catch {
     watchGroups = [];
