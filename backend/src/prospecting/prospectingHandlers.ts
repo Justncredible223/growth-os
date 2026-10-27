@@ -1,3 +1,4 @@
+import { replyTagProblem, tagGateOpen, tagNote, taggableHandles } from "./prospectingTagging.js";
 import { RECOVERY_REPLY_COOLDOWN_MS, computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
 import { RECOVERY_DRAFT_NOTE, loadRecoveryState, namesFillbook, type RecoveryState } from "./prospectingRecovery.js";
 import { MENTION_BUDGET_DRAFT_NOTE, computeMentionBudget } from "./prospectingMentionBudget.js";
@@ -338,6 +339,9 @@ async function draftCandidateCore(
   const mustOmitFillbook = recovery.active || mentionBudget.exhausted;
   // Option C (the Fillbook option) is offered unless recovery mode or the mention budget says to leave Fillbook out.
   draftContext.fillbookOption = !mustOmitFillbook;
+  // Occasional tag (about 1 draft in 5): only an account the post itself names. Closed otherwise, and replyTagProblem then rejects any @handle.
+  const allowedTags = tagGateOpen(id) ? taggableHandles(row.postText, row.authorHandle) : [];
+  if (allowedTags.length > 0) draftContext.tagNote = tagNote(allowedTags);
   // A draft with a real problem (banned phrase, link, unverified claim, dash, over X's length limit) is
   // regenerated with the reason fed back, up to MAX_DRAFT_ATTEMPTS, and never shown. A draft with only a
   // soft style tell ("most traders", a question tacked on the end, too many sentences) gets ONE retry and
@@ -366,6 +370,7 @@ async function draftCandidateCore(
         ];
         const hardFor = (option: DraftOption): string | null =>
           checkReplyGuardrails(option.text, false)?.reason ??
+          replyTagProblem(option.text, allowedTags) ??
           (candidate.usesLink ? "declares a link; cold replies never include one" : null) ??
           (mustOmitFillbook && namesFillbook(option.text)
             ? recovery.active
@@ -391,6 +396,7 @@ async function draftCandidateCore(
       return {
         hard:
           checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ??
+          replyTagProblem(candidate.reply, allowedTags) ??
           (mustOmitFillbook && namesFillbook(candidate.reply)
             ? recovery.active
               ? "names Fillbook while recovery mode is on -- leave the product out entirely"
