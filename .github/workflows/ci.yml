@@ -98,8 +98,15 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
 
       # The mock-slide tests render real slides in headless Chromium (they skip themselves where none is installed).
+      # The download has hung for 10+ minutes on its own (2026-10-27, twice); cap each try at 4 minutes and try up to 3 times.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            timeout 240 npx playwright install --with-deps chromium && exit 0
+            echo "Chromium install attempt $attempt failed or timed out"
+          done
+          exit 1
+        timeout-minutes: 15
 
       - name: Typecheck
         run: npm run typecheck
