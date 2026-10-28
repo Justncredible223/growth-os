@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { groupedTopicQuery, runProspectingSearch, topicForPost, TOPICS_PER_QUERY } from "../src/prospecting/prospectingSearch";
 import { PROSPECTING_TOPICS, topicsInSearchOrder } from "../src/prospecting/prospectingTopics";
 import { withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
-import { DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, TOPICS_PER_SEARCH_RUN, selectPrioritizedTopicsForRun } from "../src/prospecting/prospectingEligibility";
+import { DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, MANUAL_SEARCH_RESERVE_USD, TOPICS_PER_SEARCH_RUN, selectPrioritizedTopicsForRun } from "../src/prospecting/prospectingEligibility";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFreshness";
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
@@ -468,6 +468,20 @@ describe("runProspectingSearch", () => {
       expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
     });
 
+    it("an owner-tapped search may still spend the manual reserve after the shared daily budget is used up", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => DAILY_SEARCH_BUDGET_USD, runIndexOverride: 5 });
+      expect(result.skipped).toBe(false);
+      expect(adapter.searchRecentPosts).toHaveBeenCalled();
+    });
+    it("an owner-tapped search stops once the reserve is spent too", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => DAILY_SEARCH_BUDGET_USD + MANUAL_SEARCH_RESERVE_USD, runIndexOverride: 5 });
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toMatch(/daily_search_budget/);
+      expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+    });
+
     it("near-empty searches do not use up the day: many requests are fine while the spend stays small", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
       const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => 10, getTodaySearchSpendUsd: async () => 0.09, runIndexOverride: 5 });
@@ -478,8 +492,8 @@ describe("runProspectingSearch", () => {
     it("stops mid-run once this run's own spend reaches the daily budget", async () => {
       const posts = Array.from({ length: 10 }, (_, i) => searchResult({ id: `junk-${i}`, text: "nothing relevant here at all", authorId: `a${i}` }));
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(posts) };
-      // 10 reads cost $0.05 each request; with $0.21 already spent only one more request fits.
-      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.21, runIndexOverride: 5 });
+      // 10 reads cost $0.05 each request; with the shared budget plus the manual reserve at $0.75, $0.71 already spent leaves room for one more request.
+      const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchSpendUsd: async () => 0.71, runIndexOverride: 5 });
       expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
       expect(result.searchRequests).toBe(1);
     });

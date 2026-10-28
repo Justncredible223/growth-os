@@ -7,6 +7,7 @@ import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   DAILY_SEARCH_BUDGET_USD,
   DAILY_SEARCH_CAP,
+  MANUAL_SEARCH_RESERVE_USD,
   RESULTS_PER_QUERY,
   VET_MAX_PER_RUN,
   currentRunSlot,
@@ -233,9 +234,11 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     return { skipped: true, skipReason: `daily_search_cap (${searchedToday} searches today, the limit is ${DAILY_SEARCH_CAP})`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
   }
 
+  // An owner-tapped search may use the reserve on top of the shared daily budget.
+  const searchBudgetUsd = DAILY_SEARCH_BUDGET_USD + (isManual ? MANUAL_SEARCH_RESERVE_USD : 0);
   let spentToday = deps.getTodaySearchSpendUsd ? await deps.getTodaySearchSpendUsd() : 0;
-  if (deps.getTodaySearchSpendUsd && spentToday >= DAILY_SEARCH_BUDGET_USD) {
-    return { skipped: true, skipReason: `daily_search_budget ($${spentToday.toFixed(2)} spent on searches today, the limit is $${DAILY_SEARCH_BUDGET_USD.toFixed(2)})`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
+  if (deps.getTodaySearchSpendUsd && spentToday >= searchBudgetUsd) {
+    return { skipped: true, skipReason: `daily_search_budget ($${spentToday.toFixed(2)} spent on searches today, the limit is $${searchBudgetUsd.toFixed(2)})`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
   }
 
   let postsRead = 0;
@@ -254,7 +257,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // One grouped request at a time, stopping as soon as enough usable posts are waiting.
   for (const request of plan) {
     if (deps.getTodaySearchCount && searchedToday >= DAILY_SEARCH_CAP) break;
-    if (deps.getTodaySearchSpendUsd && spentToday >= DAILY_SEARCH_BUDGET_USD) break;
+    if (deps.getTodaySearchSpendUsd && spentToday >= searchBudgetUsd) break;
     // Bounded discovery-time freshness (2026-09-07 review): X's recent-search
     // endpoint supports a real start_time filter (see xAdapter.ts's own doc
     // comment), so this asks X itself to never return anything older than

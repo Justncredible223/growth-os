@@ -232,7 +232,7 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   at a time, at most 2). An owner-tapped "Search now" keeps going, topic by topic, until it finds one more usable post, at most 3 topics.
 - **Refill after a reply.** Marking a reply posted starts a background refill (`prospectingRefill.ts`, `waitUntil`), so a fresh post is
   waiting when the 20-minute cooldown ends. It never throws and cannot delay saving the reply.
-- **Limits.** Searches are limited by money, not count: at most $0.25 (temporarily, see below; $0.50 before 2026-10-26) of X search spend a day (`DAILY_SEARCH_BUDGET_USD`, from cost
+- **Limits.** Searches are limited by money, not count: at most $0.50 of X search spend a day ($0.25 for 2026-10-26 to 2026-10-28, see below), plus a $0.25 reserve only an owner-tapped "Search now" can use (`MANUAL_SEARCH_RESERVE_USD`) (`DAILY_SEARCH_BUDGET_USD`, from cost
   events, Arizona day), with 30 requests as a safety net, and a monthly cap of $20 (was $15). The first version capped requests at 10;
   because the futures-anchored per-topic queries returned about 1.8 posts a search (down from 4 to 7), ten near-empty searches used the
   whole day. The Android app shows the skip reasons `daily_search_budget` and `daily_search_cap` as raw text until it is next rebuilt.
@@ -253,6 +253,8 @@ options and crypto posts were reaching the queue and the owner was tapping "Sear
   topics (prop firm, funded account, drawdown, journal, ...) only fill slots the pain topics cannot (`selectPrioritizedTopicsForRun`,
   `topicsInSearchOrder`). To undo (3), call `selectTopicsForRun(PROSPECTING_TOPICS, ...)` again in `prospectingSearch.ts`. Watch: pain
   phrases still sit behind the futures anchor, so they may return few posts; see the variant proposal in the PR.
+
+- **Budget restored, manual reserve (2026-10-28).** The $0.25 trial left the owner with an empty queue and `daily_search_budget` all day: scheduled and refill runs spent it before "Search now" could, and $0.25 is about 50 post reads. `DAILY_SEARCH_BUDGET_USD` is back to $0.50 and "Search now" may spend `MANUAL_SEARCH_RESERVE_USD` ($0.25) beyond it, so the button works even after scheduled runs used the shared budget. Worst case is $0.75 a day; the monthly cap still applies. The target is 4 to 6 replyable posts a day; if the queue is still thin, the Maybe list and "Draft anyway" remain the fallback.
 
 Why: October's real spend was about $0.63 a day ($15.17 by the 24th), 113 of 114 discovered posts were too old to use, and the owner's
 replies were reaching a median of 9 views. Revert switches: none needed; the old behavior is in git history (#227 and earlier).
