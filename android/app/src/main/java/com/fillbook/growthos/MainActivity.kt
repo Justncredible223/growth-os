@@ -202,8 +202,8 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         CrashReporter.install(this, AppConfig.BASE_URL, AppConfig.PROTECTION_BYPASS_SECRET, AppConfig.APP_TOKEN)
         VideoNotifications.createChannel(this)
-        PostingReminders.createChannel(this)
-        PostingReminders.scheduleNext(this)
+        // The daily posting reminder was removed (2026-10-28); this clears the alarm and channel an earlier build left behind.
+        PostingReminders.retire(this)
         // The deep-link route (if this activity was launched by tapping a
         // video-render push notification) is read once here and threaded
         // down through GrowthOsRoot/GrowthOsApp as initial nav state --
