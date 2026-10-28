@@ -3,11 +3,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Runtime-requested on API 33+ (see MainActivity's GrowthOsRoot); granted at install time below that. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Re-arms the daily posting reminders after a reboot (PostingReminders.kt). -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Posting reminders fire on the minute. Granted at install on API 33+; SCHEDULE_EXACT_ALARM covers API 31-32. -->
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <!-- Only needed for DownloadManager's public Downloads dir destination on API 26 to 28 (pre-scoped-storage); a documented no-op on 29+, where scoped storage's MediaStore path needs no such permission at all. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
@@ -50,15 +45,6 @@
                 <data android:scheme="com.fillbook.growthos" android:host="auth-callback" />
             </intent-filter>
         </activity>
-
-        <!-- Daily posting reminders at 6:30am / 12pm / 5:30pm Arizona time (PostingReminders.kt). -->
-        <receiver android:name=".data.PostingReminderReceiver" android:exported="false" />
-        <receiver android:name=".data.PostingReminderBootReceiver" android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-        </receiver>
 
         <service
             android:name=".push.FillbookMessagingService"
