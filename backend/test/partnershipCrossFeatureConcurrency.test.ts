@@ -30,7 +30,7 @@ const GOOD_DRAFT = "Fillbook is a broker-agnostic futures trading journal built 
 function contentAwareFetch() {
   return vi.fn(async (_url: string, init: RequestInit) => {
     const body = JSON.parse(init.body as string);
-    const toolName = body.tool_choice?.name as string | undefined;
+    const toolName = body.tools?.[0]?.name as string | undefined;
     if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
     if (toolName === "submit_verdict") return verdictResponse(true);
     throw new Error(`unexpected tool_choice: ${toolName}`);

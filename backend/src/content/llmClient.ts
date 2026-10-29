@@ -11,13 +11,22 @@ export const MODEL_HAIKU = "claude-haiku-5-5";
 const MODEL = MODEL_OPUS;
 
 /**
- * Where a call goes when the API answers 404 for its model (the key or workspace cannot use it): the model that ran
- * before this upgrade, so a model-access problem degrades quality instead of stopping every draft.
+ * Where a call goes when the API cannot serve its model (404: the key or workspace cannot use it; 400 "not supported
+ * for this model": a request option the model rejects) or the model answers without the tool call: the model that ran
+ * before this upgrade, so a model problem degrades quality instead of stopping every draft.
  */
 const FALLBACK_MODELS: Record<string, string> = {
   [MODEL_OPUS]: MODEL_SONNET,
   [MODEL_HAIKU]: "claude-haiku-4-5-20251001",
 };
+
+/**
+ * Models that answer HTTP 400 to a forced tool call (tool_choice type "tool" or "any"). Opus 5.5 is one: it takes
+ * tool_choice "auto" plus an instruction naming the tool. It also always thinks, and thinking tokens count against
+ * max_tokens, so these calls run at low effort with a larger token cap (billing is by tokens used, not by the cap).
+ */
+const NO_FORCED_TOOL_MODELS = new Set<string>([MODEL_OPUS]);
+const NO_FORCED_TOOL_MIN_MAX_TOKENS = 4096;
 
 /**
  * Previously there was NO per-call timeout at all -- a single hung request
@@ -156,15 +165,32 @@ export class LlmClient {
       ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
       : systemPrompt;
 
-    const bodyFor = (forModel: string) =>
-      JSON.stringify({
+    const bodyFor = (forModel: string) => {
+      const tools = [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }];
+      if (!NO_FORCED_TOOL_MODELS.has(forModel)) {
+        return JSON.stringify({
+          model: forModel,
+          max_tokens: maxTokens,
+          system: systemValue,
+          messages: [{ role: "user", content: userMessage }],
+          tools,
+          tool_choice: { type: "tool", name: toolName },
+        });
+      }
+      const instruction = `Respond only by calling the ${toolName} tool exactly once. Do not write any other text.`;
+      return JSON.stringify({
         model: forModel,
-        max_tokens: maxTokens,
-        system: systemValue,
+        max_tokens: Math.max(maxTokens, NO_FORCED_TOOL_MIN_MAX_TOKENS),
+        // The instruction goes after the cached block, so the cached system prompt stays byte-identical.
+        system: Array.isArray(systemValue)
+          ? [...systemValue, { type: "text", text: instruction }]
+          : `${systemValue}\n\n${instruction}`,
         messages: [{ role: "user", content: userMessage }],
-        tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
-        tool_choice: { type: "tool", name: toolName },
+        tools,
+        tool_choice: { type: "auto" },
+        output_config: { effort: "low" },
       });
+    };
     let requestBody = bodyFor(model);
     let fellBack = false;
 
@@ -185,9 +211,11 @@ export class LlmClient {
 
       const body = await res.text();
       const fallbackModel = FALLBACK_MODELS[model];
-      if (res.status === 404 && fallbackModel && !fellBack) {
+      // Any 400 or 404 on a model with a fallback: a request option the new model refuses must never stop every draft.
+      const modelRejected = res.status === 404 || res.status === 400;
+      if (modelRejected && fallbackModel && !fellBack) {
         fellBack = true;
-        console.warn(`LLM model ${model} unavailable (HTTP 404); falling back to ${fallbackModel}`);
+        console.warn(`LLM model ${model} rejected (HTTP ${res.status}); falling back to ${fallbackModel}`);
         requestBody = bodyFor(fallbackModel);
         continue;
       }
@@ -227,6 +255,11 @@ export class LlmClient {
     }
 
     const toolUse = json.content.find((block) => block.type === "tool_use" && block.name === toolName);
+    if (!toolUse && NO_FORCED_TOOL_MODELS.has(model) && !fellBack && FALLBACK_MODELS[model]) {
+      // The model was only asked (not forced) to call the tool and answered without it: one retry on the forced path.
+      console.warn(`LLM model ${model} answered without the ${toolName} tool call; retrying on ${FALLBACK_MODELS[model]}`);
+      return this.callTool<T>(systemPrompt, userMessage, toolName, toolSchema, timeoutMs, maxTokens, FALLBACK_MODELS[model], cacheSystemPrompt);
+    }
     if (!toolUse) {
       throw new LlmClientError(`Claude API response did not include a ${toolName} tool call`);
     }

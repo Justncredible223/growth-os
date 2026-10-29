@@ -330,7 +330,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
       fetchCallCount += 1;
       if (fetchCallCount === 1) await firstDraftGate; // hold the first call's very first fetch open
       const body = JSON.parse(init.body as string);
-      const toolName = body.tool_choice?.name as string | undefined;
+      const toolName = body.tools?.[0]?.name as string | undefined;
       return toolName === "submit_draft" ? draftResponse(GOOD_DRAFT) : verdictResponse(true);
     }) as unknown as typeof fetch;
 
@@ -372,7 +372,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
   function contentAwareFetch(): ReturnType<typeof vi.fn> {
     return vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string);
-      const toolName = body.tool_choice?.name as string | undefined;
+      const toolName = body.tools?.[0]?.name as string | undefined;
       if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
       if (toolName === "submit_verdict") return verdictResponse(true);
       throw new Error(`unexpected tool_choice in test fetch mock: ${toolName}`);
@@ -426,7 +426,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     let reviewerCalls = 0;
     global.fetch = vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string);
-      const toolName = body.tool_choice?.name as string | undefined;
+      const toolName = body.tools?.[0]?.name as string | undefined;
       if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
       reviewerCalls += 1;
       if (reviewerCalls === 3) throw new Error("simulated network interruption");
@@ -477,7 +477,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     // Supabase failure surfaces: {error}, not a throw).
     global.fetch = vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string);
-      const toolName = body.tool_choice?.name as string | undefined;
+      const toolName = body.tools?.[0]?.name as string | undefined;
       if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
       return verdictResponse(true);
     }) as unknown as typeof fetch;

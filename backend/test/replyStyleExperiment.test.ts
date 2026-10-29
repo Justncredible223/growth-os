@@ -129,7 +129,7 @@ describe("two-option drafting", () => {
     expect(system).toContain(PROSPECTING_COLD_NO_PITCH_GUIDANCE);
     expect(system).not.toContain("The Fillbook sentence is the point of the reply");
     expect(sent.tools[0].input_schema.required).toEqual(expect.arrayContaining(["reply", "helpfulReply"]));
-    expect(sent.max_tokens).toBeLessThanOrEqual(1000);
+    expect(sent.max_tokens).toBeLessThanOrEqual(4096); // Opus calls get a 4096 cap so thinking cannot use up the answer; billing is by tokens used
   });
 
   it("keeps every shared hard rule in the prompt and leaves HUMAN_REPLY_VOICE_RULES itself untouched", () => {
