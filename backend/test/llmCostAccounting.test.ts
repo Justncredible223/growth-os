@@ -147,12 +147,12 @@ describe("LlmClient: awaited usage recording and the budget guard", () => {
 describe("daily budget tiers", () => {
   const env = {} as NodeJS.ProcessEnv;
   it("background work stops at the daily budget", () => {
-    expect(budgetExceeded("background", { totalUsd: 1.6 }, env)).toBe(true);
-    expect(budgetExceeded("background", { totalUsd: 1.4 }, env)).toBe(false);
+    expect(budgetExceeded("background", { totalUsd: 4.1 }, env)).toBe(true);
+    expect(budgetExceeded("background", { totalUsd: 3.9 }, env)).toBe(false);
   });
   it("owner actions are exempt from the background budget but not from the absolute ceiling", () => {
-    expect(budgetExceeded("owner", { totalUsd: 3 }, env)).toBe(false);
-    expect(budgetExceeded("owner", { totalUsd: 5 }, env)).toBe(true);
+    expect(budgetExceeded("owner", { totalUsd: 7 }, env)).toBe(false);
+    expect(budgetExceeded("owner", { totalUsd: 8 }, env)).toBe(true);
   });
   it("is tunable by env and ignores junk values", () => {
     expect(budgetExceeded("background", { totalUsd: 0.6 }, { LLM_DAILY_BUDGET_USD: "0.5" })).toBe(true);
@@ -175,7 +175,7 @@ describe("daily budget tiers", () => {
     const broken = new DailyBudgetGuard(async () => { throw new Error("db"); }, "background", {} as NodeJS.ProcessEnv);
     await expect(broken.check()).resolves.toBeUndefined();
 
-    const guard = new DailyBudgetGuard(async () => ({ totalUsd: 1.49 }), "background", {} as NodeJS.ProcessEnv);
+    const guard = new DailyBudgetGuard(async () => ({ totalUsd: 3.99 }), "background", {} as NodeJS.ProcessEnv);
     await expect(guard.check()).resolves.toBeUndefined();
     guard.note({ model: "claude-sonnet-4-5-20250929", inputTokens: 100_000, outputTokens: 0 }); // $0.30
     await expect(guard.check()).rejects.toThrow(/daily LLM budget reached/);
@@ -211,7 +211,7 @@ describe("createRecordedLlmClient: one recorder for every call", () => {
   });
 
   it("a background caller is skipped (no fetch, no row) once today's background budget is spent; an owner caller is not", async () => {
-    const spent = [{ id: "s", event_type: "llm_call", cost_usd: 1.6, created_at: "2026-10-13T08:00:00Z", context: { endpoint: "run-campaign" } }];
+    const spent = [{ id: "s", event_type: "llm_call", cost_usd: 4.1, created_at: "2026-10-13T08:00:00Z", context: { endpoint: "run-campaign" } }];
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
     try {

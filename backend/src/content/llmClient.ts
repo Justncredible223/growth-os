@@ -2,10 +2,22 @@ import { logLlmKeySourceOnce, resolveAnthropicKey } from "./llmKey.js";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 export const MODEL_SONNET = "claude-sonnet-4-5-20250929";
-export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+/** Writers (drafts, scripts, replies) and the review agents: the strongest model, for better drafts and stricter checks. */
+export const MODEL_OPUS = "claude-opus-5-5";
+/** Cheap and fast: relevance prechecks and the live host's quick lines. */
+export const MODEL_HAIKU = "claude-haiku-5-5";
 
 /** Default model for content generation (drafts, scripts). */
-const MODEL = MODEL_SONNET;
+const MODEL = MODEL_OPUS;
+
+/**
+ * Where a call goes when the API answers 404 for its model (the key or workspace cannot use it): the model that ran
+ * before this upgrade, so a model-access problem degrades quality instead of stopping every draft.
+ */
+const FALLBACK_MODELS: Record<string, string> = {
+  [MODEL_OPUS]: MODEL_SONNET,
+  [MODEL_HAIKU]: "claude-haiku-4-5-20251001",
+};
 
 /**
  * Previously there was NO per-call timeout at all -- a single hung request
@@ -144,14 +156,17 @@ export class LlmClient {
       ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
       : systemPrompt;
 
-    const requestBody = JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: systemValue,
-      messages: [{ role: "user", content: userMessage }],
-      tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
-      tool_choice: { type: "tool", name: toolName },
-    });
+    const bodyFor = (forModel: string) =>
+      JSON.stringify({
+        model: forModel,
+        max_tokens: maxTokens,
+        system: systemValue,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
+        tool_choice: { type: "tool", name: toolName },
+      });
+    let requestBody = bodyFor(model);
+    let fellBack = false;
 
     let res: Response;
     for (let attempt = 0; ; attempt++) {
@@ -169,6 +184,13 @@ export class LlmClient {
       if (res.ok) break;
 
       const body = await res.text();
+      const fallbackModel = FALLBACK_MODELS[model];
+      if (res.status === 404 && fallbackModel && !fellBack) {
+        fellBack = true;
+        console.warn(`LLM model ${model} unavailable (HTTP 404); falling back to ${fallbackModel}`);
+        requestBody = bodyFor(fallbackModel);
+        continue;
+      }
       if (RETRYABLE_STATUSES.has(res.status) && attempt < this.retry.retries) {
         await this.retry.sleep(retryDelayMs(this.retry, attempt + 1, res.headers?.get("retry-after") ?? null));
         continue;
