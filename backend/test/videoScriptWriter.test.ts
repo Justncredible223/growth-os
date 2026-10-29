@@ -45,7 +45,8 @@ describe("draftVideoScript", () => {
     expect(result).toEqual(script);
     const [, options] = fetchMock.mock.calls[0]!;
     const body = JSON.parse((options as { body: string }).body);
-    expect(body.tool_choice).toEqual({ type: "tool", name: "submit_video_script" });
+    expect(body.tool_choice).toEqual({ type: "auto" }); // Opus rejects a forced tool call
+    expect(body.tools[0].name).toBe("submit_video_script");
   });
 });
 

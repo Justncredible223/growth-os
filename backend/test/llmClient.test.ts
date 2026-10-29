@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { LlmClient, LlmClientError, DEFAULT_RETRY, createLlmClient, type RetryOptions } from "../src/content/llmClient";
+import { LlmClient, LlmClientError, DEFAULT_RETRY, MODEL_HAIKU, createLlmClient, type RetryOptions } from "../src/content/llmClient";
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -24,6 +24,9 @@ describe("LlmClient", () => {
       "user message",
       "submit_verdict",
       { type: "object", properties: {} },
+      undefined,
+      undefined,
+      MODEL_HAIKU,
     );
 
     expect(result).toEqual({ pass: true, score: 0.9 });
@@ -46,6 +49,70 @@ describe("LlmClient", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string).model).toBe("claude-opus-5-5");
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string).model).toBe("claude-sonnet-4-5-20250929");
+  });
+
+  it("Opus is not forced into a tool call (the API rejects that): tool_choice auto, an instruction, low effort, a roomy token cap", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ content: [{ type: "tool_use", name: "t", input: { ok: true } }] }));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await client.callTool("sys prompt", "user", "t", {}, undefined, 500);
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body.model).toBe("claude-opus-5-5");
+    expect(body.tool_choice).toEqual({ type: "auto" });
+    expect(body.system).toContain("sys prompt");
+    expect(body.system).toContain("calling the t tool");
+    expect(body.output_config).toEqual({ effort: "low" });
+    expect(body.max_tokens).toBe(4096);
+  });
+
+  it("keeps the cached system block first and puts the Opus instruction after it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ content: [{ type: "tool_use", name: "t", input: {} }] }));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await client.callTool("sys prompt", "user", "t", {}, undefined, 500, undefined, true);
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body.system[0]).toEqual({ type: "text", text: "sys prompt", cache_control: { type: "ephemeral" } });
+    expect(body.system[1].text).toContain("calling the t tool");
+  });
+
+  it("other models are still forced into the tool call", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ content: [{ type: "tool_use", name: "t", input: {} }] }));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await client.callTool("sys", "user", "t", {}, undefined, 500, MODEL_HAIKU);
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+    expect(body.tool_choice).toEqual({ type: "tool", name: "t" });
+    expect(body.max_tokens).toBe(500);
+    expect(body.output_config).toBeUndefined();
+  });
+
+  it("falls back to the previous model when the API answers 400 'not supported for this model'", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: { message: "tool_choice: type \"tool\" and \"any\" are not supported for this model." } }, false, 400))
+      .mockResolvedValueOnce(jsonResponse({ content: [{ type: "tool_use", name: "t", input: { ok: true } }] }));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await expect(client.callTool("sys", "user", "t", {})).resolves.toEqual({ ok: true });
+
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string).model).toBe("claude-sonnet-4-5-20250929");
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string).tool_choice).toEqual({ type: "tool", name: "t" });
+  });
+
+  it("retries once on the previous model, forced, when Opus answers without the tool call", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ content: [{ type: "text", text: "no tool call" }] }))
+      .mockResolvedValueOnce(jsonResponse({ content: [{ type: "tool_use", name: "t", input: { ok: true } }] }));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await expect(client.callTool("sys", "user", "t", {})).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string).model).toBe("claude-sonnet-4-5-20250929");
   });
 
@@ -127,7 +194,7 @@ describe("LlmClient", () => {
       for (const status of [400, 401]) {
         const fetchMock = vi.fn().mockResolvedValue(fail(status));
         const client = new LlmClient("k", fetchMock, undefined, undefined, retrying());
-        await expect(client.callTool("s", "u", "t", {})).rejects.toThrow(new RegExp(`HTTP ${status}`));
+        await expect(client.callTool("s", "u", "t", {}, undefined, undefined, "claude-sonnet-4-5-20250929")).rejects.toThrow(new RegExp(`HTTP ${status}`));
         expect(fetchMock).toHaveBeenCalledTimes(1);
       }
     });
