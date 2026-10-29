@@ -1,5 +1,6 @@
 import type { ProspectingTopic } from "./prospectingTopics.js";
 import { invitesReplies } from "./prospectingRelevance.js";
+import { suggestInteraction } from "./prospectingInteraction.js";
 
 // Real evidence this run's own results turned up (2026-09-03 live search):
 // a competitor prop-firm discount ad and a hashtag-stuffed forex-bot account
@@ -215,6 +216,12 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
 
   const total = topicPoints + discussionPoints + reachPoints + midSizedBonus + trafficPoints + breakoutPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints + watchlistPoints - crowdedPenalty;
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
+
+  // What to do with the post and the angle to take (prospectingInteraction.ts). Shown with the score breakdown; stored for the weekly review.
+  const interaction = suggestInteraction({ postText: input.postText, followers: input.authorFollowerCount, replyCount, impressionCount });
+  breakdown.suggestedAction = interaction.action;
+  breakdown.suggestedAngle = interaction.angle;
+  breakdown.angleKind = interaction.angleKind;
 
   return { score, breakdown, excluded: false, exclusionReason: null };
 }

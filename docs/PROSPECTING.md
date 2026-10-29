@@ -314,3 +314,13 @@ gate (`options`, `forex_stock`, `crypto`, `no_futures_evidence`, `not_trading`, 
 of dropped posts with the reason, and up to 4 kept ones. Read it with `GET /api/summary?view=prospecting-runs` (latest 60 requests, newest
 first). The cost event is written after the request is processed, in a `finally`, so spend is still recorded if processing fails.
 `whyNotReplyWorthy` in `prospectingRelevance.ts` gives the first reason a post fails the free gate and agrees with `isReplyWorthyPost`.
+
+## Suggested interaction and angle (2026-10-28)
+
+Each scored candidate now carries `suggestedAction` (reply, quote or engage), `suggestedAngle` (one sentence) and `angleKind` (answer, loss, math, detail, like) in its score breakdown (`src/prospecting/prospectingInteraction.ts`, rules in the file). The Prospecting card shows "Suggested: Reply. <angle>" under the post. It is a suggestion only: the app still drafts replies, and a quote or a like is done by hand.
+
+- engage: a thread with 40+ replies, or a post under 40 characters.
+- quote: 1,000+ impressions and 10x the author's followers, a statement (no question) with numbers.
+- reply otherwise; the angle follows the post: question, loss or breach, numbers, or a detail.
+
+The weekly review's "Where replies reached people" section now also groups replies by `angleKind` and by a suggested quote, once a group has 3 replies. Candidates scored before this change have no suggestion and appear in no angle group. The app needs a new build to show the line; the server side works without it.
