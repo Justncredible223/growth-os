@@ -20,8 +20,8 @@ import { estimateCostUsd, selectCostEvents } from "./costTracking.js";
  * reached") before any network call and report a skip line. If today's spend cannot be read the guard FAILS OPEN:
  * a measurement problem must not stop real work (the per-feature caps still apply).
  */
-export const DAILY_LLM_BUDGET_USD = 1.5;
-export const ABSOLUTE_DAILY_LLM_CEILING_USD = 5;
+export const DAILY_LLM_BUDGET_USD = 4;
+export const ABSOLUTE_DAILY_LLM_CEILING_USD = 8;
 
 export type LlmCallerTier = "background" | "owner";
 

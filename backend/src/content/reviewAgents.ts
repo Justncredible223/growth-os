@@ -1,5 +1,5 @@
 import type { LlmClient } from "./llmClient.js";
-import { MODEL_HAIKU } from "./llmClient.js";
+import { MODEL_OPUS } from "./llmClient.js";
 
 export type ReviewAgentName =
   | "trader"
@@ -169,7 +169,7 @@ export async function runReviewAgent(
     "---",
   ].join("\n");
 
-  const input = await client.callTool<VerdictToolInput>(systemPrompt, userMessage, VERDICT_TOOL_NAME, VERDICT_SCHEMA, undefined, REVIEW_VERDICT_MAX_TOKENS, MODEL_HAIKU, true);
+  const input = await client.callTool<VerdictToolInput>(systemPrompt, userMessage, VERDICT_TOOL_NAME, VERDICT_SCHEMA, undefined, REVIEW_VERDICT_MAX_TOKENS, MODEL_OPUS, true);
 
   return {
     agent,

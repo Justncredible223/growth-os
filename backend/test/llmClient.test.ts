@@ -35,6 +35,28 @@ describe("LlmClient", () => {
     expect(body.system).toBe("system prompt");
   });
 
+  it("defaults to Opus and retries once on the previous model when the API answers 404 for it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: { type: "not_found_error" } }, false, 404))
+      .mockResolvedValueOnce(jsonResponse({ content: [{ type: "tool_use", name: "t", input: { ok: true } }] }));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await expect(client.callTool("sys", "user", "t", {})).resolves.toEqual({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string).model).toBe("claude-opus-5-5");
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string).model).toBe("claude-sonnet-4-5-20250929");
+  });
+
+  it("does not fall back twice: a second 404 is an error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "nope" }, false, 404));
+    const client = new LlmClient("test-key", fetchMock);
+
+    await expect(client.callTool("sys", "user", "t", {})).rejects.toThrow(/HTTP 404/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("throws LlmClientError with the response body on a failed request", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: "rate limited" }, false, 429));
     const client = new LlmClient("test-key", fetchMock);
