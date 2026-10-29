@@ -88,6 +88,8 @@ export interface ProspectingRunDeps {
   getTodaySearchCount?: () => Promise<number>;
   /** X search dollars recorded today (Arizona day): the real daily limit (DAILY_SEARCH_BUDGET_USD). Omitted means no daily spend limit is applied. */
   getTodaySearchSpendUsd?: () => Promise<number>;
+  /** The query strings of the X searches made in the last RECENT_QUERY_WINDOW_MS. A topic search whose query is among them is not repeated (2026-10-28). */
+  getRecentSearchQueries?: () => Promise<Set<string>>;
   /**
    * Overrides which run-index's topic slice gets searched, bypassing the
    * normal day/schedule-slot rotation. Used by the owner-triggered manual
@@ -106,6 +108,12 @@ export interface ProspectingRunDeps {
   /** Whether the creator watchlist is read at all (default true). Production turns it off (2026-10-27): its streams were forex, crypto and news accounts, nearly all dropped, so the whole budget goes to topic searches. */
   watchlistEnabled?: boolean;
 }
+
+/**
+ * A topic search already made this recently is not made again. X's recent search returns the same newest posts for the same query, so a
+ * repeat read the same ~10 posts (all duplicates) and cost the same $0.05; three repeats in 14 seconds were seen on 2026-10-29.
+ */
+export const RECENT_QUERY_WINDOW_MS = 3 * 60 * 60 * 1000;
 
 /** Topics searched together in one X request (OR-ed): one near-empty request per narrow topic was burning the daily limit (2026-10-25). */
 export const TOPICS_PER_QUERY = 4;
@@ -214,7 +222,26 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   type PlannedRequest = { kind: "creators"; handles: string[] } | { kind: "topics"; group: ProspectingTopic[] };
   const isCreatorSlot = (i: number) => watchGroups.length > 0 && i % 2 === 0;
   const topicSlots = Array.from({ length: breadth.maxTopics }, (_, i) => i).filter((i) => !isCreatorSlot(i)).length;
-  const wanted = selectPrioritizedTopicsForRun(topicsInSearchOrder(), runIndex, topicSlots * TOPICS_PER_QUERY);
+  // Plan more topic groups than the run needs, drop the ones whose exact query was just searched, and keep the first few that are left. When
+  // every group was searched recently the run makes no topic request at all (and spends nothing).
+  let recentQueries = new Set<string>();
+  try {
+    recentQueries = deps.getRecentSearchQueries ? await deps.getRecentSearchQueries() : recentQueries;
+  } catch {
+    recentQueries = new Set();
+  }
+  // The next slices of the same rotation (run index + 1, + 2, ...) are the next topics in line, so the first slice is exactly what this run searched before.
+  const candidateTopics: ProspectingTopic[] = [];
+  for (let ahead = 0; ahead < 4; ahead++) {
+    for (const topic of selectPrioritizedTopicsForRun(topicsInSearchOrder(), runIndex + ahead, topicSlots * TOPICS_PER_QUERY)) {
+      if (!candidateTopics.some((t) => t.key === topic.key)) candidateTopics.push(topic);
+    }
+  }
+  const freshGroups: ProspectingTopic[][] = [];
+  for (let i = 0; i < candidateTopics.length && freshGroups.length < topicSlots; i += TOPICS_PER_QUERY) {
+    const group = candidateTopics.slice(i, i + TOPICS_PER_QUERY);
+    if (!recentQueries.has(groupedTopicQuery(group).query)) freshGroups.push(group);
+  }
   const plan: PlannedRequest[] = [];
   let creatorSeen = 0;
   let topicSeen = 0;
@@ -223,9 +250,14 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       plan.push({ kind: "creators", handles: watchGroups[(runIndex + creatorSeen) % watchGroups.length]! });
       creatorSeen++;
     } else {
-      plan.push({ kind: "topics", group: wanted.slice(topicSeen * TOPICS_PER_QUERY, (topicSeen + 1) * TOPICS_PER_QUERY) });
+      const group = freshGroups[topicSeen];
       topicSeen++;
+      if (group) plan.push({ kind: "topics", group });
     }
+  }
+
+  if (plan.length === 0) {
+    return { skipped: true, skipReason: `searched_recently (every topic search for this run was already made in the last ${RECENT_QUERY_WINDOW_MS / 3_600_000} hours; a repeat reads the same posts)`, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0, selectableBefore: selectable };
   }
 
   let searchedToday = deps.getTodaySearchCount ? await deps.getTodaySearchCount() : 0;
