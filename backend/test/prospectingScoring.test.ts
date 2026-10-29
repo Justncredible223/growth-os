@@ -39,6 +39,15 @@ describe("scoreProspectingCandidate", () => {
     expect(result.excluded).toBe(true);
   });
 
+  it("does NOT exclude a trader who writes one unpunctuated sentence per line (found live 2026-10-28: dropped as spam every day)", () => {
+    const result = scoreProspectingCandidate(
+      baseInput({
+        postText: ["Prop firm question for the timeline", "What blows more funded accounts", "Oversizing one setup", "Or revenge trading after the loss", "Futures traders, which one is it?"].join("\n"),
+      }),
+    );
+    expect(result.excluded).toBe(false);
+  });
+
   it("does NOT exclude a real conversational multi-line post (periods/questions, not short tag fragments)", () => {
     const result = scoreProspectingCandidate(
       baseInput({
