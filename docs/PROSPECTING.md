@@ -324,3 +324,13 @@ Each scored candidate now carries `suggestedAction` (reply, quote or engage), `s
 - reply otherwise; the angle follows the post: question, loss or breach, numbers, or a detail.
 
 The weekly review's "Where replies reached people" section now also groups replies by `angleKind` and by a suggested quote, once a group has 3 replies. Candidates scored before this change have no suggestion and appear in no angle group. The app needs a new build to show the line; the server side works without it.
+
+## Looser spam formatting check (2026-10-28)
+
+The "listicle or ad formatting" check dropped any post with four or more short lines without a full stop. That caught real traders who write one sentence per line (a futures account posting "Be quick with the loss / Slow with the winner / ..." was dropped as spam every day). It now also needs three fragment lines: a bare dot, an emoji bullet, or three words or fewer. Ad copy and tag lists still match; one-sentence-per-line posts pass.
+
+Left as is on purpose: the 12-hour age cutoff (cut from 72h on 2026-09-25 because replies to day-old posts got 1-4 views) and the futures-evidence requirement (the owner's futures-only rule).
+
+## No repeated searches (2026-10-28)
+
+A topic search whose exact query was already made in the last 3 hours is not made again (`RECENT_QUERY_WINDOW_MS`, `getRecentSearchQueries`). X's recent search returns the same newest posts for the same query, so a repeat read the same ~10 posts (all duplicates) for the same $0.05; three repeats in 14 seconds were seen on 2026-10-29. The run plans a few more topic groups than it needs (the next slices of the same rotation), drops the recent ones and searches the first fresh ones. When every group was searched recently the run makes no request, spends nothing, and reports `searched_recently`. A failed read of the recent searches never blocks a search. The 12-hour post age cutoff is unchanged.

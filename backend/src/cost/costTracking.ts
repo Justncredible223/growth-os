@@ -387,6 +387,17 @@ export async function getTodayXSearchCount(client: SupabaseClient, now: Date = n
   return rows.length;
 }
 
+/** The query strings of X searches made since `since` (each x_search_read cost event records its query). Feeds Prospecting's "do not repeat a search just made" check (2026-10-28). */
+export async function getRecentXSearchQueries(client: SupabaseClient, since: Date): Promise<Set<string>> {
+  const rows = await selectCostEvents(client, "context", { since: since.toISOString(), eventTypes: ["x_search_read"], label: "getRecentXSearchQueries" });
+  const queries = new Set<string>();
+  for (const row of rows) {
+    const query = (row as { context?: { query?: unknown } | null }).context?.query;
+    if (typeof query === "string") queries.add(query);
+  }
+  return queries;
+}
+
 /** X search spend recorded today (Arizona day). Feeds Prospecting's daily search budget (2026-10-25). */
 export async function getTodayXSearchSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const rows = await selectCostEvents(client, "cost_usd", { since: startOfDay(now).toISOString(), eventTypes: ["x_search_read"], label: "getTodayXSearchSpendUsd" });

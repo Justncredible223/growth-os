@@ -90,7 +90,12 @@ function isListicleOrAdFormatted(text: string): boolean {
     .filter(Boolean);
   if (lines.length < 4) return false;
   const shortUnpunctuatedLines = lines.filter((l) => l.length <= 40 && !/[.!?]$/.test(l));
-  return shortUnpunctuatedLines.length >= 4;
+  if (shortUnpunctuatedLines.length < 4) return false;
+  // 2026-10-28: short lines alone also caught real traders who write one sentence per line without a full stop (an account posting
+  // "Be quick with the loss / Slow with the winner / ..." was dropped as spam every day). Ad copy and tag lists look different: their
+  // lines are fragments (a bare dot, an emoji bullet, or three words or fewer, like "forex trading tips").
+  const fragments = shortUnpunctuatedLines.filter((l) => /^[.•*\-]+$/.test(l) || /\p{Extended_Pictographic}/u.test(l) || l.split(/\s+/).length <= 3);
+  return fragments.length >= 3;
 }
 
 /**

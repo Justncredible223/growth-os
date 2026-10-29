@@ -446,6 +446,45 @@ describe("runProspectingSearch", () => {
       expect(screenRelevance.mock.calls.length).toBeLessThanOrEqual(8);
     });
 
+    it("never repeats a topic search that was just made: it skips to the next topics, and makes no request at all when every one was recent (2026-10-28)", async () => {
+      const asked: string[] = [];
+      const blockFirstTwo = new (class extends Set<string> {
+        has(q: string) {
+          if (!asked.includes(q)) asked.push(q);
+          return asked.indexOf(q) < 2;
+        }
+      })();
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      await run(new FakeProspectingRepo(), adapter, { runIndexOverride: 3, getRecentSearchQueries: async () => blockFirstTwo });
+      expect(asked.length).toBeGreaterThanOrEqual(3);
+      const sent = adapter.searchRecentPosts.mock.calls.map((c) => c[0] as string);
+      expect(sent.length).toBeGreaterThan(0);
+      expect(sent.some((q) => q.includes(asked[0]!) || q.includes(asked[1]!))).toBe(false);
+      expect(sent[0]).toContain(asked[2]!);
+
+      const none = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const all = new (class extends Set<string> {
+        has() {
+          return true;
+        }
+      })();
+      const result = await run(new FakeProspectingRepo(), none, { runIndexOverride: 3, getRecentSearchQueries: async () => all });
+      expect(result.skipped).toBe(true);
+      expect(result.skipReason).toMatch(/searched_recently/);
+      expect(none.searchRecentPosts).not.toHaveBeenCalled();
+    });
+
+    it("a failed read of the recent searches never blocks a search", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const result = await run(new FakeProspectingRepo(), adapter, {
+        getRecentSearchQueries: async () => {
+          throw new Error("db down");
+        },
+      });
+      expect(result.skipped).toBe(false);
+      expect(adapter.searchRecentPosts).toHaveBeenCalled();
+    });
+
     it("stops at the daily search limit, with a clear reason, before any X read", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
       const result = await run(new FakeProspectingRepo(), adapter, { getTodaySearchCount: async () => DAILY_SEARCH_CAP });
