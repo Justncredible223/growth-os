@@ -38,6 +38,18 @@ describe("isPlausiblyTradingRelated", () => {
     expect(isReplyWorthyPost("Alhamdulillah a $50K Funded account secured with Topstep on MNQ futures")).toBe(false);
   });
 
+  it("real futures vocabulary counts without the word futures (2026-10-29): firm names, ORB, ticks, micro contracts", () => {
+    expect(isPlausiblyTradingRelated("Blew my Apex eval again by revenge trading after a stop out. Same mistake every week.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Took the ORB trade, stopped for 12 ticks, then it ran without me. Why do I keep cutting my trades early?")).toBe(true);
+    expect(isPlausiblyTradingRelated("Trading 3 micro contracts instead of 1 is why my loss limit went so fast.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Revenge trading after a loss is the real account killer for everyone.")).toBe(false);
+  });
+
+  it("the full wrapped query still fits X's 512 character limit with the widest topic group", () => {
+    const widest = "x".repeat(180);
+    expect((withCryptoExclusions(widest) + " -is:retweet -is:reply lang:en").length).toBeLessThanOrEqual(512);
+  });
+
   it("needs a futures signal: strong trading context with no futures evidence no longer qualifies", () => {
     expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded accounts actually blow up.")).toBe(false);
     expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded futures accounts actually blow up.")).toBe(true);

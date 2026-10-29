@@ -62,6 +62,9 @@ const TRADING_RELEVANCE_PATTERNS: RegExp[] = [
   /\bmarket (maker|open|close)\b/i,
   /\bpremarket\b/i,
   /\bbrokerage\b/i,
+  // Everyday trader talk (2026-10-29, owner: we are a futures trading journal and should reply wherever a futures trader talks about their trading).
+  // Still needs a futures signal (FUTURES_OR_PROP_SIGNAL_PATTERNS) and passes the model screen, so a bare "trade" cannot qualify a post alone.
+  /\b(trades?|stopped out|win rate|risk[- ]reward|p&l|pnl|red day|green day|setups?|journal(l?ing)?)\b/i,
 
   // Prop-firm / funded-account context
   /\bprop firm\b/i,
@@ -241,6 +244,10 @@ const FUTURES_OR_PROP_SIGNAL_PATTERNS: RegExp[] = [
   /\b(MNQ|NQ|MES|ES|YM|MYM|RTY|M2K|MCL|MGC)\b/,
   /\b(ninjatrader|tradovate|rithmic|topstepx?|apex trader funding|apex funding|take profit trader|bulenox|myfundedfutures|tradeify|elite trader funding|alpha futures|lucid trading)\b/i,
   /\b(trading combine|consistency (rule|cap)|trailing drawdown)\b/i,
+  // More futures-only vocabulary (2026-10-29): real futures traders rarely write the word "futures"; they name the firm, the setup or the unit.
+  /\b(apex|topstep|sim ?funded|opening range|globex|micro (contracts?|futures)|mini (contracts?|futures))\b/i,
+  /\b(ORB|DOM|RTH)\b/,
+  /\b\d+\s*(ticks?|handles?)\b/i,
 ];
 
 /** Posts about other markets (forex, stocks): excluded unless the post also names futures explicitly. "Prop firm" is not enough, forex prop firms exist. */
@@ -272,7 +279,7 @@ export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit sp
  * in the first place instead of generic trading posts the relevance gate would then throw away after we had paid for the read. Each
  * anchor is one the gate itself accepts (FUTURES_OR_PROP_SIGNAL_PATTERNS), so a post that matches the query passes the gate.
  */
-export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
+export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR apex OR ORB OR ticks OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
 /** Topic requests skip any post that carries a link (2026-10-26): stream teasers, promo and content posts are never read or paid for. */
 export const NO_LINKS_QUERY_EXCLUSION = "-has:links";
 export function withCryptoExclusions(query: string): string {
