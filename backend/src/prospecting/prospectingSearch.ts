@@ -118,7 +118,7 @@ export const RECENT_QUERY_WINDOW_MS = 3 * 60 * 60 * 1000;
 /** Topics searched together in one X request (OR-ed): one near-empty request per narrow topic was burning the daily limit (2026-10-25). */
 export const TOPICS_PER_QUERY = 4;
 /** X allows 512 characters in a query; the wrapper (futures anchors, exclusions, -is:retweet -is:reply lang:en) takes about 270. */
-const MAX_GROUPED_QUERY_CHARS = 200;
+const MAX_GROUPED_QUERY_CHARS = 180;
 
 /** One X query that finds any of these topics: each topic's own query in parentheses, OR-ed, as many as fit. */
 export function groupedTopicQuery(topics: ProspectingTopic[]): { query: string; used: ProspectingTopic[] } {
