@@ -65,6 +65,10 @@ export function replyStyleSection(posts: OwnPostRow[], styles: PostedStyleByCand
 export interface ReplyTarget {
   authorFollowers: number | null;
   postCreatedAt: string | null;
+  /** The suggested angle kind stored with the candidate (prospectingInteraction.ts): answer, loss, math, detail or like. */
+  angleKind?: string | null;
+  /** The suggested action stored with the candidate: reply, quote or engage. */
+  suggestedAction?: string | null;
 }
 export type ReplyTargetByCandidate = Map<string, ReplyTarget>;
 
@@ -102,6 +106,15 @@ export function replyReachSection(posts: OwnPostRow[], targets: ReplyTargetByCan
         .map((r) => r.views),
     );
   }
+  const ANGLE_LABELS: Record<string, string> = {
+    answer: "replies that answered a question",
+    loss: "replies to a loss or breach post",
+    math: "replies that checked the math",
+    detail: "replies that added a detail",
+    like: "replies where the card suggested only a like",
+  };
+  for (const [kind, label] of Object.entries(ANGLE_LABELS)) addGroup(label, rows.filter((r) => r.target.angleKind === kind).map((r) => r.views));
+  addGroup("replies where the card suggested a quote", rows.filter((r) => r.target.suggestedAction === "quote").map((r) => r.views));
   if (lines.length === 0) return null;
   return ["Where replies reached people (median views):", ...lines, "  Small groups are mostly noise; use it to pick which posts to answer first, not as proof."];
 }
@@ -297,13 +310,16 @@ export async function runWeeklyDigestStep(client: SupabaseClient, now: Date): Pr
       .gte("replied_at", new Date(now.getTime() - 30 * DAY_MS).toISOString())
       .order("replied_at", { ascending: false });
     for (const r of candRes?.data ?? []) {
-      const tag = (r.score_breakdown as Record<string, unknown> | null)?.posted_style;
+      const breakdown = r.score_breakdown as Record<string, unknown> | null;
+      const tag = breakdown?.posted_style;
       if (typeof tag === "string") styleByCandidate.set(String(r.id), tag);
       const followers = (r as Record<string, unknown>).author_follower_count;
       const postedAt = (r as Record<string, unknown>).post_created_at;
       targetByCandidate.set(String(r.id), {
         authorFollowers: typeof followers === "number" ? followers : null,
         postCreatedAt: typeof postedAt === "string" ? postedAt : null,
+        angleKind: typeof breakdown?.angleKind === "string" ? breakdown.angleKind : null,
+        suggestedAction: typeof breakdown?.suggestedAction === "string" ? breakdown.suggestedAction : null,
       });
     }
   } catch {

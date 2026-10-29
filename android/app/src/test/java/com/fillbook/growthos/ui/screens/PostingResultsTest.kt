@@ -156,3 +156,17 @@ class SearchFailureMessageTest {
         assertTrue(searchFailureMessage(Exception("timeout")).contains("Check your connection"))
     }
 }
+
+class SuggestedInteractionLineTest {
+    @Test
+    fun showsTheActionAndAngleFromTheScoreBreakdown() {
+        val line = suggestedInteractionLine(mapOf("suggestedAction" to "reply", "suggestedAngle" to "Answer the question with one rule or number you actually know."))
+        assertEquals("Suggested: Reply. Answer the question with one rule or number you actually know.", line)
+    }
+
+    @Test
+    fun isHiddenForCandidatesScoredBeforeTheSuggestionExisted() {
+        assertEquals(null, suggestedInteractionLine(mapOf("recency" to "posted 1.0h ago -> +20")))
+        assertEquals(null, suggestedInteractionLine(mapOf("suggestedAction" to "reply")))
+    }
+}

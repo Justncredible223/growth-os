@@ -591,6 +591,10 @@ private fun ProspectingCard(
 
         Spacer(Modifier.height(10.dp))
         ExpandableText(candidate.postText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 3)
+        suggestedInteractionLine(candidate.scoreBreakdown)?.let { line ->
+            Spacer(Modifier.height(6.dp))
+            Text(line, style = MaterialTheme.typography.labelMedium, color = Accent)
+        }
 
         Spacer(Modifier.height(8.dp))
         TextButton(
@@ -827,4 +831,14 @@ internal fun searchFailureMessage(e: Exception): String {
     } else {
         "Couldn't search for new candidates. Check your connection and try again."
     }
+}
+
+/**
+ * The one-line suggestion under a candidate's post (2026-10-28): what to do with it and the angle to take, from the keys the server
+ * stores in the score breakdown (backend/src/prospecting/prospectingInteraction.ts). Null for candidates scored before it existed.
+ */
+internal fun suggestedInteractionLine(breakdown: Map<String, String>): String? {
+    val action = breakdown["suggestedAction"]?.takeIf { it.isNotBlank() } ?: return null
+    val angle = breakdown["suggestedAngle"]?.takeIf { it.isNotBlank() } ?: return null
+    return "Suggested: ${action.replaceFirstChar { it.uppercase() }}. $angle"
 }
