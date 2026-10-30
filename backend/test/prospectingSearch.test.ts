@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { groupedTopicQuery, runProspectingSearch, topicForPost, TOPICS_PER_QUERY } from "../src/prospecting/prospectingSearch";
 import { PROSPECTING_TOPICS, topicsInSearchOrder } from "../src/prospecting/prospectingTopics";
-import { withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
+import { CRYPTO_QUERY_EXCLUSIONS, FUTURES_QUERY_ANCHORS, withCryptoExclusions } from "../src/prospecting/prospectingRelevance";
 import { DAILY_SEARCH_BUDGET_USD, DAILY_SEARCH_CAP, TOPICS_PER_SEARCH_RUN, selectPrioritizedTopicsForRun } from "../src/prospecting/prospectingEligibility";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFreshness";
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
@@ -270,6 +270,24 @@ describe("runProspectingSearch", () => {
     const queriesAtOne = adapter.searchRecentPosts.mock.calls.map((c) => c[0]);
 
     expect(queriesAtZero).not.toEqual(queriesAtOne);
+  });
+
+  it("eval / funded / payout phrases are searched without the futures anchor, and never in a group with anchored topics (2026-10-30)", async () => {
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+    const repo = new FakeProspectingRepo();
+    for (let i = 0; i < 24; i++) {
+      await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: i, getRecentSearchQueries: async () => new Set() });
+    }
+    const queries = adapter.searchRecentPosts.mock.calls.map((c) => c[0] as string);
+    const hasAnchor = (q: string) => q.includes(FUTURES_QUERY_ANCHORS);
+    const unanchored = queries.filter((q) => !hasAnchor(q));
+    expect(unanchored.length).toBeGreaterThan(0);
+    for (const q of unanchored) {
+      expect(q).toMatch(/blew my eval|failed my eval|lost my funded|payout denied/);
+      expect(q).not.toContain("revenge trading");
+      expect(q).toContain(CRYPTO_QUERY_EXCLUSIONS);
+    }
+    for (const q of queries.filter(hasAnchor)) expect(q).not.toMatch(/blew my eval|failed my eval|lost my funded|payout denied/);
   });
 
   it("scores a previously-engaged author's post higher via the prior-outreach bonus", async () => {

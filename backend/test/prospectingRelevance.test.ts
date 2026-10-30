@@ -51,6 +51,12 @@ describe("isPlausiblyTradingRelated", () => {
     expect(isPlausiblyTradingRelated("Best stocks to trade on the Nasdaq this week, my stock picks and setups.")).toBe(false);
   });
 
+  it("the futures anchor can be left off for prop-specific phrases, keeping the other exclusions", () => {
+    const q = withCryptoExclusions('"blew my eval"', { futuresAnchor: false });
+    expect(q).toBe('("blew my eval") ' + CRYPTO_QUERY_EXCLUSIONS + ' ' + OPTIONS_QUERY_EXCLUSIONS + ' -has:links');
+    expect(q).not.toContain("MNQ");
+  });
+
   it("the full wrapped query still fits X's 512 character limit with the widest topic group", () => {
     const widest = "x".repeat(180);
     expect((withCryptoExclusions(widest) + " -is:retweet -is:reply lang:en").length).toBeLessThanOrEqual(512);

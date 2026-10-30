@@ -284,8 +284,9 @@ export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit sp
 export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR apex OR ORB OR ticks OR nasdaq OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
 /** Topic requests skip any post that carries a link (2026-10-26): stream teasers, promo and content posts are never read or paid for. */
 export const NO_LINKS_QUERY_EXCLUSION = "-has:links";
-export function withCryptoExclusions(query: string): string {
-  return `(${query}) ${FUTURES_QUERY_ANCHORS} ${CRYPTO_QUERY_EXCLUSIONS} ${OPTIONS_QUERY_EXCLUSIONS} ${NO_LINKS_QUERY_EXCLUSION}`;
+export function withCryptoExclusions(query: string, opts: { futuresAnchor?: boolean } = {}): string {
+  const anchor = opts.futuresAnchor === false ? "" : `${FUTURES_QUERY_ANCHORS} `;
+  return `(${query}) ${anchor}${CRYPTO_QUERY_EXCLUSIONS} ${OPTIONS_QUERY_EXCLUSIONS} ${NO_LINKS_QUERY_EXCLUSION}`;
 }
 
 /**
