@@ -111,7 +111,8 @@ export const STALE_EXPIRY_DAYS = 14;
  * bucket. What still keeps prospecting search inside the pool is the run rate
  * above (~$9.00/month search-only), not this ceiling.
  */
-export const MONTHLY_PROSPECTING_BUDGET_USD = 20.0;
+export const MONTHLY_PROSPECTING_BUDGET_USD = 40.0;
+// 2026-10-30: raised from $20 to $40 on the owner's instruction; the $20 cap stopped Search now on the 30th with only 50 posts stored in five days.
 // 2026-10-24: raised from $15 on the owner's instruction after October's real spend (about $0.63 a day, $15.17 by the 24th) tripped
 // the cap a week early. The search changes below (vet before queueing, search until one qualifies, a daily search limit) are what
 // bring the daily rate down; the cap is only the last line.
