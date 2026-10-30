@@ -219,7 +219,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
 
   // breadth.maxTopics is how many X requests this run may make. With a watchlist, every other request (the first, the third) reads the
   // creators and the rest search topics; each topic request covers up to TOPICS_PER_QUERY topics.
-  type PlannedRequest = { kind: "creators"; handles: string[] } | { kind: "topics"; group: ProspectingTopic[] };
+  type PlannedRequest = { kind: "creators"; handles: string[] } | { kind: "topics"; group: ProspectingTopic[]; anchored: boolean };
   const isCreatorSlot = (i: number) => watchGroups.length > 0 && i % 2 === 0;
   const topicSlots = Array.from({ length: breadth.maxTopics }, (_, i) => i).filter((i) => !isCreatorSlot(i)).length;
   // Plan more topic groups than the run needs, drop the ones whose exact query was just searched, and keep the first few that are left. When
@@ -237,10 +237,22 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       if (!candidateTopics.some((t) => t.key === topic.key)) candidateTopics.push(topic);
     }
   }
-  const freshGroups: ProspectingTopic[][] = [];
-  for (let i = 0; i < candidateTopics.length && freshGroups.length < topicSlots; i += TOPICS_PER_QUERY) {
-    const group = candidateTopics.slice(i, i + TOPICS_PER_QUERY);
-    if (!recentQueries.has(groupedTopicQuery(group).query)) freshGroups.push(group);
+  // Groups never mix topics that need the futures anchor with topics that do not (their X requests are built differently); the two kinds
+  // of group alternate so each run tries both.
+  const freshGroupsOf = (topics: ProspectingTopic[]): ProspectingTopic[][] => {
+    const out: ProspectingTopic[][] = [];
+    for (let i = 0; i < topics.length; i += TOPICS_PER_QUERY) {
+      const group = topics.slice(i, i + TOPICS_PER_QUERY);
+      if (!recentQueries.has(groupedTopicQuery(group).query)) out.push(group);
+    }
+    return out;
+  };
+  const anchoredFresh = freshGroupsOf(candidateTopics.filter((t) => !t.unanchored));
+  const unanchoredFresh = freshGroupsOf(candidateTopics.filter((t) => t.unanchored));
+  const freshGroups: Array<{ group: ProspectingTopic[]; anchored: boolean }> = [];
+  for (let i = 0; freshGroups.length < topicSlots && (i < anchoredFresh.length || i < unanchoredFresh.length); i++) {
+    if (anchoredFresh[i]) freshGroups.push({ group: anchoredFresh[i]!, anchored: true });
+    if (freshGroups.length < topicSlots && unanchoredFresh[i]) freshGroups.push({ group: unanchoredFresh[i]!, anchored: false });
   }
   const plan: PlannedRequest[] = [];
   let creatorSeen = 0;
@@ -250,9 +262,9 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       plan.push({ kind: "creators", handles: watchGroups[(runIndex + creatorSeen) % watchGroups.length]! });
       creatorSeen++;
     } else {
-      const group = freshGroups[topicSeen];
+      const fresh = freshGroups[topicSeen];
       topicSeen++;
-      if (group) plan.push({ kind: "topics", group });
+      if (fresh) plan.push({ kind: "topics", group: fresh.group, anchored: fresh.anchored });
     }
   }
 
@@ -300,7 +312,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     const groupQuery = request.kind === "creators" ? watchlistQuery(request.handles) : grouped!.query;
     // A creator request reads the people, so the crypto and options exclusions and the futures anchor are left off (the same free and model
     // gates below still decide every post); a topic request carries them.
-    const results = await deps.adapter.searchRecentPosts(request.kind === "creators" ? groupQuery : withCryptoExclusions(groupQuery), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+    const results = await deps.adapter.searchRecentPosts(request.kind === "creators" ? groupQuery : withCryptoExclusions(groupQuery, { futuresAnchor: request.anchored }), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
     searchRequests++;
     if (fromWatchlist) creatorRequests++;
     searchedToday++;

@@ -44,6 +44,12 @@ export interface ProspectingTopic {
    * where individual traders in trouble post. Set from PAIN_TOPIC_KEYS below.
    */
   priority?: 1 | 2;
+  /**
+   * True for a phrase that already says "prop firm" (an eval, a funded account, a payout): the X request leaves off the futures anchor,
+   * which a trader writing "blew my eval again" rarely satisfies in the same tweet. The free gates and the model screen still require
+   * futures evidence after the read, so a forex or stock post costs its read and is dropped.
+   */
+  unanchored?: true;
 }
 
 /** Topics whose query is a pain phrase: searched before every noun topic (see ProspectingTopic.priority). */
@@ -85,10 +91,10 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = withPriority([
   { key: "blown_account", query: '"blew my account" OR "blown account"', label: "Blown account", replyClass: "A" },
   { key: "broke_rules", query: '"broke my rules" OR "broke rules" trading', label: "Broke my rules", replyClass: "A" },
   // More first-person pain phrases (2026-10-30): the original 20 were searched on repeat and returned the same posts. Each is a single quoted phrase.
-  { key: "blew_eval", query: '"blew my eval"', label: "Blew my eval", replyClass: "A" },
-  { key: "failed_eval", query: '"failed my eval"', label: "Failed my eval", replyClass: "A" },
-  { key: "lost_funded", query: '"lost my funded"', label: "Lost my funded account", replyClass: "A" },
-  { key: "payout_denied", query: '"payout denied"', label: "Payout denied", replyClass: "A" },
+  { key: "blew_eval", query: '"blew my eval"', label: "Blew my eval", replyClass: "A", unanchored: true },
+  { key: "failed_eval", query: '"failed my eval"', label: "Failed my eval", replyClass: "A", unanchored: true },
+  { key: "lost_funded", query: '"lost my funded"', label: "Lost my funded account", replyClass: "A", unanchored: true },
+  { key: "payout_denied", query: '"payout denied"', label: "Payout denied", replyClass: "A", unanchored: true },
   { key: "revenge_traded", query: '"revenge traded"', label: "Revenge traded", replyClass: "A" },
   { key: "stopped_out_again", query: '"stopped out again"', label: "Stopped out again", replyClass: "B" },
   { key: "moved_stop", query: '"moved my stop"', label: "Moved my stop", replyClass: "B" },
