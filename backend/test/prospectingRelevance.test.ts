@@ -45,6 +45,12 @@ describe("isPlausiblyTradingRelated", () => {
     expect(isPlausiblyTradingRelated("Revenge trading after a loss is the real account killer for everyone.")).toBe(false);
   });
 
+  it("index and session language counts (2026-10-30), but stock posts still do not", () => {
+    expect(isPlausiblyTradingRelated("Nasdaq NY Session trade today, stopped out once then took the second setup and it paid.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Every S&P 500 trade I took this week lost, my stop loss placement is the problem.")).toBe(true);
+    expect(isPlausiblyTradingRelated("Best stocks to trade on the Nasdaq this week, my stock picks and setups.")).toBe(false);
+  });
+
   it("the full wrapped query still fits X's 512 character limit with the widest topic group", () => {
     const widest = "x".repeat(180);
     expect((withCryptoExclusions(widest) + " -is:retweet -is:reply lang:en").length).toBeLessThanOrEqual(512);
