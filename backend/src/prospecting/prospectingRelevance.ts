@@ -248,6 +248,8 @@ const FUTURES_OR_PROP_SIGNAL_PATTERNS: RegExp[] = [
   /\b(apex|topstep|sim ?funded|opening range|globex|micro (contracts?|futures)|mini (contracts?|futures))\b/i,
   /\b(ORB|DOM|RTH)\b/,
   /\b\d+\s*(ticks?|handles?)\b/i,
+  // Index and session language (2026-10-30): futures traders say the index or the session, not the contract. Stock and forex posts are still turned away by OTHER_MARKET_PATTERNS.
+  /\b(nasdaq|s&p ?(500)?|us30|dow jones|crude oil|ny (session|open)|new york (session|open))\b/i,
 ];
 
 /** Posts about other markets (forex, stocks): excluded unless the post also names futures explicitly. "Prop firm" is not enough, forex prop firms exist. */
@@ -279,7 +281,7 @@ export const OPTIONS_QUERY_EXCLUSIONS = '-0dte -theta -"iron condor" -"credit sp
  * in the first place instead of generic trading posts the relevance gate would then throw away after we had paid for the read. Each
  * anchor is one the gate itself accepts (FUTURES_OR_PROP_SIGNAL_PATTERNS), so a post that matches the query passes the gate.
  */
-export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR apex OR ORB OR ticks OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
+export const FUTURES_QUERY_ANCHORS = '(futures OR MNQ OR NQ OR MES OR topstep OR apex OR ORB OR ticks OR nasdaq OR ninjatrader OR tradovate OR rithmic OR "trailing drawdown" OR "trading combine")';
 /** Topic requests skip any post that carries a link (2026-10-26): stream teasers, promo and content posts are never read or paid for. */
 export const NO_LINKS_QUERY_EXCLUSION = "-has:links";
 export function withCryptoExclusions(query: string): string {
