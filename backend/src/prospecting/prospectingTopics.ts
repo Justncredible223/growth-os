@@ -51,6 +51,7 @@ export const PAIN_TOPIC_KEYS: ReadonlySet<string> = new Set([
   "revenge_trading", "overtrading", "plan_adherence", "trading_mistakes", "first_loss", "why_i_lost", "blown_account", "broke_rules",
   "consistency_rule", "sized_up", "tilt", "losing_streak", "daily_loss", "strategy_hopping", "holding_losers", "bad_trading_day",
   "hesitation_trading", "gave_back_profits", "too_many_trades", "fomo_trading",
+  "blew_eval", "failed_eval", "lost_funded", "payout_denied", "revenge_traded", "stopped_out_again", "moved_stop", "cut_winners", "ignored_plan", "same_mistake", "tilted", "red_day",
 ]);
 
 type TopicInput = Omit<ProspectingTopic, "priority">;
@@ -83,6 +84,19 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = withPriority([
   { key: "why_i_lost", query: '"why I lost" trading', label: "Why I lost", replyClass: "A" },
   { key: "blown_account", query: '"blew my account" OR "blown account"', label: "Blown account", replyClass: "A" },
   { key: "broke_rules", query: '"broke my rules" OR "broke rules" trading', label: "Broke my rules", replyClass: "A" },
+  // More first-person pain phrases (2026-10-30): the original 20 were searched on repeat and returned the same posts. Each is a single quoted phrase.
+  { key: "blew_eval", query: '"blew my eval"', label: "Blew my eval", replyClass: "A" },
+  { key: "failed_eval", query: '"failed my eval"', label: "Failed my eval", replyClass: "A" },
+  { key: "lost_funded", query: '"lost my funded"', label: "Lost my funded account", replyClass: "A" },
+  { key: "payout_denied", query: '"payout denied"', label: "Payout denied", replyClass: "A" },
+  { key: "revenge_traded", query: '"revenge traded"', label: "Revenge traded", replyClass: "A" },
+  { key: "stopped_out_again", query: '"stopped out again"', label: "Stopped out again", replyClass: "B" },
+  { key: "moved_stop", query: '"moved my stop"', label: "Moved my stop", replyClass: "B" },
+  { key: "cut_winners", query: '"cut my winners"', label: "Cut my winners", replyClass: "B" },
+  { key: "ignored_plan", query: '"ignored my plan"', label: "Ignored my plan", replyClass: "B" },
+  { key: "same_mistake", query: '"same mistake" trading', label: "Same mistake again", replyClass: "B" },
+  { key: "tilted", query: '"tilted" trading', label: "Tilted", replyClass: "B" },
+  { key: "red_day", query: '"red day" trading', label: "Red day", replyClass: "B" },
 
   // ---- CLASS A -- direct fit, self-funded (own-money) futures traders (owner direction 2026-10-07: Fillbook now serves
   // traders with no prop firm). Every query carries a "futures" anchor so a match is guaranteed to pass
