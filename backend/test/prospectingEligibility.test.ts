@@ -26,13 +26,13 @@ describe("evaluateMonthlyBudget", () => {
   // accidental edit to the constant is caught rather than silently shipped.
   // The rest of this suite derives from the constant on purpose; this one
   // assertion is the deliberate exception.
-  it("uses the owner-approved $20.00 monthly cap", () => {
-    expect(MONTHLY_PROSPECTING_BUDGET_USD).toBe(20);
+  it("uses the owner-approved $40.00 monthly cap (2026-10-30)", () => {
+    expect(MONTHLY_PROSPECTING_BUDGET_USD).toBe(40);
   });
 
   it("reports the actual cap in the skip reason the UI surfaces", () => {
     const result = evaluateMonthlyBudget(MONTHLY_PROSPECTING_BUDGET_USD);
-    expect(result.reason).toContain("cap is $20.00");
+    expect(result.reason).toContain("cap is $40.00");
   });
 
   it("stays eligible under budget", () => {
