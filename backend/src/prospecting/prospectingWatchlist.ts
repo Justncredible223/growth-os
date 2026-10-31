@@ -14,6 +14,15 @@ export const PROSPECTING_SEED_CREATORS: readonly string[] = [
   // 2026-10-30, picked from a read-only skim of X (futures-specific, 1.8K to 62K followers, no course or promo-code selling, active):
   "LumiTraders", "StoicTA", "aw_trades_", "RHerman", "fredtrades", "MrMilkTrading",
   "stefanytrades", "RC_FUTURES", "TraderLe", "FredrikMolnar", "nqvtrades", "mTraderNDX",
+  // 2026-10-31, 38 more from a second read-only skim (futures in the bio or in what they post, about 1K to 118K followers). Some carry a
+  // prop-firm affiliate code in the bio or teach; they are here for the audience that reads their replies, not as endorsements:
+  "Serg_Trades", "ktran55", "FuturesFarming", "RIPS", "fannitrades", "SatoTradesX",
+  "SaltyySniper", "TraderYush", "jtrader", "RyansTrading_", "jayalxndr", "realfearing",
+  "TurboTrades1", "TylerG_Capital", "JonnyFutes", "TSDR_Trading", "DamnGoodTrading", "dnltrader98",
+  "mmitro98", "greenbirdtrader", "Corleone_Trades", "FlexingJoe", "NWM667", "1MINUTETIP",
+  "TheAlg0mist", "TraderDiegoX", "Jesse_W33", "zerodayjay", "Travisdaman713", "JoshuaTrades",
+  "TritonTrades", "KrysAlpine", "realFatCat1", "juandotrades", "val_trades1", "MrZincx",
+  "UncleBugatti", "TempoICT",
 ];
 
 /** An author needs at least this many followers to be worth watching (the same floor spirit as MIN_PROSPECT_FOLLOWERS, higher on purpose). */
