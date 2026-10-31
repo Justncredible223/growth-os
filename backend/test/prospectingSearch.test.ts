@@ -669,6 +669,18 @@ describe("the creator watchlist in the search loop (2026-10-25)", () => {
     expect(result.excludedAsIrrelevant).toBeGreaterThanOrEqual(1);
   });
 
+  it("a hand-picked seed creator's trading post needs no futures word and skips the model screen; the same text from anyone else is dropped (2026-10-30)", async () => {
+    const text = "Trading is a lot like chess. You do not lose because of your last move, you lose because of your process. How do you review your trades?";
+    const fromSeed = { ...post("s1", text), authorHandle: "RC_FUTURES" };
+    const fromOther = { ...post("o1", text + " "), authorHandle: "somebody_else" };
+    const adapter = { searchRecentPosts: vi.fn(async (q: string) => (q.startsWith("(from:") ? [fromSeed, fromOther] : [])) };
+    const repo = new FakeProspectingRepo();
+    const screenRelevance = vi.fn(async () => false);
+    await run(repo, adapter, { watchlistSeeds: ["RC_FUTURES", "ES_Ed", "NQ_Nate", "MNQ_Mia"], screenRelevance });
+    expect([...repo.rows.values()].map((r) => r.externalId)).toEqual(["s1"]);
+    expect(screenRelevance).not.toHaveBeenCalled();
+  });
+
   it("a creator's post with no matching topic is labelled with the general futures-trader topic", async () => {
     const adapter = { searchRecentPosts: vi.fn(async (q: string) => (q.startsWith("(from:") ? [post("p1", "Took the opening range break on MNQ futures and let it run. What would you have done?")] : [])) };
     const repo = new FakeProspectingRepo();

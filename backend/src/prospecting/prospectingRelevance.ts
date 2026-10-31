@@ -318,7 +318,14 @@ const FUTURES_SPECIFIC_OVERRIDE_PATTERNS: RegExp[] = [
  * trading systems or crypto. Used as a pre-drafting gate in
  * prospectingHandlers.ts.
  */
-export function isPlausiblyTradingRelated(postText: string): boolean {
+/** Options for the free relevance gates. `trustedAuthor`: the author is a hand-picked futures creator, so the post needs no futures word of its own. */
+export interface RelevanceOptions {
+  trustedAuthor?: boolean;
+}
+
+export function isPlausiblyTradingRelated(postText: string, opts: RelevanceOptions = {}): boolean {
+  // Math-bold and other styled-letter fonts ("𝗖𝗹𝗮𝘂𝗱𝗲") fold to plain letters, so creators who post in them are read like anyone else.
+  postText = postText.normalize("NFKC");
   if (!TRADING_RELEVANCE_PATTERNS.some((p) => p.test(postText))) return false;
   if (AUTOMATED_TRADING_EXCLUSION_PATTERNS.some((p) => p.test(postText))) {
     const hasManualDisciplineOverride = MANUAL_DISCIPLINE_OVERRIDE_PATTERNS.some((p) => p.test(postText));
@@ -331,7 +338,7 @@ export function isPlausiblyTradingRelated(postText: string): boolean {
   // Futures only: options and other-market posts need an explicit futures mention; everything needs a futures or prop signal.
   if (isOptionsPost(postText) && !explicitFutures(postText)) return false;
   if (OTHER_MARKET_PATTERNS.some((p) => p.test(postText)) && !explicitFutures(postText)) return false;
-  if (!FUTURES_OR_PROP_SIGNAL_PATTERNS.some((p) => p.test(postText))) return false;
+  if (!opts.trustedAuthor && !FUTURES_OR_PROP_SIGNAL_PATTERNS.some((p) => p.test(postText))) return false;
   return true;
 }
 
@@ -458,13 +465,15 @@ export function invitesReplies(postText: string): boolean {
 }
 
 /** The original gate: about futures / prop-firm trading, and a post a person can actually reply to (not a newsletter or an ad). */
-export function isReplyWorthyBase(postText: string): boolean {
-  return isPlausiblyTradingRelated(postText) && !isAiAgentHype(postText) && !isBroadcastContent(postText) && !isPromoContent(postText);
+export function isReplyWorthyBase(postText: string, opts: RelevanceOptions = {}): boolean {
+  postText = postText.normalize("NFKC");
+  return isPlausiblyTradingRelated(postText, opts) && !isAiAgentHype(postText) && !isBroadcastContent(postText) && !isPromoContent(postText);
 }
 
 /** Prospecting's gate: the original gate plus no sales funnel, CFD-broker promo or hashtag/link-only post (reply-style experiment, 2026-10-16). */
-export function isReplyWorthyPost(postText: string): boolean {
-  return isReplyWorthyBase(postText) && !isSalesFunnelOrEmptyPost(postText);
+export function isReplyWorthyPost(postText: string, opts: RelevanceOptions = {}): boolean {
+  postText = postText.normalize("NFKC");
+  return isReplyWorthyBase(postText, opts) && !isSalesFunnelOrEmptyPost(postText);
 }
 
 /** AI trading-agent hype (2026-10-04) is not the manual-discipline audience. No override: these posts always mention drawdown too. */
@@ -477,8 +486,9 @@ export function isAiAgentHype(postText: string): boolean {
  * The first reason a post fails the free gate, or null when it passes (2026-10-25: two days of searches ended with no usable post and
  * nothing recorded about where posts died). Mirrors isReplyWorthyPost, so a post is dropped exactly when this returns a reason.
  */
-export function whyNotReplyWorthy(postText: string): string | null {
-  if (!isPlausiblyTradingRelated(postText)) {
+export function whyNotReplyWorthy(postText: string, opts: RelevanceOptions = {}): string | null {
+  postText = postText.normalize("NFKC");
+  if (!isPlausiblyTradingRelated(postText, opts)) {
     const futures = explicitFutures(postText);
     if (isOptionsPost(postText) && !futures) return "options";
     if (OTHER_MARKET_PATTERNS.some((p) => p.test(postText)) && !futures) return "forex_stock";
