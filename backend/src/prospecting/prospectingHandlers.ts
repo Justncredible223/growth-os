@@ -11,6 +11,7 @@ import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK,
 import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWithRetries } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance.js";
+import { isSeedCreator } from "./prospectingWatchlist.js";
 import { matchPostedStyle, optionSoftProblem, postMentionsFillbook, type DraftOption } from "./prospectingDraftOptions.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
@@ -160,7 +161,7 @@ export async function listProspectingQueue(
   // Owner-chosen cards (Draft anyway on a Maybe post) skip the free spam gates, the freshness window and the score floor for 24 hours.
   const overridden = nonTerminal.filter((row) => isOwnerOverrideActive(row, now));
   const overriddenIds = new Set(overridden.map((row) => row.id));
-  const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
+  const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle) }) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
   if (irrelevantIds.length > 0) {
     await Promise.all(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant")));
   }
@@ -291,7 +292,7 @@ async function draftCandidateCore(
     throw new ProspectingActionError(`Not drafting -- this candidate is already ${row.status.replace("_", " ")}.`);
   }
 
-  if (!ownerOverride && !isReplyWorthyPost(row.postText)) {
+  if (!ownerOverride && !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle) })) {
     await repo.updateStatus(id, "not_relevant");
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",

@@ -9,11 +9,12 @@ import { RECENT_QUERY_WINDOW_MS, type ProspectingRunDeps } from "./prospectingSe
  * refill after a reply): the monthly spend gate, the pause switch, the daily search limit, and the cheap model relevance screen that
  * keeps posts that are not futures prop-firm or own-capital relevant from ever reaching the queue (2026-10-24).
  */
-export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRunDeps, "getMonthSpendUsd" | "isPaused" | "getTodaySearchCount" | "getTodaySearchSpendUsd" | "getRecentSearchQueries" | "screenRelevance" | "watchlistIncludeVetted" | "watchlistEnabled"> {
+export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRunDeps, "getMonthSpendUsd" | "isPaused" | "getTodaySearchCount" | "getTodaySearchSpendUsd" | "getRecentSearchQueries" | "screenRelevance" | "watchlistIncludeVetted" | "watchlistEnabled" | "watchlistSeedsOnly"> {
   let llm: ReturnType<typeof createRecordedLlmClient> | null = null;
   return {
     watchlistIncludeVetted: false,
     watchlistEnabled: true,
+    watchlistSeedsOnly: true,
     getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
     isPaused: async () => {
       const { data } = await client.from("system_settings").select("paused").eq("id", true).single();

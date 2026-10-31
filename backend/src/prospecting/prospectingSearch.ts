@@ -18,7 +18,7 @@ import {
 } from "./prospectingEligibility.js";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
 import { MIN_DAILY_SET_SCORE, selectDailyWorkingSet } from "./prospectingDailySelection.js";
-import { MIN_WATCHLIST_SIZE, PROSPECTING_SEED_CREATORS, WATCHLIST_LOOKBACK_DAYS, buildWatchlist, chunkWatchlist, parseHandleList, watchlistQuery } from "./prospectingWatchlist.js";
+import { MIN_WATCHLIST_SIZE, PROSPECTING_SEED_CREATORS, isSeedCreator, WATCHLIST_LOOKBACK_DAYS, buildWatchlist, chunkWatchlist, parseHandleList, watchlistQuery } from "./prospectingWatchlist.js";
 import type { ProspectingRepository } from "./types.js";
 
 export interface ProspectingRunResult {
@@ -107,6 +107,8 @@ export interface ProspectingRunDeps {
   watchlistIncludeVetted?: boolean;
   /** Whether the creator watchlist is read at all (default true). Production turns it off (2026-10-27): its streams were forex, crypto and news accounts, nearly all dropped, so the whole budget goes to topic searches. */
   watchlistEnabled?: boolean;
+  /** Production reads only the hand-picked PROSPECTING_SEED_CREATORS (2026-10-30): no replied-to or environment-variable handles, which brought in noise accounts. */
+  watchlistSeedsOnly?: boolean;
 }
 
 /**
@@ -186,7 +188,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   const countSelectable = async (): Promise<number> => {
     const rows = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], BACKLOG_SCAN_LIMIT);
     return selectDailyWorkingSet(
-      rows.filter((c) => isReplyWorthyPost(c.postText) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
+      rows.filter((c) => isReplyWorthyPost(c.postText, { trustedAuthor: isSeedCreator(c.authorHandle) }) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
       now,
     ).selected.length;
   };
@@ -209,8 +211,8 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // database, so a failed read just means no watchlist this run.
   let watchGroups: string[][] = [];
   try {
-    const seeds = deps.watchlistSeeds ?? [...PROSPECTING_SEED_CREATORS, ...parseHandleList(process.env.PROSPECTING_WATCHLIST_HANDLES)];
-    const rows = deps.repo.listWatchlistRows ? await deps.repo.listWatchlistRows(new Date(now.getTime() - WATCHLIST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)) : [];
+    const seeds = deps.watchlistSeeds ?? (deps.watchlistSeedsOnly ? [...PROSPECTING_SEED_CREATORS] : [...PROSPECTING_SEED_CREATORS, ...parseHandleList(process.env.PROSPECTING_WATCHLIST_HANDLES)]);
+    const rows = !deps.watchlistSeedsOnly && deps.repo.listWatchlistRows ? await deps.repo.listWatchlistRows(new Date(now.getTime() - WATCHLIST_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)) : [];
     const watchlist = buildWatchlist(rows, seeds, deps.watchlistIncludeVetted ?? true);
     if ((deps.watchlistEnabled ?? true) && watchlist.length >= MIN_WATCHLIST_SIZE) watchGroups = chunkWatchlist(watchlist.map((w) => w.handle));
   } catch {
@@ -340,9 +342,10 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
         // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
         // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
         // newsletters, AI-trading-agent hype) is never written to prospecting_candidates in the first place.
-        if (!isReplyWorthyBase(post.text) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
+        const trusted = isSeedCreator(post.authorHandle);
+        if (!isReplyWorthyBase(post.text, { trustedAuthor: trusted }) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
           excludedAsIrrelevant++;
-          drop(isTooSmallToBeWorthIt(post.authorFollowerCount) ? "small_author" : (whyNotReplyWorthy(post.text) ?? "other"), post);
+          drop(isTooSmallToBeWorthIt(post.authorFollowerCount) ? "small_author" : (whyNotReplyWorthy(post.text, { trustedAuthor: trusted }) ?? "other"), post);
           continue;
         }
 
@@ -413,6 +416,8 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       if (deps.screenRelevance) {
         const candidates = created.filter((c) => c.score >= MIN_DAILY_SET_SCORE).sort((a, b) => b.score - a.score);
         for (const c of candidates) {
+          // A hand-picked creator's post needs no model check: the author is the evidence.
+          if (isSeedCreator(c.authorHandle)) continue;
           if (screenedChecked >= VET_MAX_PER_RUN) break;
           screenedChecked++;
           funnel.screened++;

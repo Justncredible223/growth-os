@@ -53,6 +53,13 @@ export interface WatchedCreator {
   reason: "seed" | "replied" | "vetted";
 }
 
+/** True when the handle is one of the hand-picked seed creators (case-insensitive, with or without @). */
+export function isSeedCreator(handle: string | null | undefined): boolean {
+  if (!handle) return false;
+  const h = handle.replace(/^@/, "").toLowerCase();
+  return PROSPECTING_SEED_CREATORS.some((s) => s.toLowerCase() === h);
+}
+
 const HANDLE_PATTERN = /^[A-Za-z0-9_]{1,15}$/;
 
 export function isValidHandle(handle: string): boolean {
