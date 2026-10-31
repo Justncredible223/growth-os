@@ -681,6 +681,20 @@ describe("the creator watchlist in the search loop (2026-10-25)", () => {
     expect(screenRelevance).not.toHaveBeenCalled();
   });
 
+  it("the same creator request is not made again within the repeat window (2026-10-31)", async () => {
+    const seeds = ["FuturesFox", "ES_Ed", "NQ_Nate", "MNQ_Mia"];
+    const first: string[] = [];
+    await run(new FakeProspectingRepo(), { searchRecentPosts: vi.fn(async (q: string) => (first.push(q), [])) }, { watchlistSeeds: seeds });
+    const creatorQuery = first.find((q) => q.startsWith("(from:"))!;
+    expect(creatorQuery).toBeDefined();
+    const second: string[] = [];
+    // The recorded query is the request without the wrapper; the adapter query starts with the same text.
+    const recent = new Set([creatorQuery.replace(/ -is:retweet.*$/, "")]);
+    const result = await run(new FakeProspectingRepo(), { searchRecentPosts: vi.fn(async (q: string) => (second.push(q), [])) }, { watchlistSeeds: seeds, getRecentSearchQueries: async () => recent });
+    expect(second.some((q) => q.startsWith("(from:"))).toBe(false);
+    expect(result.creatorRequests).toBe(0);
+  });
+
   it("a creator's post with no matching topic is labelled with the general futures-trader topic", async () => {
     const adapter = { searchRecentPosts: vi.fn(async (q: string) => (q.startsWith("(from:") ? [post("p1", "Took the opening range break on MNQ futures and let it run. What would you have done?")] : [])) };
     const repo = new FakeProspectingRepo();

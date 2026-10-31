@@ -261,8 +261,11 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   let topicSeen = 0;
   for (let i = 0; i < breadth.maxTopics; i++) {
     if (isCreatorSlot(i)) {
-      plan.push({ kind: "creators", handles: watchGroups[(runIndex + creatorSeen) % watchGroups.length]! });
+      const handles = watchGroups[(runIndex + creatorSeen) % watchGroups.length]!;
       creatorSeen++;
+      // The same creator request within the window returns the same latest posts (2026-10-31: two repeats read 10 posts each, 7 and 6 of them
+      // duplicates, $0.05 apiece), so it is skipped like a repeated topic search.
+      if (!recentQueries.has(watchlistQuery(handles))) plan.push({ kind: "creators", handles });
     } else {
       const fresh = freshGroups[topicSeen];
       topicSeen++;
