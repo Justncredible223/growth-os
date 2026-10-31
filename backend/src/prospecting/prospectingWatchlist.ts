@@ -10,7 +10,11 @@
  */
 
 /** Handles added by hand, always on the list. Empty until the owner names some. No @. */
-export const PROSPECTING_SEED_CREATORS: readonly string[] = [];
+export const PROSPECTING_SEED_CREATORS: readonly string[] = [
+  // 2026-10-30, picked from a read-only skim of X (futures-specific, 1.8K to 62K followers, no course or promo-code selling, active):
+  "LumiTraders", "StoicTA", "aw_trades_", "RHerman", "fredtrades", "MrMilkTrading",
+  "stefanytrades", "RC_FUTURES", "TraderLe", "FredrikMolnar", "nqvtrades", "mTraderNDX",
+];
 
 /** An author needs at least this many followers to be worth watching (the same floor spirit as MIN_PROSPECT_FOLLOWERS, higher on purpose). */
 export const MIN_WATCH_FOLLOWERS = 1_000;

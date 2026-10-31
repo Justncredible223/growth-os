@@ -149,3 +149,15 @@ describe("SupabaseProspectingRepository.listWatchlistRows", () => {
     expect(calls).toContainEqual(["not author_handle"]);
   });
 });
+
+describe("the owner's seed creators (2026-10-30)", () => {
+  it("are 12 valid, distinct handles that form a watchlist on their own", async () => {
+    const { PROSPECTING_SEED_CREATORS, buildWatchlist, isValidHandle, MIN_WATCHLIST_SIZE } = await import("../src/prospecting/prospectingWatchlist");
+    expect(PROSPECTING_SEED_CREATORS).toHaveLength(12);
+    for (const h of PROSPECTING_SEED_CREATORS) expect(isValidHandle(h)).toBe(true);
+    expect(new Set(PROSPECTING_SEED_CREATORS.map((h) => h.toLowerCase())).size).toBe(12);
+    const list = buildWatchlist([], PROSPECTING_SEED_CREATORS, false);
+    expect(list.length).toBeGreaterThanOrEqual(MIN_WATCHLIST_SIZE);
+    expect(list.every((c) => c.reason === "seed")).toBe(true);
+  });
+});

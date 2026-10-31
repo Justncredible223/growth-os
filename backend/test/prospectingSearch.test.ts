@@ -7,6 +7,9 @@ import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFr
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
 
+/** Every test starts with no hand-picked seed creators (production seeds the owner's twelve, see PROSPECTING_SEED_CREATORS); a test that wants seeds passes watchlistSeeds. */
+const runSearch = (deps: Parameters<typeof runProspectingSearch>[0]) => runProspectingSearch({ watchlistSeeds: [], ...deps });
+
 function candidateFrom(c: NewProspectingCandidate, id: string): ProspectingCandidate {
   return {
     id,
@@ -95,7 +98,7 @@ describe("runProspectingSearch", () => {
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your futures trading over time?" })]) };
     const repo = new FakeProspectingRepo();
 
-    const result = await runProspectingSearch({
+    const result = await runSearch({
       adapter: adapter as any,
       repo,
       client: fakeSupabaseClient(),
@@ -113,7 +116,7 @@ describe("runProspectingSearch", () => {
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
     const repo = new FakeProspectingRepo();
 
-    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+    await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
 
     expect(adapter.searchRecentPosts).toHaveBeenCalledWith(expect.any(String), expect.any(Number), now, MAX_AGE_FOR_DAILY_SELECTION_MS);
   });
@@ -123,8 +126,8 @@ describe("runProspectingSearch", () => {
     const repo = new FakeProspectingRepo();
     const deps = { adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now };
 
-    const first = await runProspectingSearch(deps);
-    const second = await runProspectingSearch({ ...deps, now: new Date(now.getTime() + 24 * 60 * 60 * 1000) });
+    const first = await runSearch(deps);
+    const second = await runSearch({ ...deps, now: new Date(now.getTime() + 24 * 60 * 60 * 1000) });
 
     expect(first.newCandidates).toBeGreaterThan(0);
     // Same post id keeps coming back from search (still matches the query) but must not duplicate.
@@ -139,7 +142,7 @@ describe("runProspectingSearch", () => {
     };
     const repo = new FakeProspectingRepo();
 
-    const result = await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+    const result = await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
 
     // The same spam post comes back from every one of this run's topic searches (mockResolvedValue applies to every call).
     expect(result.excludedAsSpam).toBe(TOPICS_PER_SEARCH_RUN);
@@ -153,7 +156,7 @@ describe("runProspectingSearch", () => {
     };
     const repo = new FakeProspectingRepo();
 
-    const result = await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+    const result = await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
 
     expect(result.excludedAsIrrelevant).toBe(TOPICS_PER_SEARCH_RUN);
     expect(result.newCandidates).toBe(0);
@@ -164,7 +167,7 @@ describe("runProspectingSearch", () => {
     const adapter = { searchRecentPosts: vi.fn() };
     const repo = new FakeProspectingRepo();
 
-    const result = await runProspectingSearch({
+    const result = await runSearch({
       adapter: adapter as any,
       repo,
       client: fakeSupabaseClient(),
@@ -182,7 +185,7 @@ describe("runProspectingSearch", () => {
     const repo = new FakeProspectingRepo();
     const getMonthSpendUsd = vi.fn().mockResolvedValue(0);
 
-    const result = await runProspectingSearch({
+    const result = await runSearch({
       adapter: adapter as any,
       repo,
       client: fakeSupabaseClient(),
@@ -203,7 +206,7 @@ describe("runProspectingSearch", () => {
 
     const repoNotPaused = new FakeProspectingRepo();
     const adapterNotPaused = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
-    const resultNotPaused = await runProspectingSearch({
+    const resultNotPaused = await runSearch({
       adapter: adapterNotPaused as any,
       repo: repoNotPaused,
       client: fakeSupabaseClient(),
@@ -216,7 +219,7 @@ describe("runProspectingSearch", () => {
 
     const repoNoDep = new FakeProspectingRepo();
     const adapterNoDep = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
-    const resultNoDep = await runProspectingSearch({
+    const resultNoDep = await runSearch({
       adapter: adapterNoDep as any,
       repo: repoNoDep,
       client: fakeSupabaseClient(),
@@ -251,7 +254,7 @@ describe("runProspectingSearch", () => {
       });
     }
 
-    const result = await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+    const result = await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
 
     expect(result.skipped).toBe(true);
     expect(result.skipReason).toMatch(/queue_full/);
@@ -262,11 +265,11 @@ describe("runProspectingSearch", () => {
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
     const repo = new FakeProspectingRepo();
 
-    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: 0 });
+    await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: 0 });
     const queriesAtZero = adapter.searchRecentPosts.mock.calls.map((c) => c[0]);
 
     adapter.searchRecentPosts.mockClear();
-    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: 1 });
+    await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: 1 });
     const queriesAtOne = adapter.searchRecentPosts.mock.calls.map((c) => c[0]);
 
     expect(queriesAtZero).not.toEqual(queriesAtOne);
@@ -276,7 +279,7 @@ describe("runProspectingSearch", () => {
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
     const repo = new FakeProspectingRepo();
     for (let i = 0; i < 24; i++) {
-      await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: i, getRecentSearchQueries: async () => new Set() });
+      await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: i, getRecentSearchQueries: async () => new Set() });
     }
     const queries = adapter.searchRecentPosts.mock.calls.map((c) => c[0] as string);
     expect(queries.length).toBeGreaterThan(0);
@@ -289,7 +292,7 @@ describe("runProspectingSearch", () => {
     const repo = new FakeProspectingRepo();
     repo.outreach.add("known-author");
 
-    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+    await runSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
 
     const inserted = [...repo.rows.values()][0]!;
     expect(inserted.scoreBreakdown.priorRelationship).toMatch(/already replied/);
@@ -331,7 +334,7 @@ describe("runProspectingSearch", () => {
       });
     }
     const run = (repo: FakeProspectingRepo, adapter: any, extra: Record<string, unknown> = {}) =>
-      runProspectingSearch({ adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
+      runProspectingSearch({ watchlistSeeds: [], adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
     const trackingRepo = () => new FakeProspectingRepo();
 
     it("makes no X read when two usable posts are already waiting", async () => {
@@ -592,7 +595,7 @@ describe("runProspectingSearch", () => {
     it("a request covers up to four topics, so a run's two requests cover up to eight", async () => {
       const queries: string[] = [];
       const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
-      const result = await runProspectingSearch({ adapter: adapter as any, repo: new FakeProspectingRepo(), client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now: new Date("2026-09-01T12:00:00Z") });
+      const result = await runSearch({ adapter: adapter as any, repo: new FakeProspectingRepo(), client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now: new Date("2026-09-01T12:00:00Z") });
       expect(queries).toHaveLength(2);
       expect(result.topicsSearched.length).toBeGreaterThan(queries.length);
     });
@@ -605,7 +608,7 @@ describe("the creator watchlist in the search loop (2026-10-25)", () => {
   const post = (id: string, text: string, authorId = `a-${id}`) =>
     searchResult({ id, text, authorId, authorHandle: `h${id}`, authorFollowerCount: 5000, createdAt: new Date(now.getTime() - 60 * 60 * 1000), publicMetrics: { reply_count: 2, like_count: 6 } });
   const run = (repo: FakeProspectingRepo, adapter: any, extra: Record<string, unknown> = {}) =>
-    runProspectingSearch({ adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
+    runProspectingSearch({ watchlistSeeds: [], adapter, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, ...extra });
 
   it("reads the creators first, then topics, when enough creators are known", async () => {
     const queries: string[] = [];
@@ -693,7 +696,7 @@ describe("the funnel is recorded on each request's cost event (2026-10-25)", () 
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue(posts) };
     const repo = new FakeProspectingRepo();
     const screenRelevance = vi.fn(async (post: { postText: string }) => !post.postText.includes("Revenge"));
-    await runProspectingSearch({ adapter: adapter as any, repo, client, getMonthSpendUsd: async () => 0, now, screenRelevance, runIndexOverride: 1 });
+    await runSearch({ adapter: adapter as any, repo, client, getMonthSpendUsd: async () => 0, now, screenRelevance, runIndexOverride: 1 });
     expect(events.length).toBeGreaterThan(0);
     const ev = events[0];
     expect(ev.event_type).toBe("x_search_read");
@@ -716,7 +719,7 @@ describe("the funnel is recorded on each request's cost event (2026-10-25)", () 
       throw new Error("db down");
     };
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([p("k1", "How do you manage the trailing drawdown on a funded account trading ES futures?")]) };
-    await expect(runProspectingSearch({ adapter: adapter as any, repo, client, getMonthSpendUsd: async () => 0, now, runIndexOverride: 1 })).rejects.toThrow("db down");
+    await expect(runProspectingSearch({ watchlistSeeds: [], adapter: adapter as any, repo, client, getMonthSpendUsd: async () => 0, now, runIndexOverride: 1 })).rejects.toThrow("db down");
     expect(events).toHaveLength(1);
     expect(events[0].cost_usd).toBeCloseTo(0.005, 6);
   });
