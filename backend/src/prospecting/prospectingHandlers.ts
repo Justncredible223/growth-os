@@ -31,6 +31,10 @@ export class ProspectingConflictError extends ProspectingActionError {}
 export const OWNER_OVERRIDE_DRAFT_NOTE =
   "The owner has chosen to reply to this post themselves, even though an automatic screen thought it a weak fit. Write the best reply you can under every rule above. If it is a poor fit, still write a short, specific, harmless reply rather than declining, and set isRelevant to true.";
 
+/** Added to the drafter's user message for a hand-picked creator: the owner wants to be seen replying to them, so a post that is not strictly about futures is still worth a reply. */
+export const TRUSTED_CREATOR_DRAFT_NOTE =
+  "The author is a hand-picked futures creator the owner wants to reply to, so this post is relevant even when it is not strictly about futures or trading rules. Reply to what they actually said, in a specific and harmless way, under every rule above. Do not force a futures or Fillbook mention, and set isRelevant to true.";
+
 /** True for a card the owner pulled out of the Maybe list and that is still inside its 24-hour visibility window. */
 export function isOwnerOverrideActive(row: ProspectingCandidate, now: Date): boolean {
   if (row.scoreBreakdown?.[OWNER_OVERRIDE_KEY] !== "true") return false;
@@ -316,7 +320,8 @@ async function draftCandidateCore(
   // Second, cheap (MODEL_HAIKU) relevance gate -- runs before the expensive
   // drafting call below so a post that clears the free regex filter but
   // isn't actually relevant gets rejected without paying for a full draft.
-  if (!ownerOverride && !(await cheapRelevanceCheck(draftContext))) {
+  const trustedCreator = isSeedCreator(row.authorHandle);
+  if (!ownerOverride && !trustedCreator && !(await cheapRelevanceCheck(draftContext))) {
     await repo.updateStatus(id, "not_relevant");
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
   }
@@ -333,6 +338,7 @@ async function draftCandidateCore(
   // Recovery mode: the draft must not name Fillbook at all while X is limiting the account's replies.
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, new Date());
   if (ownerOverride) draftContext.ownerOverrideNote = OWNER_OVERRIDE_DRAFT_NOTE;
+  else if (trustedCreator) draftContext.ownerOverrideNote = TRUSTED_CREATOR_DRAFT_NOTE;
   if (recovery.active) draftContext.recoveryNote = RECOVERY_DRAFT_NOTE;
   // Mention budget: once recent posted replies name Fillbook too often, this one must leave it out (same effect as recovery mode).
   const mentionBudget = computeMentionBudget(await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
@@ -361,7 +367,7 @@ async function draftCandidateCore(
       // cheap Haiku check above (e.g. a post that uses real trading vocabulary
       // but in a fundamentally different, still-irrelevant context). Same
       // terminal status and no persisted draft as the earlier gates.
-      if (!ownerOverride && !candidate.isRelevant) {
+      if (!ownerOverride && !trustedCreator && !candidate.isRelevant) {
         throw new ProspectingIrrelevantSignal();
       }
       if (candidate.helpfulReply !== undefined) {
