@@ -13,7 +13,7 @@ export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRu
   let llm: ReturnType<typeof createRecordedLlmClient> | null = null;
   return {
     watchlistIncludeVetted: false,
-    watchlistEnabled: false,
+    watchlistEnabled: true,
     getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
     isPaused: async () => {
       const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
