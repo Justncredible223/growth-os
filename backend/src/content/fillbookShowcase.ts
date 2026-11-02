@@ -27,7 +27,7 @@ export const FILLBOOK_SHOWCASE_VIEWS: readonly FillbookShowcaseView[] = [
     id: "setup_breakdown",
     audience: "both",
     problems: "a green month or account that hides a losing setup; not knowing which setup makes or loses the money; 'my strategy works but I'm still down'",
-    shows: "the By setup breakdown: every setup on its own row with its trade count, win rate and net P&L, worst first",
+    shows: "the By setup breakdown: every setup on its own row with its trade count, win rate and net P&L",
   },
   {
     id: "account_buffer",

@@ -165,9 +165,9 @@ const CONCEPTS: Daily[] = [
     focus: [f(h("Opening Range Break", "25%", "bad"), 0, 0), f(h("Every trade", "64%", "good"), 0, 1)],
     details: { title: "Reports · overview", rows: [["Net P&L", "$387.08", "good"], ["Win rate", "64%", "good"], ["Total trades", "22", "good"]] },
     facts: ["setup.opening_range_break_result", "month.net_pnl"],
-    say: ["Fillbook Reports rank your setups, worst first.", "One setup wins 25%.", "But all trades win 64%.", "It adds net P&L and trade count.", "Rank your own setups."],
+    say: ["Fillbook's Reports show each setup's P&L.", "One setup wins 25%.", "But all trades win 64%.", "It adds net P&L and trade count.", "Rank your own setups."],
     cap: ["Reports: by setup.", "Opening Range: 25% win.", "All trades: 64% win.", "Net P&L and trade count.", "Rank your own setups."],
-    take: ["Reports rank setups, worst first.", "One setup wins 25%.", "Overall it is 64%.", "It adds the net P&L.", "Rank your own setups."],
+    take: ["Reports show each setup's P&L.", "One setup wins 25%.", "Overall it is 64%.", "It adds the net P&L.", "Rank your own setups."],
   },
   // 07
   {
