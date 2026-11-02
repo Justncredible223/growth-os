@@ -435,7 +435,7 @@ The trap is a setup you like, which keeps getting taken long after it stopped pa
 
 List each setup with its trade count, win rate and P&L, and start with the worst one. [pause]
 
-Fillbook's Reports list every setup with its trades, win rate and P&L. [pause]
+Fillbook's Reports show each setup's P&L. [pause]
 
 Which setup is costing you most?
 ```
@@ -459,7 +459,7 @@ The trap is sizing up to close the gap faster, which can undo weeks of progress 
 
 Write down the amount left and your normal daily pace, and let the gap close at that pace. [pause]
 
-Fillbook's payout readiness page tracks the gap. [pause]
+Fillbook's readiness page tracks the gap. [pause]
 
 How far along is your target?
 ```

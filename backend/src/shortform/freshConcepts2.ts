@@ -375,9 +375,9 @@ const FRESH2: Daily[] = [
     focus: [f(h("Net P&L · of $9,000", "$7,516", "good"), 0, 0), f(h("Left to the target", "$1,484", "bad"), 0, 1)],
     details: { title: "Readiness · the rest", rows: [["Progress", "84%", "good"], ["Rule breach", "None active", "good"], ["Account", "150K funded", "good"]] },
     facts: ["payouts.readiness", "payouts.to_go"],
-    say: ["$7,516 made toward a $9,000 target.", "That is 84% of the way.", "But $1,484 is still to go.", "Fillbook's payout readiness page tracks the gap.", "How far along is your target?"],
-    cap: ["Readiness: the target.", "Net P&L: $7,516 of $9,000.", "To go: $1,484.", "Payout readiness tracks it.", "How far along are you?"],
-    take: ["$7,516 made toward a $9,000 target.", "That is 84% of the way.", "$1,484 is still to go.", "The payout readiness page tracks the gap.", "How far along is your target?"],
+    say: ["$7,516 made toward a $9,000 target.", "That is 84% of the way.", "But $1,484 is still to go.", "Fillbook's readiness page tracks the gap.", "How far along is your target?"],
+    cap: ["Readiness: the target.", "Net P&L: $7,516 of $9,000.", "To go: $1,484.", "The readiness page tracks it.", "How far along are you?"],
+    take: ["$7,516 made toward a $9,000 target.", "That is 84% of the way.", "$1,484 is still to go.", "The readiness page tracks the gap.", "How far along is your target?"],
   },
 ];
 

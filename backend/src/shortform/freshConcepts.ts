@@ -81,9 +81,9 @@ const FRESH: Daily[] = [
     focus: [f(h("Opening Range Break", "-$422", "bad"), 0, 0), f(h("Every trade · win rate", "64%", "good"), 0, 1)],
     details: { title: "Reports · overview", rows: [["Net P&L", "$387.08", "good"], ["Win rate", "64%", "good"], ["Total trades", "22", "good"]] },
     facts: ["setup.opening_range_break_result", "month.net_pnl"],
-    say: ["One setup. Eight trades. Lost $422.", "It won just 25% of them.", "But all trades won 64%.", "Fillbook's Reports list every setup with its trades, win rate and P&L.", "Which setup is costing you most?"],
-    cap: ["Reports: one setup.", "Opening Range: 25% win.", "All trades: 64% win.", "Reports list every setup.", "Which setup costs you most?"],
-    take: ["One setup lost $422 in 8 trades.", "It won just 25%.", "All trades won 64%.", "Reports list every setup.", "Which setup costs you most?"],
+    say: ["One setup. Eight trades. Lost $422.", "It won just 25% of them.", "But all trades won 64%.", "Fillbook's Reports show each setup's P&L.", "Which setup is costing you most?"],
+    cap: ["Reports: one setup.", "Opening Range: 25% win.", "All trades: 64% win.", "Reports show each setup's P&L.", "Which setup costs you most?"],
+    take: ["One setup lost $422 in 8 trades.", "It won just 25%.", "All trades won 64%.", "Reports show each setup's P&L.", "Which setup costs you most?"],
   },
   // 05
   {
