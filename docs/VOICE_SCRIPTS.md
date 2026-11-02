@@ -459,7 +459,7 @@ The trap is sizing up to close the gap faster, which can undo weeks of progress 
 
 Write down the amount left and your normal daily pace, and let the gap close at that pace. [pause]
 
-Fillbook's readiness page tracks the gap. [pause]
+Fillbook's payout readiness page tracks the gap. [pause]
 
 How far along is your target?
 ```
