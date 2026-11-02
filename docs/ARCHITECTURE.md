@@ -3,21 +3,21 @@
 ## What this is
 
 An Android "Mission Control" app + cloud backend that finds organic growth
-opportunities for FillbookHQ (fillbookhq.com), drafts platform-native content
+opportunities for Fillbook (fillbookhq.com), drafts platform-native content
 and video for them, and hands every external action to the human owner
 (Justin) to personally publish. It never posts, replies, likes, follows, or
 DMs on its own. See `docs/EXTERNAL_WRITE_FIREWALL.md`.
 
-## Relationship to FillbookHQ
+## Relationship to Fillbook
 
 Fillbook Growth OS is a **separate repo and separate deployment** from the
-FillbookHQ product repo (`C:\Users\Justin\fillbookhq`, GitHub
-`Justncredible223/fillbook`). It reads from FillbookHQ (its public site, its
+Fillbook product repo (`C:\Users\Justin\fillbookhq`, GitHub
+`Justncredible223/fillbook`). It reads from Fillbook (its public site, its
 Search Console property, aggregated/anonymized product signals) but does not
 share a codebase or a production database with it. This keeps a mistake in
 Growth OS from ever being able to touch the paying product's data path.
 
-FillbookHQ today (as of 2026-08-31, for sizing decisions — verify before
+Fillbook today (as of 2026-08-31, for sizing decisions — verify before
 relying on this later): 3 real signups, 1 paying customer, Vercel Hobby tier,
 small Supabase project. Growth OS is deliberately **right-sized to this
 stage** — see "Build sequencing" below — not built as if Fillbook were a
@@ -50,7 +50,7 @@ blockers, so work resumes safely across sessions without re-deriving context.
 
 ## Seeded from real prior work
 
-FillbookHQ's repo already contains a manual growth practice (not a
+Fillbook's repo already contains a manual growth practice (not a
 prototype — real accounts, real posts, real findings). Growth OS imports
 this as day-one data rather than starting cold:
 
@@ -67,16 +67,16 @@ See `docs/SEED_DATA_SOURCES.md` for the exact mapping of doc → table.
 ## Tech stack
 
 - **Backend**: Node.js + TypeScript, deployed as Vercel serverless functions
-  (matches FillbookHQ's existing hosting relationship/expertise; separate
-  Vercel project). Vitest for tests (matches FillbookHQ's existing tooling).
-- **Database**: Supabase Postgres, **new dedicated project** (not FillbookHQ's
+  (matches Fillbook's existing hosting relationship/expertise; separate
+  Vercel project). Vitest for tests (matches Fillbook's existing tooling).
+- **Database**: Supabase Postgres, **new dedicated project** (not Fillbook's
   production DB). Migrations as plain numbered SQL files, applied via the
   Supabase MCP tooling.
 - **Jobs**: `system_jobs` table + a Vercel Cron-triggered worker endpoint,
   polling with `SELECT ... FOR UPDATE SKIP LOCKED`. This is a deliberately
   simple durable queue — no separate message broker until real volume
   justifies one.
-- **Android**: Kotlin + Jetpack Compose, native (not Capacitor — FillbookHQ's
+- **Android**: Kotlin + Jetpack Compose, native (not Capacitor — Fillbook's
   own untracked `frontend/android` Capacitor scaffold is unrelated and is
   not reused here).
 - **AI**: provider-agnostic call layer from day one (model per workload,
@@ -88,12 +88,12 @@ See `docs/EXTERNAL_WRITE_FIREWALL.md`. Enforced server-side in
 `backend/src/firewall/`, with tests proving every EXTERNAL_WRITE class is
 rejected. This is not a UI setting and has no override.
 
-## Known open items inherited from FillbookHQ (not Growth OS bugs, but Growth OS should be aware)
+## Known open items inherited from Fillbook (not Growth OS bugs, but Growth OS should be aware)
 
 - Vercel MCP access was returning 403 as of 2026-08-31 — don't assume
   Vercel API deploy-verification works until rechecked.
-- UTM attribution gap: TikTok/X traffic shows as 0 in FillbookHQ's own
+- UTM attribution gap: TikTok/X traffic shows as 0 in Fillbook's own
   dashboard (suspected in-app-browser UTM stripping, unconfirmed). Growth OS's
   Attribution Engine (later phase) should treat this as a known-broken input
-  until FillbookHQ's own tracking is fixed — do not build on top of it
+  until Fillbook's own tracking is fixed — do not build on top of it
   silently.

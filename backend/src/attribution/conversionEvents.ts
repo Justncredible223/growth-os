@@ -6,9 +6,9 @@ export const CONVERSION_EVENT_TYPES: ConversionEventType[] = ["signup", "activat
 export interface NewConversionEvent {
   source: string;
   eventType?: ConversionEventType;
-  /** FillbookHQ's own stable id for the underlying event (their `events.id` UUID) -- the dedup key. Omitted only by the original pre-2026-09-18 signup-only callers. */
+  /** Fillbook's own stable id for the underlying event (their `events.id` UUID) -- the dedup key. Omitted only by the original pre-2026-09-18 signup-only callers. */
   externalEventId?: string | null;
-  /** HMAC of FillbookHQ's user_id, keyed by a secret only FillbookHQ holds -- see migration 0035's comment. Never a real user_id/email. */
+  /** HMAC of Fillbook's user_id, keyed by a secret only Fillbook holds -- see migration 0035's comment. Never a real user_id/email. */
   subjectHash?: string | null;
   utmSource: string | null;
   utmMedium: string | null;
@@ -29,7 +29,7 @@ export interface RecordConversionEventResult {
 
 /**
  * Records one conversion reported by an external webhook (today: only
- * FillbookHQ's signup/activation/first_trade/first_paid events, all under
+ * Fillbook's signup/activation/first_trade/first_paid events, all under
  * source="fillbook_signup" -- see migration 0035). Throws on failure
  * rather than swallowing it, unlike cost/costTracking.ts's recordCostEvent
  * -- this is the entire point of the request (there's no discovery/reply
@@ -38,7 +38,7 @@ export interface RecordConversionEventResult {
  * event.
  *
  * Idempotent by (source, externalEventId): a retried webhook delivery or
- * a re-run of FillbookHQ's sync cron after a partial failure re-sends the
+ * a re-run of Fillbook's sync cron after a partial failure re-sends the
  * same externalEventId, and the unique index from migration 0035 makes a
  * duplicate a no-op rather than a double-counted conversion. Detected via
  * Postgres's own unique_violation code (23505) rather than a
