@@ -118,6 +118,8 @@ export const PILOT_1: ScenePlan = {
       topics: ["setup_breakdown"],
       // Starts just before the swipe (4.53-5.73s) so the viewer sees the page move down to the breakdown.
       clipTimeRangeSeconds: { start: 4.35, end: 17.7 },
+      // STALE: Reports "By setup" now sorts best net impact first (was worst first when this pilot was made). Do not re-render
+      // as is; if revived, say "Opening Range Break is the one that loses: 8 trades, 25% win, down $421.76." (needs trio YES + re-record).
       claims: [{ id: "p1-c2", type: "data_point", text: "By setup, worst first: Opening Range Break has 8 trades, 25% win, -$421.76.", evidence: [{ assetId: P1_REC, factKey: "setup.opening_range_break_result" }] }],
     }),
     scene({
@@ -1593,6 +1595,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     topic: "A strong overall win rate can sit on top of one losing setup",
     scenes: [
       { narration: "64% win rate. One setup still loses.", headline: "64% win rate", caption: "22 trades, $387.08 net.", takeaway: "A good overall win rate can hide one bad setup." },
+      // STALE: the app no longer sorts setups worst first (see the note on claim p1-c2). Do not re-render this narration as is.
       { narration: "Sorted worst first, it's Opening Range Break: 8 trades, 25% win, down $421.76.", headline: "The setup behind the losses", caption: "Opening Range Break: 8 trades, -$421.76.", takeaway: "Sort setups worst first to find the leak." },
       { narration: "These are sample trades, not anyone's real money. Sort your own and see what shows up.", headline: "Sample trades, not real money", caption: "Sort your own and see what shows up.", takeaway: "Check your own setups, not these numbers." },
       { narration: "Sort your own setups, worst first.", headline: "Sort your setups worst first.", caption: "See your breakdown at fillbookhq.com.", takeaway: "Start the review from the weakest setup." },
