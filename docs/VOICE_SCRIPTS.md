@@ -435,7 +435,7 @@ The trap is a setup you like, which keeps getting taken long after it stopped pa
 
 List each setup with its trade count, win rate and P&L, and start with the worst one. [pause]
 
-Fillbook's Reports rank setups, worst first. [pause]
+Fillbook's Reports list every setup with its trades, win rate and P&L. [pause]
 
 Which setup is costing you most?
 ```
