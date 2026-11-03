@@ -975,3 +975,29 @@ describe("categoryUnderrepresentationBonus / content-mix self-correction -- fixe
     expect(winnerCategory).toBeTruthy();
   });
 });
+
+describe("runDailyXFeedPostStep -- image brief, posting window, weekly reference post", () => {
+  it("a normal day's ready run carries the image brief and the posting window in the owner note", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(GOOD_DRAFT_A)).mockResolvedValue(verdictResponse(true));
+    const { deps } = buildHarness(fetchMock);
+
+    const result = await runDailyXFeedPostStep(deps, "2026-11-03", false); // a Tuesday
+    expect(result.status).toBe("ready");
+    const run = await deps.runRepo.getRun("2026-11-03");
+    expect(run?.selectionReason).toMatch(/Image: /);
+    expect(run?.selectionReason).toMatch(/When: Post after the 9:30 ET open/);
+  });
+
+  it("on Wednesday the draft is a reference topic, and Home can label it", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(GOOD_DRAFT_A)).mockResolvedValue(verdictResponse(true));
+    const { deps } = buildHarness(fetchMock);
+
+    const result = await runDailyXFeedPostStep(deps, "2026-11-04", false); // a Wednesday
+    expect(result.status).toBe("ready");
+    expect(result.topicKey).toMatch(/^reference_/);
+    const run = await deps.runRepo.getRun("2026-11-04");
+    expect(run?.selectionReason).toMatch(/^Weekly reference post/);
+    expect(run?.selectionReason).toMatch(/Image: A /);
+    expect(feedPostTopicLabel(result.topicKey!)).toMatch(/^Reference: /);
+  });
+});
