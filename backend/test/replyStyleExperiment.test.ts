@@ -1,3 +1,4 @@
+import { paragraphizeReply } from "../src/content/replySpacing";
 import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
 import { HUMAN_REPLY_VOICE_RULES } from "../src/content/humanReplyVoice";
@@ -151,14 +152,14 @@ describe("two-option drafting", () => {
     const repo = new Repo();
     repo.seed(candidate());
     const out = await draftProspectingCandidateReply({} as any, "c1", deps(repo, [twoOption()]));
-    expect(out.draftReply).toBe(SHARP);
+    expect(out.draftReply).toBe(paragraphizeReply(SHARP));
     expect(out.draftOptions).toEqual([
-      { style: "sharp", text: SHARP },
-      { style: "helpful", text: HELPFUL },
+      { style: "sharp", text: paragraphizeReply(SHARP) },
+      { style: "helpful", text: paragraphizeReply(HELPFUL) },
     ]);
     expect(out.status).toBe("ready");
     const json = toProspectingJson(out);
-    expect(json.draftReply).toBe(SHARP);
+    expect(json.draftReply).toBe(paragraphizeReply(SHARP));
     expect(json.draftOptions).toHaveLength(2);
   });
 
@@ -179,7 +180,7 @@ describe("two-option drafting", () => {
     expect(seen).toHaveLength(2);
     expect(seen[1]!.retryFeedback).toContain("The helpful option");
     expect(seen[1]!.retryFeedback).toContain("Check the rulebook");
-    expect(out.draftOptions?.map((o) => o.text)).toEqual([SHARP, HELPFUL]);
+    expect(out.draftOptions?.map((o) => o.text)).toEqual([paragraphizeReply(SHARP), paragraphizeReply(HELPFUL)]);
   });
 
   it("if one option never gets clean, the good one is still offered on its own", async () => {
@@ -187,8 +188,8 @@ describe("two-option drafting", () => {
     repo.seed(candidate());
     const bad = twoOption({ reply: "Great point, this is a real problem for a lot of people trading funded accounts." });
     const out = await draftProspectingCandidateReply({} as any, "c1", deps(repo, [bad]));
-    expect(out.draftOptions).toEqual([{ style: "helpful", text: HELPFUL }]);
-    expect(out.draftReply).toBe(HELPFUL);
+    expect(out.draftOptions).toEqual([{ style: "helpful", text: paragraphizeReply(HELPFUL) }]);
+    expect(out.draftReply).toBe(paragraphizeReply(HELPFUL));
   });
 
   it("rejects the draft entirely when both options break a hard rule", async () => {

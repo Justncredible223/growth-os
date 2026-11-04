@@ -19,6 +19,9 @@ export const HUMAN_REPLY_VOICE_RULES = `HOW REAL TRADERS ACTUALLY REPLY ON X (th
 - One or two sentences. A reply that shows a Fillbook view is usually two: the point, then the view. Aim for
   under about 250 characters; X allows 280 and anything longer is rejected outright. If you need more room
   than that, you have too many points: pick the best one.
+- Spacing (owner rule 2026-11-04): when a reply has two parts, put each on its own line with one blank line
+  between them (the point, blank line, then the view). Never run two thoughts together as one block. A
+  one-sentence reply stays one line.
 - Never generalize about "most traders" or "most people". Talk about this person's post. Also never open with
   "The gap between", "The second you", "The hard part is" or "What separates", and never close with a tidy
   "that's the gap between X and Y" line. These are the shapes that get replies called AI slop.

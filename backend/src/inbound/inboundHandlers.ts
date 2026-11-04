@@ -7,6 +7,7 @@ import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { estimateCostUsd } from "../cost/costTracking.js";
 import { draftInboundResponse, INBOUND_TRACKABLE_LINK, type InboundDraftContext } from "./inboundResponseWriter.js";
 import { draftWithRetries } from "../content/xReplyGuardrails.js";
+import { paragraphizeReply } from "../content/replySpacing.js";
 import { assessInboundDraft } from "./inboundDraftPolicy.js";
 import { OWN_ACCOUNT_NOTE, closeOwnAccountItems, isOwnAccountRow, type OwnAccountIdentity } from "./ownAccount.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
@@ -199,9 +200,11 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   // Swaps the model's static placeholder link for a real per-engagement
   // short link (see trackableLinks.ts) -- same per-reply attribution this
   // session added to Prospecting. A no-op when usesLink is false.
-  const finalReply = draft.usesLink
-    ? substituteTrackableLink(draft.reply, INBOUND_TRACKABLE_LINK, buildTrackableReplyLink(`inbound:${id}`, "inbound", id))
-    : draft.reply;
+  const finalReply = paragraphizeReply(
+    draft.usesLink
+      ? substituteTrackableLink(draft.reply, INBOUND_TRACKABLE_LINK, buildTrackableReplyLink(`inbound:${id}`, "inbound", id))
+      : draft.reply,
+  );
 
   await repo.updateStatus(id, "draft_ready", { draftResponse: finalReply, draftUsesLink: draft.usesLink });
   // Keep the rebuilt thread on the row so the card shows it too (the app already displays inResponseToText).
