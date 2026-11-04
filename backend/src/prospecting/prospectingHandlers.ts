@@ -60,7 +60,16 @@ export interface ProspectingHandlerDeps {
   loadStyleExamples?: (client: SupabaseClient) => Promise<StyleExample[]>;
   /** Recovery-mode state (prospectingRecovery.ts). Overridable so tests never touch the database. */
   loadRecovery?: (client: SupabaseClient, now: Date) => Promise<RecoveryState>;
+  /** Overrides FILLBOOK_OPTION_ENABLED. Tests only. */
+  fillbookOptionEnabled?: boolean;
 }
+
+/**
+ * Whether a cold reply may offer option C, the one that names Fillbook. OFF since 2026-11-04 (owner: follow the X playbook, and the
+ * ChatGPT + Gemini + Claude check agreed): viewers who mute us get -58.8 and our replies rarely reach non-followers anyway, so a cold
+ * reply never names Fillbook. The code stays so it can be switched back on after the 2026-11-21 review.
+ */
+export const FILLBOOK_OPTION_ENABLED = false;
 
 function repoFor(client: SupabaseClient, deps: ProspectingHandlerDeps): ProspectingRepository {
   return deps.repo ?? new SupabaseProspectingRepository(client);
@@ -346,7 +355,7 @@ async function draftCandidateCore(
   if (!recovery.active && mentionBudget.exhausted) draftContext.recoveryNote = MENTION_BUDGET_DRAFT_NOTE;
   const mustOmitFillbook = recovery.active || mentionBudget.exhausted;
   // Option C (the Fillbook option) is offered unless recovery mode or the mention budget says to leave Fillbook out.
-  draftContext.fillbookOption = !mustOmitFillbook;
+  draftContext.fillbookOption = (deps.fillbookOptionEnabled ?? FILLBOOK_OPTION_ENABLED) && !mustOmitFillbook;
   // Occasional tag (about 1 draft in 5): only an account the post itself names. Closed otherwise, and replyTagProblem then rejects any @handle.
   const allowedTags = tagGateOpen(id) ? taggableHandles(row.postText, row.authorHandle) : [];
   if (allowedTags.length > 0) draftContext.tagNote = tagNote(allowedTags);

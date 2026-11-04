@@ -75,3 +75,29 @@ describe("weekly review groups replies by the suggested angle", () => {
     expect(lines).not.toMatch(/replies that checked the math/);
   });
 });
+
+describe("quote suggestions for the X playbook (2026-11-04)", () => {
+  const base = { followers: 9000, replyCount: 6, impressionCount: 300 };
+  const numbered = "Funded account trailing drawdown locks at the starting balance once you are up $2,000 on the account.";
+
+  it("suggests a quote for a trusted seed creator's post with a concrete number", () => {
+    const s = suggestInteraction({ ...base, postText: numbered, trustedCreator: true });
+    expect(s.action).toBe("quote");
+    expect(s.angle).toMatch(/something real to add/);
+  });
+
+  it("keeps a reply for the same post from an author who is not a seed creator", () => {
+    expect(suggestInteraction({ ...base, postText: numbered }).action).toBe("reply");
+  });
+
+  it("suggests a quote instead of 'like and follow' when a numbered post is buried under replies", () => {
+    const s = suggestInteraction({ ...base, replyCount: 60, postText: numbered });
+    expect(s.action).toBe("quote");
+    expect(s.angle).toMatch(/buried/);
+  });
+
+  it("keeps like-and-follow for a buried post with nothing concrete to add, and a reply for a question", () => {
+    expect(suggestInteraction({ ...base, replyCount: 60, postText: "Great session today everyone, keep going and stay patient out there." }).action).toBe("engage");
+    expect(suggestInteraction({ ...base, postText: `${numbered} Does that match your firm?`, trustedCreator: true }).action).toBe("reply");
+  });
+});

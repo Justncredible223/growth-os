@@ -12,6 +12,8 @@ export interface InteractionInput {
   followers: number | null;
   replyCount: number;
   impressionCount: number;
+  /** True when the author is one of the trusted seed creators (an on-topic author we have vetted). */
+  trustedCreator?: boolean;
 }
 
 export interface InteractionSuggestion {
@@ -34,11 +36,25 @@ export function suggestInteraction(input: InteractionInput): InteractionSuggesti
   const hasQuestion = text.includes("?");
   const followers = input.followers ?? 0;
 
-  if (text.length < 40 || input.replyCount >= BURIED_AT_REPLIES) {
+  const buried = input.replyCount >= BURIED_AT_REPLIES;
+  // X playbook (2026-11-04): a reply from someone the viewer does not follow is filtered out of For You, while a quote is an original
+  // post on our own timeline and can get the new-post boost. So a post with a concrete rule or number gets a quote suggestion when it is
+  // a trusted seed creator's, or when it is buried under replies. Only when there is something real to add; the owner decides.
+  const quotable = !hasQuestion && NUMBERS.test(text) && text.length >= 40;
+  if (quotable && (input.trustedCreator || buried)) {
+    return {
+      action: "quote",
+      angleKind: "math",
+      angle: buried
+        ? "A reply under this many would be buried. Quote it with the one rule consequence they left out, on your own timeline, only if you have something real to add."
+        : "Quote it with the one rule consequence they left out, on your own timeline, where our followers see it. Only if you have something real to add, otherwise reply.",
+    };
+  }
+  if (text.length < 40 || buried) {
     return {
       action: "engage",
       angleKind: "like",
-      angle: input.replyCount >= BURIED_AT_REPLIES ? "Like it and follow them. A reply under this many would be buried." : "Too little context for a useful reply. Like it and follow them.",
+      angle: buried ? "Like it and follow them. A reply under this many would be buried." : "Too little context for a useful reply. Like it and follow them.",
     };
   }
   const breakout = input.impressionCount >= QUOTE_MIN_IMPRESSIONS && followers > 0 && input.impressionCount >= followers * QUOTE_BREAKOUT_RATIO;
