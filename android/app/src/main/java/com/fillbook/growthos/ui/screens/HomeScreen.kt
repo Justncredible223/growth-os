@@ -576,7 +576,7 @@ private fun TodayXPostCard(
                 )
                 post.selectionReason?.let { reason ->
                     Spacer(Modifier.height(4.dp))
-                    Text(reason, style = MaterialTheme.typography.bodySmall, color = TextTertiary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(reason, style = MaterialTheme.typography.bodySmall, color = TextTertiary, maxLines = 12, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
             TodayXPostState.RUNNING -> {

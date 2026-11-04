@@ -198,7 +198,8 @@ describe("draftScreenedOutPost -- owner override", () => {
 
   it("the next queue shows the card (past 12h, under the score floor, failing the regex) and the Maybe list drops it", async () => {
     const repo = new Repo();
-    repo.seed(maybeRow());
+    // Seeded relative to the real clock: this test drafts with new Date(), so a fixed-date seed ages out of the 7-day Maybe window.
+    repo.seed(maybeRow({ updatedAt: new Date(Date.now() - 5 * 3600_000).toISOString() }));
     await draftScreenedOutPost(client, "m1", baseDeps(repo, vi.fn(async () => good())), new Date());
     const soon = new Date(Date.now() + 3600_000);
     const q = await listProspectingQueue(client, soon, { repo, loadRecovery: off });

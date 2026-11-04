@@ -3,6 +3,7 @@ import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { LlmClient, LlmUsage } from "./llmClient.js";
 import { runCampaignPipeline, type CampaignRepository, type PipelineOpportunity } from "./campaignPipeline.js";
 import { estimateCostUsd } from "../cost/costTracking.js";
+import { composeOwnerNote, isReferencePostDay, pickReferenceTopic, REFERENCE_TOPICS } from "./xFeedPostExtras.js";
 
 /**
  * The canonical asset_type for Today's X Post -- deliberately distinct
@@ -1049,7 +1050,11 @@ export async function runDailyXFeedPostStep(
       break;
     }
 
-    const { selected: topic, reason: selectionReason } = selectFeedPostAngle(operatingDate, triedTopicKeys, recentEditorialTags, freshnessSignalCountByTopicKey, recentCategories);
+    // One day a week the draft is the reference post (image-led); the other days, and a reference day whose topics were all tried, use the usual selection.
+    const referenceTopic = isReferencePostDay(operatingDate) ? pickReferenceTopic(operatingDate, triedTopicKeys) : null;
+    const { selected: topic, reason: selectionReason } = referenceTopic
+      ? { selected: referenceTopic as FeedPostTopic, reason: `Weekly reference post: "${referenceTopic.label}"` }
+      : selectFeedPostAngle(operatingDate, triedTopicKeys, recentEditorialTags, freshnessSignalCountByTopicKey, recentCategories);
     attempts++;
     triedTopicKeys = [...triedTopicKeys, topic.key];
 
@@ -1104,7 +1109,9 @@ export async function runDailyXFeedPostStep(
     const costUsdDelta = newUsage.reduce((sum, u) => sum + estimateCostUsd(u), 0);
     totalAiCalls += aiCallsDelta;
     totalCostUsd += costUsdDelta;
-    const progress = await deps.runRepo.recordAttemptProgress(runId, currentUpdatedAt, { aiCallsDelta, costUsdDelta });
+    // A passing draft also gets its image brief and posting window, stored in the same note the owner already reads under the post.
+    const ownerNote = result.finalStage === "ready_for_owner" ? composeOwnerNote(selectionReason, topic, result.draftText) : undefined;
+    const progress = await deps.runRepo.recordAttemptProgress(runId, currentUpdatedAt, ownerNote ? { aiCallsDelta, costUsdDelta, selectionReason: ownerNote } : { aiCallsDelta, costUsdDelta });
     if (!progress.ok) return supersededResult(await deps.runRepo.getRun(operatingDate));
     currentUpdatedAt = progress.updatedAt;
 
@@ -1150,7 +1157,7 @@ export async function runDailyXFeedPostStep(
 /** Human label for a topic key, e.g. for Home's "source/angle context" -- null for an unrecognized/legacy key rather than throwing. */
 export function feedPostTopicLabel(topicKey: string | null): string | null {
   if (!topicKey) return null;
-  return FEED_POST_TOPICS.find((t) => t.key === topicKey)?.label ?? null;
+  return FEED_POST_TOPICS.find((t) => t.key === topicKey)?.label ?? REFERENCE_TOPICS.find((t) => t.key === topicKey)?.label ?? null;
 }
 
 export type TodayXPostState = "empty" | "running" | "ready" | "handed_off" | "posted" | "failed";
