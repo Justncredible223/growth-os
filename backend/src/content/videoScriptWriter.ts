@@ -510,11 +510,30 @@ export function publicConceptText(text: string): string {
  * approval can never be silently honored against stale or substituted
  * content.
  */
+/**
+ * One line per scene, the scene's headline. An explainer reuses its hook card's headline for several scenes, and the AI copy
+ * review sent Day 16 back for a shot list that repeated one line five times ("padded and lazy"). A repeat now says what is
+ * different about that scene (its on-screen caption); a scene with nothing different keeps the headline. Description only:
+ * the render reads the plan, not this list, and the plan hash is untouched.
+ */
+export function distinctShots(scenes: ReadonlyArray<{ headline?: string; captionText?: string; sceneId: string }>): string[] {
+  const seen = new Set<string>();
+  return scenes.map((s) => {
+    const base = s.headline || s.captionText || s.sceneId;
+    let shot = base;
+    if (seen.has(base) && s.captionText && s.captionText !== base) shot = `${base} (caption: ${s.captionText})`;
+    if (seen.has(shot)) shot = base;
+    seen.add(base);
+    seen.add(shot);
+    return shot;
+  });
+}
+
 export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
   const title = publicConceptText(plan.title);
   const topic = publicConceptText(plan.topic);
   const script = plan.scenes.map((s) => s.narration).join(" ");
-  const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
+  const shotList = distinctShots(plan.scenes.map((s) => ({ headline: s.headline, captionText: s.captionText, sceneId: s.sceneId })));
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
   // Tags by the video's own topic (owner request 2026-10-17); they were the same three on every video.
   const hashtags = videoHashtags(title, topic);
