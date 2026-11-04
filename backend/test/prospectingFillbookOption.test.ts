@@ -96,6 +96,7 @@ function deps(repo: Repo, drafts: ProspectingDraftResult[], recovery = off, seen
   let i = 0;
   return {
     repo,
+    fillbookOptionEnabled: true, // the flag is off in production since 2026-11-04; these tests exercise option C itself
     drafter: async (context: ProspectingDraftContext) => {
       seen.push(context);
       return drafts[Math.min(i++, drafts.length - 1)]!;
@@ -263,5 +264,12 @@ describe("every model gate asks the same relevance test (2026-10-25)", () => {
     await draftProspectingReply(new LlmClient("test-key", draftFetch), { platform: "x", authorHandle: "t", postText: "hi", discoveryQuery: "drawdown" }, "", "");
     const sent = JSON.parse((draftFetch.mock.calls[0]![1] as { body: string }).body);
     expect(JSON.stringify(sent.tools)).toContain(JSON.stringify(PROSPECTING_RELEVANCE_CRITERIA).slice(1, -1));
+  });
+});
+
+describe("option C is off by default in production (X playbook, 2026-11-04)", () => {
+  it("the flag is false, so a cold reply never offers the Fillbook option", async () => {
+    const { FILLBOOK_OPTION_ENABLED } = await import("../src/prospecting/prospectingHandlers");
+    expect(FILLBOOK_OPTION_ENABLED).toBe(false);
   });
 });

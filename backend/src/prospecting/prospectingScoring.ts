@@ -223,7 +223,7 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 
   // What to do with the post and the angle to take (prospectingInteraction.ts). Shown with the score breakdown; stored for the weekly review.
-  const interaction = suggestInteraction({ postText: input.postText, followers: input.authorFollowerCount, replyCount, impressionCount });
+  const interaction = suggestInteraction({ postText: input.postText, followers: input.authorFollowerCount, replyCount, impressionCount, trustedCreator: input.fromWatchlist === true });
   breakdown.suggestedAction = interaction.action;
   breakdown.suggestedAngle = interaction.angle;
   breakdown.angleKind = interaction.angleKind;
