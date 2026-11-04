@@ -8,7 +8,7 @@
  *
  * What this can and cannot honestly claim, given what Growth OS actually
  * has access to (see docs/ARCHITECTURE.md's isolation goal -- no DB
- * access into FillbookHQ):
+ * access into Fillbook):
  *  - "Published content" = content_publications rows with a real
  *    owner-confirmed publication (ownerReportedPublishedAt set) --
  *    see migration 0035's own comment on why row-existence alone isn't
@@ -19,13 +19,13 @@
  *    of its own tracked links. Labeled explicitly, never called
  *    "visitors."
  *  - "Signups"/"activated"/"first paid" = conversion_events by
- *    event_type, delivered by FillbookHQ's own sync (see fillbook's
+ *    event_type, delivered by Fillbook's own sync (see fillbook's
  *    growthOsSync.ts). Zero here can mean either "really zero" or
- *    "FillbookHQ's sync hasn't run yet" -- see hasAnyFunnelData below,
+ *    "Fillbook's sync hasn't run yet" -- see hasAnyFunnelData below,
  *    which the caller uses to distinguish those two cases explicitly
  *    rather than presenting a bare 0.
  *  - "Current active subscriptions" is NOT computed here at all --
- *    billing state lives in FillbookHQ's own database and is
+ *    billing state lives in Fillbook's own database and is
  *    structurally unavailable to this isolated project. Never
  *    approximated from first_paid conversion counts, which only ever
  *    grow and say nothing about churn.
@@ -52,7 +52,7 @@ export interface GrowthLoopInput {
   linkClickCount: number;
   conversions: GrowthLoopConversionRow[];
   contentProductionCostUsd: number;
-  /** True once FillbookHQ's sync has ever delivered ANY event (any event_type, any time, not just this window) -- distinguishes "the funnel is genuinely empty this window" from "nothing has ever arrived, this isn't connected yet." */
+  /** True once Fillbook's sync has ever delivered ANY event (any event_type, any time, not just this window) -- distinguishes "the funnel is genuinely empty this window" from "nothing has ever arrived, this isn't connected yet." */
   fillbookSyncHasEverDelivered: boolean;
 }
 
@@ -84,7 +84,7 @@ const ATTRIBUTION_NOTE =
   "Tracked-link clicks measure attributable visits only -- they cannot identify everyone who saw published content or who later visited fillbookhq.com without clicking a tracked link.";
 
 const SUBSCRIPTION_UNAVAILABLE_REASON =
-  "Billing/subscription state lives in FillbookHQ's own database, kept isolated from Growth OS by design (see docs/ARCHITECTURE.md). Not computable here from first-paid conversion counts, which only ever grow and say nothing about later cancellations.";
+  "Billing/subscription state lives in Fillbook's own database, kept isolated from Growth OS by design (see docs/ARCHITECTURE.md). Not computable here from first-paid conversion counts, which only ever grow and say nothing about later cancellations.";
 
 export function computeGrowthLoopSummary(input: GrowthLoopInput): GrowthLoopSummary {
   const publishedContentCount = input.publications.filter((p) => p.ownerReportedPublishedAt !== null).length;
