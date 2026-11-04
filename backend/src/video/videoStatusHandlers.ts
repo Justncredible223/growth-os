@@ -79,7 +79,7 @@ export function parseVideoRenderMetadata(rawMetadata: unknown, campaignAssetId?:
     hashtags: v.hashtags as string[],
     disclosureCta: typeof v.disclosureCta === "string" ? v.disclosureCta : null,
     youtubeThumbnailConcept: typeof v.youtubeThumbnailConcept === "string" ? v.youtubeThumbnailConcept : null,
-    pinnedComment: buildPinnedComment(typeof v.hook === "string" ? v.hook : v.youtubeTitle, campaignAssetId),
+    pinnedComment: buildPinnedComment(typeof v.hook === "string" ? v.hook : v.youtubeTitle, campaignAssetId, v.youtubeDescription),
   };
 }
 

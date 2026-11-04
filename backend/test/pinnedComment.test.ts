@@ -27,3 +27,19 @@ describe("buildPinnedComment", () => {
     expect(PINNED_COMMENT).toMatch(/^Open this same screen/);
   });
 });
+
+describe("chart-illustration videos", () => {
+  it("get the illustration wording, not 'open this same screen'", async () => {
+    const { buildPinnedComment, PINNED_COMMENT_ILLUSTRATION } = await import("../src/video/pinnedComment");
+    const c = buildPinnedComment("hook", "asset", "A range day where VWAP goes flat. Every chart is a drawn illustration, not a real market.");
+    expect(c).toBe(PINNED_COMMENT_ILLUSTRATION);
+    expect(c).not.toMatch(/same screen/i);
+    expect(c).not.toMatch(/https?:|www\.|\.com|utm_/i);
+    expect(c.length).toBeLessThanOrEqual(150);
+  });
+  it("keeps the sample-account wording for app-screen videos", async () => {
+    const { buildPinnedComment, PINNED_COMMENT } = await import("../src/video/pinnedComment");
+    expect(buildPinnedComment("hook", "asset", "Every number shown is demo data from a sample Fillbook account.")).toBe(PINNED_COMMENT);
+    expect(buildPinnedComment("hook")).toBe(PINNED_COMMENT);
+  });
+});
