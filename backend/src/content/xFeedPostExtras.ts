@@ -57,7 +57,7 @@ export const REFERENCE_TOPICS: ReferenceTopic[] = [
   },
   {
     key: "reference_pre_trade_numbers",
-    label: "Reference: four numbers to know before you click buy",
+    label: "Reference: four numbers to know before you enter a trade",
     contentCategory: "education",
     rationale: `Write the caption for a one-picture card of the four numbers to know before entering a trade: the most you can lose today, your size, the stop distance in dollars, and the daily limit left. ${REFERENCE_RULES}`,
     editorialTags: ["risk-per-trade", "pre-trade-routine"],
@@ -66,7 +66,7 @@ export const REFERENCE_TOPICS: ReferenceTopic[] = [
     practicalUsefulness: 5,
     evidenceStrength: 3,
     imageSpec:
-      "A four-tile card, one number per tile with a blank to fill in: 'Max loss today', 'Contracts', 'Stop distance in dollars', 'Daily limit left'. Between the tiles a simple line reads 'contracts x stop distance = risk on this trade'. Numbers on it: none (the blanks are for the trader). Text on it: the four tile titles, the formula line and the title 'Before you click buy'. Small Fillbook wordmark bottom-left. No firm logos.",
+      "A four-tile card, one number per tile with a blank to fill in: 'Max loss today', 'Contracts', 'Stop distance in dollars', 'Daily limit left'. Between the tiles a simple line reads 'contracts x stop distance = risk on this trade'. Numbers on it: none (the blanks are for the trader). Text on it: the four tile titles, the formula line and the title 'Before you enter a trade'. Small Fillbook wordmark bottom-left. No firm logos.",
   },
 ];
 
