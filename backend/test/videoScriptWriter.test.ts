@@ -463,3 +463,21 @@ describe("youtubeTitleProblems acronym handling", () => {
     expect(youtubeTitleProblems(withTitle("Blew an Account Over ONE Number")).some((p) => p.reason.includes("ONE"))).toBe(true);
   });
 });
+
+describe("distinctShots (a repeated headline says what is different about that scene)", () => {
+  it("keeps unique headlines and labels repeats with their on-screen caption", async () => {
+    const { distinctShots } = await import("../src/content/videoScriptWriter");
+    const shots = distinctShots([
+      { headline: "One setup: 8 trades.", captionText: "Reports: one setup.", sceneId: "s1" },
+      { headline: "One setup: 8 trades.", captionText: "Opening Range: 25% win.", sceneId: "s2" },
+      { headline: "A setup is a repeatable trade.", captionText: "Group trades by setup.", sceneId: "s3" },
+      { headline: "One setup: 8 trades.", captionText: "Opening Range: 25% win.", sceneId: "s4" },
+    ]);
+    expect(shots[0]).toBe("One setup: 8 trades.");
+    expect(shots[1]).toBe("One setup: 8 trades. (caption: Opening Range: 25% win.)");
+    expect(shots[2]).toBe("A setup is a repeatable trade.");
+    // Nothing different to say about the last one: it keeps the plain headline instead of inventing text.
+    expect(shots[3]).toBe("One setup: 8 trades.");
+    expect(distinctShots([{ sceneId: "only" }])).toEqual(["only"]);
+  });
+});
