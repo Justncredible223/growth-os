@@ -69,8 +69,25 @@ describe("image spec and posting window", () => {
     expect(note.indexOf("When:")).toBeGreaterThan(note.indexOf("Image:"));
     expect(note).toContain(POSTING_WINDOW_NOTE);
     expect(POSTING_WINDOW_NOTE).toMatch(/9:30 ET/);
+    expect(POSTING_WINDOW_NOTE).toMatch(/about 10:00 ET/);
     expect(POSTING_WINDOW_NOTE).toMatch(/4:00 ET/);
     expect(POSTING_WINDOW_NOTE).toMatch(/2 hours/);
+    // No 2-hour impressions check is taught: under ~200 impressions is only an eligibility condition, not a diagnosis.
+    expect(POSTING_WINDOW_NOTE).not.toMatch(/impression/i);
+  });
+
+  it("only the drawdown reference post suggests a first reply with the calculator, never in the post body", () => {
+    const drawdown = REFERENCE_TOPICS.find((t) => t.key === "reference_drawdown_types")!;
+    const note = composeOwnerNote("why", drawdown, "caption");
+    expect(note).toContain("First reply");
+    expect(note).toContain("https://www.fillbookhq.com/tools/prop-firm-drawdown-calculator");
+    expect(note.indexOf("First reply")).toBeGreaterThan(note.indexOf("Image:"));
+    expect(note.indexOf("When:")).toBeGreaterThan(note.indexOf("First reply"));
+    expect(drawdown.rationale).toMatch(/NO link in the post body/);
+    for (const t of REFERENCE_TOPICS.filter((x) => x.key !== "reference_drawdown_types")) {
+      expect(composeOwnerNote("why", t, "caption")).not.toContain("First reply");
+    }
+    expect(composeOwnerNote("why", { key: "x", label: "Discipline" }, "Stay small.")).not.toContain("First reply");
   });
 
   it("marks the reference post in the note", () => {

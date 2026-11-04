@@ -87,7 +87,15 @@ export function isReferenceTopic(key: string | null | undefined): boolean {
 
 /** Posting window advice. Eastern time because the audience trades the US session; two windows, away from the 9:30 ET open. */
 export const POSTING_WINDOW_NOTE =
-  "Post after the 9:30 ET open settles (about 10:30 ET) or after the 4:00 ET close (about 4:30 ET), and stay around for the first 2 hours to answer replies.";
+  "Post 15 to 30 minutes after the 9:30 ET open (about 10:00 ET) or after the 4:00 ET close (about 4:30 ET), and stay around for the first 2 hours to answer replies.";
+
+/**
+ * A suggested first reply (never in the post body) for the reference topics where a free calculator genuinely fits.
+ * Team decision 2026-11-04: only where it fits, so only the drawdown picture links the drawdown calculator.
+ */
+export const FIRST_REPLY_SUGGESTIONS: Readonly<Record<string, string>> = {
+  reference_drawdown_types: "The free drawdown calculator works out where your own floor sits: https://www.fillbookhq.com/tools/prop-firm-drawdown-calculator",
+};
 
 const NUMBER_PATTERN = /\$\s?\d[\d,]*(?:\.\d+)?[kKmM]?|\d[\d,]*(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?\s?(?:R|x|ticks?|points?|contracts?|trades?|days?)\b/g;
 
@@ -119,5 +127,7 @@ export function buildImageSpec(topic: { key: string; label: string }, draftText:
 /** The owner-facing note stored on the run: why the angle was picked, then the image brief and the posting window. */
 export function composeOwnerNote(selectionReason: string, topic: { key: string; label: string }, draftText: string): string {
   const lead = isReferenceTopic(topic.key) ? "Weekly reference post: the picture is the post. " : "";
-  return `${lead}${selectionReason}\n\nImage: ${buildImageSpec(topic, draftText)}\n\nWhen: ${POSTING_WINDOW_NOTE}`;
+  const firstReply = FIRST_REPLY_SUGGESTIONS[topic.key];
+  const firstReplyLine = firstReply ? `\n\nFirst reply (post it by hand under the post, not in the post body): ${firstReply}` : "";
+  return `${lead}${selectionReason}\n\nImage: ${buildImageSpec(topic, draftText)}${firstReplyLine}\n\nWhen: ${POSTING_WINDOW_NOTE}`;
 }
