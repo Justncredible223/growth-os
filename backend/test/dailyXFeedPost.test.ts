@@ -985,7 +985,7 @@ describe("runDailyXFeedPostStep -- image brief, posting window, weekly reference
     expect(result.status).toBe("ready");
     const run = await deps.runRepo.getRun("2026-11-03");
     expect(run?.selectionReason).toMatch(/Image: /);
-    expect(run?.selectionReason).toMatch(/When: Post after the 9:30 ET open/);
+    expect(run?.selectionReason).toMatch(/When: Post 15 to 30 minutes after the 9:30 ET open/);
   });
 
   it("on Wednesday the draft is a reference topic, and Home can label it", async () => {
