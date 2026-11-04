@@ -651,7 +651,7 @@ The trap is one big final trade to finish it, which can turn a near pass into a 
 
 Keep your usual size on the final days and let the target arrive at your normal pace. [pause]
 
-Fillbook's dashboard shows the target progress. [pause]
+Fillbook's rules page shows target progress. [pause]
 
 Would you trade on day eleven?
 ```
@@ -747,7 +747,7 @@ The trap is taking every pattern you see, which spreads attention away from what
 
 Find the setup and time window with the most trades and the best results, and name them. [pause]
 
-Fillbook's Your Edge page ranks both. [pause]
+Fillbook's Your Edge shows your strongest patterns. [pause]
 
 What is your strongest setup?
 ```

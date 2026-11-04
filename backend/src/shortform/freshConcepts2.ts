@@ -317,9 +317,9 @@ const FRESH2: Daily[] = [
     focus: [f(h("Made so far", "$2,940", "good"), 0, 0), f(h("Target · $3,000", "98%", "bad"), 1, 0)],
     details: { title: "Dashboard · the rest", rows: [["Best day", "$340", "good"], ["Average per trading day", "$294", "good"], ["Day streak", "10", "good"]] },
     facts: ["dashboard.finalday_summary", "rules.finalday_target", "dashboard.green_days", "rules.target_progress"],
-    say: ["10 green days. 98% of the target.", "$2,940 made against a $3,000 target.", "But the target still isn't reached.", "Fillbook's dashboard shows the target progress.", "Would you trade on day eleven?"],
-    cap: ["Dashboard: 98% of target.", "Made so far: $2,940.", "Target: $3,000.", "The dashboard tracks progress.", "Trade on day eleven?"],
-    take: ["10 green days, 98% of the target.", "$2,940 made against a $3,000 target.", "The target still isn't reached.", "The dashboard shows the target progress.", "Would you trade on day eleven?"],
+    say: ["10 green days. 98% of the target.", "$2,940 made against a $3,000 target.", "But the target still isn't reached.", "Fillbook's rules page shows target progress.", "Would you trade on day eleven?"],
+    cap: ["Rules: 98% of target.", "Made so far: $2,940.", "Target: $3,000.", "The rules page tracks it.", "Trade on day eleven?"],
+    take: ["10 green days, 98% of the target.", "$2,940 made against a $3,000 target.", "The target still isn't reached.", "The rules page shows target progress.", "Would you trade on day eleven?"],
   },
   // 27
   {
@@ -330,9 +330,9 @@ const FRESH2: Daily[] = [
     focus: [f(h("Order Block Retest · win", "88%", "good"), 0, 0), f(h("Open · win rate", "71%", "good"), 0, 1)],
     details: { title: "Your Edge · the rest", rows: [["Setup · confidence", "High", "good"], ["Window · confidence", "High", "good"], ["Setup · win rate", "88%", "good"]] },
     facts: ["edge.strongest"],
-    say: ["One setup: 48 trades, still 88% wins.", "Strongest setup: Order Block Retest.", "But the strongest window is Open.", "Fillbook's Your Edge page ranks both.", "What is your strongest setup?"],
-    cap: ["Your Edge: strongest setup.", "Order Block Retest: 88%.", "Strongest window: Open, 71%.", "Your Edge ranks both.", "What is your strongest setup?"],
-    take: ["One setup: 48 trades, still 88% wins.", "The strongest setup is Order Block Retest.", "The strongest window is Open.", "Your Edge ranks both.", "What is your strongest setup?"],
+    say: ["One setup: 48 trades, still 88% wins.", "Strongest setup: Order Block Retest.", "But the strongest window is Open.", "Fillbook's Your Edge shows your strongest patterns.", "What is your strongest setup?"],
+    cap: ["Your Edge: strongest setup.", "Order Block Retest: 88%.", "Strongest window: Open, 71%.", "Your Edge shows top patterns.", "What is your strongest setup?"],
+    take: ["One setup: 48 trades, still 88% wins.", "The strongest setup is Order Block Retest.", "The strongest window is Open.", "Your Edge shows top patterns.", "What is your strongest setup?"],
   },
   // 28
   {
