@@ -10,6 +10,7 @@ import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
 import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWithRetries } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
+import { paragraphizeReply } from "../content/replySpacing.js";
 import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance.js";
 import { isSeedCreator } from "./prospectingWatchlist.js";
 import { matchPostedStyle, optionSoftProblem, postMentionsFillbook, type DraftOption } from "./prospectingDraftOptions.js";
@@ -437,14 +438,18 @@ async function draftCandidateCore(
   } else {
     options = [bestPartial!.option];
   }
+  // Owner rule 2026-11-04: a two-part reply shows as two short paragraphs, not one run-on block. Whitespace only, after the checks.
+  if (options) options = options.map((o) => ({ ...o, text: paragraphizeReply(o.text) }));
 
   // Swaps the model's static placeholder link for a real per-candidate
   // short link (see trackableLinks.ts) -- closes the "per-reply link
   // attribution isn't real yet" gap. A no-op when usesLink is false (the
   // common case), since the placeholder never appears in the reply then.
-  const finalReply = draft.usesLink
-    ? substituteTrackableLink(draft.reply, PROSPECTING_TRACKABLE_LINK, buildTrackableReplyLink(`prospecting:${id}`, "prospecting", id))
-    : draft.reply;
+  const finalReply = paragraphizeReply(
+    draft.usesLink
+      ? substituteTrackableLink(draft.reply, PROSPECTING_TRACKABLE_LINK, buildTrackableReplyLink(`prospecting:${id}`, "prospecting", id))
+      : draft.reply,
+  );
 
   // draftReply is always the first option's text so older app builds (which only know draftReply) keep working.
   await repo.updateStatus(id, "ready", {

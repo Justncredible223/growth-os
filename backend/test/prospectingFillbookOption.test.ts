@@ -1,3 +1,4 @@
+import { paragraphizeReply } from "../src/content/replySpacing";
 import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
 import { recoveryFromVisibility, type RecoveryState } from "../src/prospecting/prospectingRecovery";
@@ -140,7 +141,7 @@ describe("the Fillbook option, option C (2026-10-25)", () => {
     const out = await draftProspectingCandidateReply({} as any, "c-fb", deps(repo, [draft()], off, seen));
     expect(seen[0]!.fillbookOption).toBe(true);
     expect(out.draftOptions?.map((o) => o.style)).toEqual(["sharp", "helpful", "fillbook"]);
-    expect(out.draftReply).toBe(SHARP);
+    expect(out.draftReply).toBe(paragraphizeReply(SHARP));
     expect(out.replyMentionsFillbook).toBe(true);
   });
 
@@ -196,7 +197,7 @@ describe("the Fillbook option, option C (2026-10-25)", () => {
     repo.seed(candidate({ id: "c-ab" }));
     const named = draft({ reply: "Fillbook shows the floor in dollars so the size does not creep." });
     const out = await draftProspectingCandidateReply({} as any, "c-ab", deps(repo, [named, draft()]));
-    expect(out.draftOptions?.find((o) => o.style === "sharp")!.text).toBe(SHARP);
+    expect(out.draftOptions?.find((o) => o.style === "sharp")!.text).toBe(paragraphizeReply(SHARP));
   });
 
   it("is recognised by the style tag, the parser and the Monday report", () => {

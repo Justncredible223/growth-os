@@ -1,3 +1,4 @@
+import { paragraphizeReply } from "../src/content/replySpacing";
 import { describe, it, expect, vi } from "vitest";
 import { recoveryFromVisibility, type RecoveryState } from "../src/prospecting/prospectingRecovery";
 import { computeMentionBudget } from "../src/prospecting/prospectingMentionBudget";
@@ -234,7 +235,7 @@ describe("recovery mode (X limiting the account's replies, 2026-09-26)", () => {
 
     expect(drafter.mock.calls[0]![0].recoveryNote).toMatch(/RECOVERY MODE IS ON/);
     expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/recovery mode/);
-    expect(updated.draftReply).toBe(plain.reply);
+    expect(updated.draftReply).toBe(paragraphizeReply(plain.reply));
   });
 });
 
@@ -547,7 +548,7 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
 
     expect(drafter).toHaveBeenCalledTimes(2);
     expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/setup_breakdown/);
-    expect(updated.draftReply).toBe(shown.reply);
+    expect(updated.draftReply).toBe(paragraphizeReply(shown.reply));
   });
 
   it("does not retry when the model says the post is not relevant", async () => {
@@ -805,7 +806,7 @@ describe("mention budget (cold replies naming Fillbook too often, 2026-09-30)", 
     const updated = await draftProspectingCandidateReply(fakeClient, "x-mb", deps(repo, drafter));
     expect(drafter.mock.calls[0]![0].recoveryNote).toMatch(/MENTION BUDGET REACHED/);
     expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/pitch it too often/);
-    expect(updated.draftReply).toBe(plain.reply);
+    expect(updated.draftReply).toBe(paragraphizeReply(plain.reply));
   });
 });
 
