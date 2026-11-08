@@ -156,3 +156,28 @@ describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
     expect(result.selected.map((c) => c.id)).toEqual(["1"]);
   });
 });
+
+describe("author cooldown across days (owner 2026-11-08: the same accounts keep coming back)", () => {
+  const strong = MIN_DAILY_SET_SCORE + 20;
+
+  it("defers an author the owner replied to recently so other accounts take the slots", async () => {
+    const { authorKeyOf } = await import("../src/prospecting/prospectingDailySelection");
+    const a = candidate({ id: "a", opportunityScore: strong + 5, authorExternalId: "creator-1", authorHandle: "creator1" });
+    const b = candidate({ id: "b", opportunityScore: strong, authorExternalId: "other-2", authorHandle: "other2" });
+    const result = selectDailyWorkingSet([a, b], new Date("2026-09-01T01:00:00Z"), { cooldownAuthorKeys: new Set([authorKeyOf(a)]) });
+    expect(result.selected.map((c) => c.id)).toEqual(["b"]);
+    expect(result.deferred.map((c) => c.id)).toEqual(["a"]);
+  });
+
+  it("changes nothing when no author is in the cooldown", () => {
+    const pool = [candidate({ id: "x", opportunityScore: strong }), candidate({ id: "y", opportunityScore: strong - 1 })];
+    expect(selectDailyWorkingSet(pool, new Date("2026-09-01T01:00:00Z"), { cooldownAuthorKeys: new Set() }).selected).toHaveLength(2);
+  });
+
+  it("matches the cooldown on the stable author id, falling back to the handle", async () => {
+    const { authorKeyOf } = await import("../src/prospecting/prospectingDailySelection");
+    expect(authorKeyOf({ id: "1", authorExternalId: "42", authorHandle: "h" })).toBe("42");
+    expect(authorKeyOf({ id: "1", authorExternalId: null, authorHandle: "h" })).toBe("h");
+    expect(authorKeyOf({ id: "1", authorExternalId: null, authorHandle: null })).toBe("1");
+  });
+});

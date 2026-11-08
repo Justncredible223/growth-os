@@ -5,7 +5,7 @@ import { MENTION_BUDGET_DRAFT_NOTE, computeMentionBudget } from "./prospectingMe
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
-import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
+import { AUTHOR_COOLDOWN_DAYS, authorKeyOf, selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
 import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWithRetries } from "../content/xReplyGuardrails.js";
@@ -181,7 +181,15 @@ export async function listProspectingQueue(
   }
   const eligible = irrelevantIds.length > 0 ? nonTerminal.filter((row) => !irrelevantIds.includes(row.id)) : nonTerminal;
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, now);
-  const selection = selectDailyWorkingSet(eligible.filter((row) => !overriddenIds.has(row.id)), now);
+  // Accounts the owner replied to recently sit out, so the queue shows other people. A lookup failure never blocks the queue.
+  let cooldownAuthorKeys: Set<string> = new Set();
+  try {
+    const recent = await repo.listRepliedSince(new Date(now.getTime() - AUTHOR_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
+    cooldownAuthorKeys = new Set(recent.map((r) => authorKeyOf(r)));
+  } catch {
+    cooldownAuthorKeys = new Set();
+  }
+  const selection = selectDailyWorkingSet(eligible.filter((row) => !overriddenIds.has(row.id)), now, { cooldownAuthorKeys });
   const { deferred, belowQualityBar } = selection;
   let { selected, tooOldForToday } = selection;
   if (recovery.active && recovery.maxPostAgeHours !== null) {
