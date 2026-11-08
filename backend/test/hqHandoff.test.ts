@@ -182,3 +182,42 @@ describe("hq handoff: storing", () => {
     expect(log.filter((l) => l.op === "insert")).toHaveLength(0);
   });
 });
+
+describe("hq handoff: numbered ids and clean text (first live test, 2026-11-08)", () => {
+  it("accepts a whole-number hqDraftId and stores it as text", () => {
+    const v = validateHqHandoffBody(body({ hqDraftId: 44 }));
+    expect(v.ok && v.draft.hqDraftId).toBe("44");
+  });
+
+  it("still rejects an id with spaces or a negative or fractional number", () => {
+    expect(validateHqHandoffBody(body({ hqDraftId: "draft #44" })).ok).toBe(false);
+    expect(validateHqHandoffBody(body({ hqDraftId: -1 })).ok).toBe(false);
+    expect(validateHqHandoffBody(body({ hqDraftId: 4.5 })).ok).toBe(false);
+  });
+
+  it("refuses text that carries markdown labels or a draft label (422), so only one clean post reaches the owner", () => {
+    for (const text of [
+      "**Draft 1 (X)**\n\nCheck your drawdown buffer before the first entry today, every day, without exception.",
+      "Draft 2\nCheck your drawdown buffer before the first entry today, every day, without exception.",
+      "Your **drawdown buffer** is the number that decides how many bad trades you get this week.",
+    ]) {
+      const v = validateHqHandoffBody(body({ text }));
+      expect(v.ok).toBe(false);
+      if (!v.ok) expect(v.status).toBe(422);
+    }
+  });
+
+  it("accepts a normal multi-paragraph post, a 700-character post, and a sentence that merely contains the word draft", () => {
+    const longPost = ("Check your drawdown buffer before the first entry. " .repeat(14)).trim();
+    expect(longPost.length).toBeGreaterThan(600);
+    expect(validateHqHandoffBody(body({ text: longPost })).ok).toBe(true);
+    expect(validateHqHandoffBody(body({ text: "Write the plan first.\n\nThen trade it. A rough draft of the plan beats no plan at all." })).ok).toBe(true);
+  });
+});
+
+describe("hq handoff: the label check does not refuse ordinary sentences", () => {
+  it("allows a line that starts with the verb draft", () => {
+    const text = "Draft your rules the night before.\n\nThen trade the plan you wrote, not the one you feel like trading.";
+    expect(validateHqHandoffBody(body({ text })).ok).toBe(true);
+  });
+});
