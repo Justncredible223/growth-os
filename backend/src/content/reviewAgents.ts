@@ -58,6 +58,12 @@ export interface ReviewContext {
    * the recipient, which reviewers could only assert, not verify.
    */
   pitchEvidenceExcerpts?: string[];
+  /**
+   * True for a catalog motion-concept explainer whose narration is already recorded and fixed. The copy editor then gets the narrow
+   * rubric in CATALOG_COPY_EDITOR_NOTE: it judged style on every retry of the same fixed script and blocked it. No other reviewer
+   * reads this flag, so facts, claims, brand and integrity are judged exactly as before.
+   */
+  isCatalogExplainer?: boolean;
 }
 
 const VERDICT_TOOL_NAME = "submit_verdict";
@@ -133,6 +139,10 @@ If the user message tells you this is a PARTNERSHIP PITCH: judge the pitch's act
  * Runs one review agent against a candidate piece of content, forcing a
  * structured verdict via tool use rather than parsing free text.
  */
+/** Extra instruction for the copy editor on a catalog explainer (owner decision 2026-11-08; ChatGPT + Gemini reviewed the wording). */
+export const CATALOG_COPY_EDITOR_NOTE =
+  "Content format: this is a CATALOG EXPLAINER whose narration is already recorded and fixed. Do not request narration rewrites or fail for deliberate recap lines, repeated visual frames, or consistent terminology. Fail ONLY for demonstrable grammar or spelling errors, banned or off-voice language (corporate SaaS wording, AI cliches, motivational filler), unintelligible phrasing or broken logic, or factual contradictions between lines. Do not fail for subjective style preferences, weaker verbs, or generic structure. If no qualifying defect exists, PASS.";
+
 export async function runReviewAgent(
   client: LlmClient,
   agent: ReviewAgentName,
@@ -155,7 +165,9 @@ export async function runReviewAgent(
           .join("\n")
       : context.isReply
         ? "Content format: this is a REPLY to a real X user's mention of Fillbook, not a standalone post -- see your instructions above for how that changes what to judge."
-        : null,
+        : agent === "copy_editor" && context.isCatalogExplainer
+          ? CATALOG_COPY_EDITOR_NOTE
+          : null,
     "",
     "Brand rules (for context, another mechanical check already covers exact prohibited phrases):",
     context.brandRulesSummary || "(none provided)",
