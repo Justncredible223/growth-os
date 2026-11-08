@@ -14,6 +14,7 @@ import type { NewExperiment } from "../src/experiments/types.js";
 import { SupabaseNotificationRepository } from "../src/notifications/supabaseNotificationRepository.js";
 import { llmKeySource } from "../src/content/llmKey.js";
 import { breakdownCostEvents, getTodaySpendUsd, selectCostEvents, selectCostEventsResult, sumCostUsd } from "../src/cost/costTracking.js";
+import { MONTHLY_BACKGROUND_PAUSE_SHARE, monthlyBudgetState, monthlyCapUsd, utcMonthStart } from "../src/cost/llmBudget.js";
 import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
 import { buildXPostImageCard, type XPostImageCard } from "../src/content/xPostImageCard.js";
 import { buildPostReceipt, type ReceiptItem } from "../src/content/xPostReceipt.js";
@@ -558,6 +559,15 @@ async function handleProspectingRuns(res: VercelResponse): Promise<void> {
   }
 }
 
+/** This month's model spend against the monthly cap: ok, background_paused at 80%, hard_stop at 100%. */
+function monthlyBudgetStatus(allRows: Array<{ event_type?: string | null; cost_usd?: number | string | null; created_at?: string | null }>, now: Date) {
+  const start = utcMonthStart(now);
+  const llmTypes = new Set(["llm_call", "partnership_llm_call", "prospecting_llm_call"]);
+  const monthUsd = allRows.filter((r) => llmTypes.has(String(r.event_type)) && (r.created_at ?? "") >= start).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+  const capUsd = monthlyCapUsd();
+  return { month: start.slice(0, 7), monthUsd: Number(monthUsd.toFixed(4)), capUsd, softLineUsd: Number((capUsd * MONTHLY_BACKGROUND_PAUSE_SHARE).toFixed(2)), state: monthlyBudgetState(monthUsd) };
+}
+
 async function handleCostSummary(res: VercelResponse): Promise<void> {
   try {
     const client = getServiceClient();
@@ -590,6 +600,8 @@ async function handleCostSummary(res: VercelResponse): Promise<void> {
       totalOutputTokens,
       // Additive (2026-10-13): which job costs what. Window is the last 30 days; byDayStep attributes a spike day.
       breakdown: breakdownCostEvents(allRows, new Date(), 30),
+      // Additive (2026-11-08): the monthly Anthropic cap and where this month stands against it (src/cost/llmBudget.ts). Model calls only: X reads are X's bill.
+      monthlyBudget: monthlyBudgetStatus(allRows, new Date()),
     });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });

@@ -168,7 +168,8 @@ describe("daily budget tiers", () => {
         { id: "4", event_type: "llm_call", cost_usd: 7, created_at: "2026-10-12T23:59:00Z", context: {} },
       ],
     });
-    expect(await loadTodayLlmSpend(asSupabase(client), NOW)).toEqual({ totalUsd: 0.75 });
+    // Today is the 0.75; the month (the 12th row is earlier in the same month) is 7.75. X reads are not model spend.
+    expect(await loadTodayLlmSpend(asSupabase(client), NOW)).toEqual({ totalUsd: 0.75, monthUsd: 7.75 });
   });
 
   it("guard fails open when spend cannot be read, and counts a call's own cost locally", async () => {
@@ -246,3 +247,39 @@ describe("createRecordedLlmClient: one recorder for every call", () => {
   });
 });
 
+
+describe("monthly Anthropic cap (team decision 2026-11-08: $40, background pauses at 80%)", () => {
+  it("has three states against the cap", async () => {
+    const { monthlyBudgetState, monthlyCapUsd } = await import("../src/cost/llmBudget");
+    expect(monthlyCapUsd({} as NodeJS.ProcessEnv)).toBe(40);
+    expect(monthlyBudgetState(31.99, {} as NodeJS.ProcessEnv)).toBe("ok");
+    expect(monthlyBudgetState(32, {} as NodeJS.ProcessEnv)).toBe("background_paused");
+    expect(monthlyBudgetState(40, {} as NodeJS.ProcessEnv)).toBe("hard_stop");
+    expect(monthlyBudgetState(30, { LLM_MONTHLY_HARD_CAP_USD: "35" } as unknown as NodeJS.ProcessEnv)).toBe("background_paused");
+  });
+
+  it("at 80% background work skips but the owner's actions and the daily X post (owner tier) keep running; at 100% everyone skips", async () => {
+    const { budgetSkipReason } = await import("../src/cost/llmBudget");
+    const env = {} as NodeJS.ProcessEnv;
+    expect(budgetSkipReason("background", { totalUsd: 1, monthUsd: 33 }, env)).toBe("monthly");
+    expect(budgetSkipReason("owner", { totalUsd: 1, monthUsd: 33 }, env)).toBeNull();
+    expect(budgetSkipReason("owner", { totalUsd: 1, monthUsd: 40 }, env)).toBe("monthly");
+    expect(budgetSkipReason("background", { totalUsd: 1, monthUsd: 10 }, env)).toBeNull();
+  });
+
+  it("still applies the daily ceilings, and fails open when the month is unknown", async () => {
+    const { budgetSkipReason } = await import("../src/cost/llmBudget");
+    const env = {} as NodeJS.ProcessEnv;
+    expect(budgetSkipReason("background", { totalUsd: 4, monthUsd: 5 }, env)).toBe("daily");
+    expect(budgetSkipReason("owner", { totalUsd: 8, monthUsd: 5 }, env)).toBe("daily");
+    expect(budgetSkipReason("background", { totalUsd: 1 }, env)).toBeNull();
+  });
+
+  it("the guard skips with the monthly message and counts a finished call into the month", async () => {
+    const { DailyBudgetGuard, MONTHLY_BUDGET_SKIP_MESSAGE } = await import("../src/cost/llmBudget");
+    const guard = new DailyBudgetGuard(async () => ({ totalUsd: 1, monthUsd: 33 }), "background", {} as NodeJS.ProcessEnv);
+    await expect(guard.check()).rejects.toThrow(MONTHLY_BUDGET_SKIP_MESSAGE);
+    const owner = new DailyBudgetGuard(async () => ({ totalUsd: 1, monthUsd: 33 }), "owner", {} as NodeJS.ProcessEnv);
+    await expect(owner.check()).resolves.toBeUndefined();
+  });
+});
