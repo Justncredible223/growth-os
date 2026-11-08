@@ -354,12 +354,9 @@ private fun openXWithPicture(context: Context, bmp: Bitmap, text: String) {
         putExtra(Intent.EXTRA_TEXT, text)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val toX = Intent(send).setPackage("com.twitter.android").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    try {
-        context.startActivity(toX)
-    } catch (e: android.content.ActivityNotFoundException) {
-        context.startActivity(Intent.createChooser(send, "Post to X with the picture").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
+    // Always through Android's chooser, never straight into the X app: a direct launch lets the phone remember a pick (X offers "Post" and
+    // "Chat" as separate targets) and then reuse it every time. The chooser has no "always" option, so the owner picks Post each time.
+    context.startActivity(Intent.createChooser(send, "Post to X with the picture").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 /**
