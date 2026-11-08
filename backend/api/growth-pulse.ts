@@ -268,6 +268,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (runPartnerships) {
     results.push(
       await runStep("partnerships_discovery", async () => {
+        const retired = retiredStepSkip("partnerships_discovery");
+        if (retired) return retired;
         let adapter = null;
         try {
           adapter = getXReads().adapter;
@@ -332,6 +334,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // so it cannot fail the pulse or the comment-monitoring step below.
     results.push(
       await runStep("engagement_autofill", async () => {
+        const retired = retiredStepSkip("engagement_autofill");
+        if (retired) return retired;
         const fill = await runEngagementAutoFill(client, {
           now: () => now,
           isPaused: async () => {
