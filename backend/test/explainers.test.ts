@@ -1,3 +1,4 @@
+import { CHART_MOMENT_ORDER } from "../src/shortform/strategyVideos";
 import { describe, it, expect } from "vitest";
 import { EXPLAINERS, EXPLAINERS_OFFERED, EXPLAINER_PILOTS, EXPLAINER_ORDER, EXPLAINER_SERIES, isExplainerPlan } from "../src/shortform/explainers";
 import { STRATEGY_ORDER } from "../src/shortform/strategyVideos";
@@ -27,7 +28,7 @@ describe("the explainers", () => {
     });
     expect(OFFERED_DAILY_CONCEPT_IDS.filter((id) => id.startsWith("explain-"))).toEqual([...EXPLAINERS_OFFERED]);
     expect([...OFFERED_DAILY_CONCEPT_IDS.filter((id) => id.startsWith("strategy-"))].sort()).toEqual([...STRATEGY_ORDER].sort());
-    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...OFFERED_DAILY_CONCEPT_IDS].sort());
+    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...CHART_MOMENT_ORDER].sort());
     for (const p of EXPLAINER_PILOTS) {
       expect(p.series).toBe(EXPLAINER_SERIES);
       expect(isExplainerPlan(p)).toBe(true);
