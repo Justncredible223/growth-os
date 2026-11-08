@@ -235,7 +235,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
     hook: { headline: "Edge Score 67 hides a 59. Why?", caption: "Profit, consistency, risk and rule-following each tell a different part.", say: "Edge Score is one score for four parts of how you trade.", take: "One weak part can pull the whole score down." },
     source: "fresh-21-edge-score-67",
     title: "One score for how you trade, and what drags it down",
-    topic: "An Edge Score that blends profitability, consistency, risk control and rule adherence",
+    topic: "A sample account's Edge Score and its weakest factor",
     teach: [
       { headline: "P&L is one part of trading.", caption: "Profit, consistency, risk and rule-following each tell you something.", say: "Profit is only one part of how you trade, next to consistency, risk control and following your rules.", take: "Profit is one part of the picture." },
       { headline: "A blended score shows balance.", caption: "Strong rules with weak profit is a different problem from the reverse.", say: "A blended score shows whether those parts are in balance, or whether one is pulling the rest down.", take: "Look for the weakest part." },
