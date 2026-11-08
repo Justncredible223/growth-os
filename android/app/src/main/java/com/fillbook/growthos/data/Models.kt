@@ -219,6 +219,12 @@ data class XPostImageCard(
     val footer: String?,
     /** Which topic illustration to draw (Risk Blueprint theme); null on older cards, which get the fallback. */
     val motif: String? = null,
+    /** Drawdown posts that set intraday against end-of-day trailing: drawn as two panels side by side. */
+    val compare: Boolean = false,
+    /** A short sentence copied verbatim from the post, shown on the picture instead of repeating the post's first sentence. */
+    val hook: String? = null,
+    /** The words just before each figure in the post, so no figure is shown bare. */
+    val figureNotes: List<String> = emptyList(),
 )
 
 enum class XFeedPostHistoryState { UNPOSTED_DRAFT, POSTED, FAILED }

@@ -217,6 +217,9 @@ class NetworkGrowthOsRepository(
             sampleData = optBoolean("sampleData", false),
             footer = optStringOrNull("footer"),
             motif = optStringOrNull("motif"),
+            compare = optBoolean("compare", false),
+            hook = optStringOrNull("hook"),
+            figureNotes = optJSONArray("figureNotes")?.mapStrings() ?: emptyList(),
         )
     }
 

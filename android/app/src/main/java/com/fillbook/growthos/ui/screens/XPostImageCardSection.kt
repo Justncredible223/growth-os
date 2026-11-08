@@ -240,17 +240,64 @@ private fun Canvas.drawMotif(motif: String?, left: Float, top: Float, w: Float, 
     }
 }
 
+
+/**
+ * Card v2 (owner 2026-11-08, ChatGPT + Gemini agreed): the picture shows the mechanism the post only describes, and never repeats the
+ * post's own first sentence. Words on it are a short verbatim line from the post plus a small fixed vocabulary (Intraday, End of day,
+ * Peak, Floor); every figure is copied from the post with the words that precede it. A diagram of a rule, not an account's real result.
+ */
+private fun Canvas.drawTrailingPanel(left: Float, top: Float, w: Float, h: Float, title: String, intraday: Boolean) {
+    val panel = RectF(left, top, left + w, top + h)
+    drawRoundRect(panel, 18f, 18f, fill(PANEL))
+    drawRoundRect(panel, 18f, 18f, stroke(GRID, 3f))
+    drawText(title, left + 28f, top + 54f, paint(40f, INK, bold = true))
+    val l = left + 40f; val r = left + w - 40f; val t = top + 100f; val b = top + h - 36f
+    val iw = r - l; val ih = b - t
+    val xs = floatArrayOf(0f, 0.15f, 0.30f, 0.50f, 0.62f, 0.80f, 1f)
+    val ys = floatArrayOf(0.72f, 0.58f, 0.64f, 0.34f, 0.12f, 0.30f, 0.44f)
+    // The floor: moves up with every new high when intraday, stays put when end of day.
+    val floorYs = if (intraday) floatArrayOf(0.96f, 0.96f, 0.96f, 0.80f, 0.58f, 0.58f, 0.58f) else floatArrayOf(0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f)
+    val floor = android.graphics.Path()
+    for (i in xs.indices) { val px = l + iw * xs[i]; val py = t + ih * floorYs[i]; if (i == 0) floor.moveTo(px, py) else floor.lineTo(px, py) }
+    drawPath(floor, stroke(AMBER, 7f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(24f, 14f), 0f) })
+    val eq = android.graphics.Path()
+    for (i in xs.indices) { val px = l + iw * xs[i]; val py = t + ih * ys[i]; if (i == 0) eq.moveTo(px, py) else eq.lineTo(px, py) }
+    drawPath(eq, stroke(CYAN, 9f))
+    val peakX = l + iw * xs[4]; val peakY = t + ih * ys[4]
+    drawCircle(peakX, peakY, 13f, fill(CYAN))
+    drawText("Peak", peakX + 22f, peakY + 10f, paint(30f, INK, bold = true))
+    val floorLabelY = t + ih * floorYs[6] - 16f
+    drawText("Floor", r - paint(30f, AMBER, bold = true).measureText("Floor"), floorLabelY, paint(30f, AMBER, bold = true))
+}
+
+/** Each figure with the words that precede it in the post (small, above the figure). Returns the bottom y. */
+private fun Canvas.drawFigureChips(card: XPostImageCard, left: Float, baseline: Float, maxWidth: Float) {
+    var size = 64f
+    fun width(sz: Float): Double = card.numbers.mapIndexed { i, n ->
+        maxOf(paint(sz, CYAN, bold = true).measureText(n), paint(sz * 0.42f, MUTED).measureText(card.figureNotes.getOrNull(i).orEmpty())).toDouble()
+    }.sum() + 48.0 * (card.numbers.size - 1)
+    while (size > 40f && width(size) > maxWidth) size -= 4f
+    var x = left
+    card.numbers.forEachIndexed { i, n ->
+        val note = card.figureNotes.getOrNull(i).orEmpty()
+        val figP = paint(size, CYAN, bold = true)
+        val noteP = paint(size * 0.42f, MUTED)
+        if (note.isNotBlank()) drawText(note, x, baseline - size - 6f, noteP)
+        drawText(n, x, baseline, figP)
+        x += maxOf(figP.measureText(n), noteP.measureText(note)) + 48f
+    }
+}
+
 /** Draws the card to a bitmap. Pure drawing: text wraps and shrinks to fit, nothing is added or changed. */
 fun renderXPostImageCard(card: XPostImageCard): Bitmap {
     val bmp = Bitmap.createBitmap(CARD_W, CARD_H, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     c.drawColor(BG)
-    c.drawBlueprintBackdrop()
     val textW = (CARD_W - 2 * MARGIN_X).toInt()
 
     // Brand mark, top-left (inside the safe zone).
-    c.drawCircle(MARGIN_X + 12f, 86f, 12f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CYAN })
-    c.drawText("Fillbook", MARGIN_X + 38f, 98f, paint(38f, INK, bold = true))
+    c.drawCircle(92f, 86f, 12f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CYAN })
+    c.drawText("Fillbook", 118f, 98f, paint(38f, INK, bold = true))
 
     if (card.kind == "reference") {
         val titleLayout = layoutOf(card.title, paint(58f, INK, bold = true), textW, 2)
@@ -274,39 +321,38 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
             c.drawLayout(layoutOf(it, paint(27f, CYAN), textW, 1), MARGIN_X, minOf(y + 8f, SAFE_BOTTOM + 10f))
         }
     } else {
-        // Headline card: shrink the headline until headline + figures fit the safe zone.
-        // Left 60% holds the headline and the figures; the topic illustration sits in the right 40% so it never sits under the words.
-        val leftW = 640
-        val sizes = listOf(56f, 50f, 44f, 40f, 36f)
-        var headline = layoutOf(card.title, paint(sizes.last(), INK, bold = true), leftW)
-        for (s in sizes) {
-            val l = layoutOf(card.title, paint(s, INK, bold = true), leftW, 7)
-            val figures = if (card.numbers.isNotEmpty()) 36f + 104f else 0f
-            headline = l
-            if (l.height + figures <= SAFE_BOTTOM - SAFE_TOP) break
-        }
-        c.drawMotif(card.motif, 790f, SAFE_TOP - 10f, 300f, SAFE_BOTTOM - SAFE_TOP + 10f)
-        c.drawLayout(headline, MARGIN_X, SAFE_TOP)
-        if (card.numbers.isNotEmpty()) {
-            var figSize = 96f
-            val figGap = 40f
-            // Shrink the row of figures until it fits the left column.
-            while (figSize > 48f && card.numbers.sumOf { paint(figSize, CYAN, bold = true).measureText(it).toDouble() } + figGap * (card.numbers.size - 1) > leftW) figSize -= 6f
-            val figP = paint(figSize, CYAN, bold = true)
-            var x = MARGIN_X
-            val y = SAFE_TOP + headline.height + 36f + 90f
-            card.numbers.forEach { n ->
-                c.drawText(n, x, y, figP)
-                x += figP.measureText(n) + figGap
+        val line = card.hook ?: card.title
+        if (card.compare) {
+            // Two panels side by side: the same day, two kinds of floor.
+            val lineLayout = layoutOf(line, paint(46f, INK, bold = true), 1040, 2)
+            c.drawLayout(lineLayout, 80f, 132f)
+            val panelTop = 132f + lineLayout.height + 22f
+            val figureRoom = if (card.numbers.isNotEmpty()) 110f else 0f
+            val panelH = CARD_H - 60f - figureRoom - panelTop
+            c.drawTrailingPanel(80f, panelTop, 500f, panelH, "Intraday", true)
+            c.drawTrailingPanel(620f, panelTop, 500f, panelH, "End of day", false)
+            if (card.numbers.isNotEmpty()) c.drawFigureChips(card, 90f, CARD_H - 62f, 1020f)
+        } else {
+            // One big topic illustration on the right, the verbatim line and the labelled figures on the left.
+            val leftW = 560
+            val sizes = listOf(54f, 48f, 44f, 40f, 36f)
+            var headline = layoutOf(line, paint(sizes.last(), INK, bold = true), leftW)
+            for (sz in sizes) {
+                val l = layoutOf(line, paint(sz, INK, bold = true), leftW, 6)
+                headline = l
+                if (l.height <= 300f) break
             }
+            c.drawMotif(card.motif, 700f, 130f, 420f, 440f)
+            c.drawLayout(headline, 80f, 150f)
+            if (card.numbers.isNotEmpty()) c.drawFigureChips(card, 90f, CARD_H - 62f, 560f)
         }
     }
 
-    c.drawSeasonalAccent(java.time.LocalDate.now().monthValue)
 
     // Illustrative figures always carry the label (owner rule).
     if (card.sampleData) {
-        c.drawText("SAMPLE DATA", MARGIN_X, CARD_H - 56f, paint(26f, AMBER, bold = true, spacing = 0.12f))
+        val sp = paint(26f, AMBER, bold = true, spacing = 0.12f)
+        c.drawText("SAMPLE DATA", CARD_W - 80f - sp.measureText("SAMPLE DATA"), 98f, sp)
     }
     return bmp
 }

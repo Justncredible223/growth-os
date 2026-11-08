@@ -32,6 +32,42 @@ const MOTIF_RULES: Array<[CardMotif, RegExp]> = [
   ["journal", /\b(?:journal\w*|log(?:ged|ging)?|notes?|review)\b/i],
 ];
 
+/** True when the post sets intraday trailing against end-of-day trailing (it names both). */
+export function isTrailingComparison(text: string): boolean {
+  return /\bintraday\b/i.test(text) && /\b(?:end[- ]of[- ]day|eod)\b/i.test(text);
+}
+
+export const HOOK_MIN = 12;
+export const HOOK_MAX = 48;
+
+/**
+ * A short sentence copied from the post, shown on the picture instead of the post's own first sentence (which the feed already shows right
+ * above the picture). The shortest of the first five sentences that is 12 to 48 characters; null when none is.
+ */
+export function shortHook(text: string): string | null {
+  const sentences = text
+    .split(/\n+/)
+    .flatMap((line) => line.trim().split(/(?<=[.!?])\s+/))
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 5);
+  const fits = sentences.filter((s) => s.length >= HOOK_MIN && s.length <= HOOK_MAX);
+  if (fits.length === 0) return null;
+  return fits.reduce((a, b) => (b.length < a.length ? b : a));
+}
+
+/** Up to two words right before each figure's first appearance in the post, within the same sentence, verbatim. */
+export function figureNotesFor(text: string, numbers: string[]): string[] {
+  return numbers.map((n) => {
+    const at = text.indexOf(n);
+    if (at <= 0) return "";
+    const before = text.slice(0, at);
+    const sentence = before.split(/[.!?\n]/).pop() ?? "";
+    const words = sentence.trim().split(/\s+/).filter((w) => /^[A-Za-z'-]+$/.test(w));
+    return words.slice(-2).join(" ").slice(0, 16);
+  });
+}
+
 /** The motif for a post: the first rule that matches wins; "target" when none do. */
 export function motifForPost(text: string): CardMotif {
   const hit = MOTIF_RULES.find(([, re]) => re.test(text));
@@ -52,6 +88,12 @@ export interface XPostImageCard {
   footer?: string;
   /** Post cards: the topic illustration the phone draws (see CardMotif). Absent on older cards; the phone then draws the fallback. */
   motif?: CardMotif;
+  /** Drawdown posts that set intraday against end-of-day trailing: the phone draws the two side by side (owner 2026-11-08). */
+  compare?: boolean;
+  /** A short sentence copied verbatim from the post (12-48 characters) shown as the card's line, so the picture does not repeat the post's first sentence, which sits right above it in the feed. */
+  hook?: string;
+  /** For each figure in `numbers`, the up to two words that come right before it in the post (verbatim), so a figure is never shown bare. */
+  figureNotes?: string[];
 }
 
 /** Off switch. Anything other than the exact value "off" leaves the card on. */
@@ -115,7 +157,7 @@ function digitRuns(text: string): string[] {
 /** True when every figure on a post card appears in the post text exactly as written. A card that fails this is never shown. */
 export function cardNumbersTraceToPost(card: XPostImageCard, draftText: string): boolean {
   if (card.kind !== "post") return true;
-  const shown = [card.title, ...card.numbers, ...card.rows.flatMap((r) => [r.label, r.note ?? ""]), card.footer ?? ""];
+  const shown = [card.title, card.hook ?? "", ...card.numbers, ...card.rows.flatMap((r) => [r.label, r.note ?? ""]), card.footer ?? ""];
   return shown.every((s) => digitRuns(s).every((run) => draftText.includes(run)));
 }
 
@@ -141,6 +183,19 @@ export function buildXPostImageCard(
   const headline = cardHeadline(text);
   if (!headline) return null;
   const numbers = numbersInPost(text).slice(0, 3);
-  const card: XPostImageCard = { version: 1, kind: "post", title: headline, rows: [], numbers, sampleData: numbers.length > 0, motif: motifForPost(text) };
+  const motif = motifForPost(text);
+  const hook = shortHook(text);
+  const card: XPostImageCard = {
+    version: 1,
+    kind: "post",
+    title: headline,
+    rows: [],
+    numbers,
+    sampleData: numbers.length > 0,
+    motif,
+    ...(motif === "drawdown" && isTrailingComparison(text) ? { compare: true } : {}),
+    ...(hook ? { hook } : {}),
+    ...(numbers.length > 0 ? { figureNotes: figureNotesFor(text, numbers) } : {}),
+  };
   return cardNumbersTraceToPost(card, text) ? card : null;
 }
