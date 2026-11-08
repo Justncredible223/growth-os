@@ -34,6 +34,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -390,7 +392,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             onDismissRequest = { if (!handingOff) reviewingXPost = false },
             title = { Text("Today's X Post") },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
                         "Edit the draft below if you want, then copy it and open X -- posting is still up to you.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -410,6 +412,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                         },
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
                     )
+                    post?.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId, editedXPostText) }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(
                             onClick = { copyToClipboard(context, "Today's X post", editedXPostText) },
@@ -578,7 +581,7 @@ private fun TodayXPostCard(
                     Spacer(Modifier.height(4.dp))
                     Text(reason, style = MaterialTheme.typography.bodySmall, color = TextTertiary, maxLines = 12, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
-                post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId) }
+                post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId, post.previewText) }
             }
             TodayXPostState.RUNNING -> {
                 Spacer(Modifier.height(4.dp))
@@ -587,8 +590,21 @@ private fun TodayXPostCard(
             TodayXPostState.HANDED_OFF -> {
                 Spacer(Modifier.height(4.dp))
                 Text("You already opened X with this draft today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                // Still offered after opening X: the image is attached by hand in the composer.
-                post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId) }
+                // The draft stays visible after opening X, with the same copy and open actions, so a second try or a picture is never lost.
+                post.previewText?.takeIf { it.isNotBlank() }?.let { text ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(text, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 12, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    val handedContext = LocalContext.current
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { copyToClipboard(handedContext, "Today's X post", text) }) { Text("Copy text") }
+                        TextButton(onClick = {
+                            copyToClipboard(handedContext, "Today's X post", text)
+                            openExternalUrl(handedContext, "https://x.com/compose/post")
+                        }) { Text("Copy + open X") }
+                    }
+                }
+                // Still offered after opening X: the picture goes with the text through Open X with text + picture, or is saved or shared.
+                post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId, post.previewText) }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onMarkPosted, enabled = !busy) { Text(if (busy) "Marking..." else "Mark posted") }
             }

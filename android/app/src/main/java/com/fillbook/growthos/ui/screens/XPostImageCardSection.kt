@@ -165,9 +165,38 @@ private fun sharePng(context: Context, bmp: Bitmap) {
     context.startActivity(Intent.createChooser(send, "Attach to your X post").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
-/** Preview of the post's picture with Save, Share and Discard. Shown only while the post is ready; the owner attaches the image by hand. */
+/**
+ * Opens X's composer with the post text AND the picture attached (Android share: text + image to the X app, falling back to the chooser).
+ * The text is also copied to the clipboard, so if X drops the text the owner can paste it. Nothing is posted: X opens a draft the owner sends.
+ * The plain https://x.com/compose/post link cannot carry an image, which is why Copy + Open X alone never attached the picture.
+ */
+private fun openXWithPicture(context: Context, bmp: Bitmap, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Today's X post", text))
+    val dir = File(context.cacheDir, "x_cards").apply { mkdirs() }
+    val file = File(dir, "fillbook-x-post.png")
+    file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_TEXT, text)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val toX = Intent(send).setPackage("com.twitter.android").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(toX)
+    } catch (e: android.content.ActivityNotFoundException) {
+        context.startActivity(Intent.createChooser(send, "Post to X with the picture").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
+/**
+ * Preview of the post's picture with Open X with picture, Save, Share and Discard. [postText] is the text that goes with it; without it only
+ * the picture actions show. The owner still presses Post in X.
+ */
 @Composable
-internal fun XPostImageCardSection(card: XPostImageCard, assetKey: String?) {
+internal fun XPostImageCardSection(card: XPostImageCard, assetKey: String?, postText: String? = null) {
     val context = LocalContext.current
     var discarded by rememberSaveable(assetKey) { mutableStateOf(false) }
     if (discarded) {
@@ -190,6 +219,17 @@ internal fun XPostImageCardSection(card: XPostImageCard, assetKey: String?) {
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
         )
+        if (!postText.isNullOrBlank()) {
+            androidx.compose.material3.Button(
+                onClick = { openXWithPicture(context, bitmap, postText) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Open X with text + picture") }
+            Text(
+                "Opens X with your text and this picture attached. The text is also copied. You still press Post.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TextButton(onClick = { sharePng(context, bitmap) }) { Text("Share image") }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
