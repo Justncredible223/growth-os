@@ -246,28 +246,61 @@ private fun Canvas.drawMotif(motif: String?, left: Float, top: Float, w: Float, 
  * post's own first sentence. Words on it are a short verbatim line from the post plus a small fixed vocabulary (Intraday, End of day,
  * Peak, Floor); every figure is copied from the post with the words that precede it. A diagram of a rule, not an account's real result.
  */
-private fun Canvas.drawTrailingPanel(left: Float, top: Float, w: Float, h: Float, title: String, intraday: Boolean) {
+/** The two figures of a trailing comparison, attached to the events they describe (rise to the peak, fall from it). */
+private class TrailingFigures(val riseNote: String, val riseNumber: String, val fallNote: String, val fallNumber: String)
+
+private fun Canvas.drawTrailingPanel(left: Float, top: Float, w: Float, h: Float, title: String, intraday: Boolean, figures: TrailingFigures?) {
     val panel = RectF(left, top, left + w, top + h)
     drawRoundRect(panel, 18f, 18f, fill(PANEL))
     drawRoundRect(panel, 18f, 18f, stroke(GRID, 3f))
-    drawText(title, left + 28f, top + 54f, paint(40f, INK, bold = true))
-    val l = left + 40f; val r = left + w - 40f; val t = top + 100f; val b = top + h - 36f
+    drawText(title, left + 28f, top + 58f, paint(44f, INK, bold = true))
+    val l = left + 40f; val r = left + w - 40f; val t = top + 112f; val b = top + h - 40f
     val iw = r - l; val ih = b - t
-    val xs = floatArrayOf(0f, 0.15f, 0.30f, 0.50f, 0.62f, 0.80f, 1f)
-    val ys = floatArrayOf(0.72f, 0.58f, 0.64f, 0.34f, 0.12f, 0.30f, 0.44f)
+    val xs = floatArrayOf(0f, 0.14f, 0.28f, 0.42f, 0.55f, 0.78f, 0.92f)
+    val ys = floatArrayOf(0.80f, 0.64f, 0.70f, 0.40f, 0.12f, 0.30f, 0.40f)
     // The floor: moves up with every new high when intraday, stays put when end of day.
-    val floorYs = if (intraday) floatArrayOf(0.96f, 0.96f, 0.96f, 0.80f, 0.58f, 0.58f, 0.58f) else floatArrayOf(0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f)
+    val floorYs = if (intraday) floatArrayOf(0.96f, 0.96f, 0.96f, 0.88f, 0.74f, 0.74f, 0.74f) else floatArrayOf(0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f)
     val floor = android.graphics.Path()
     for (i in xs.indices) { val px = l + iw * xs[i]; val py = t + ih * floorYs[i]; if (i == 0) floor.moveTo(px, py) else floor.lineTo(px, py) }
-    drawPath(floor, stroke(AMBER, 7f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(24f, 14f), 0f) })
+    drawPath(floor, stroke(AMBER, 8f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(26f, 15f), 0f) })
     val eq = android.graphics.Path()
     for (i in xs.indices) { val px = l + iw * xs[i]; val py = t + ih * ys[i]; if (i == 0) eq.moveTo(px, py) else eq.lineTo(px, py) }
-    drawPath(eq, stroke(CYAN, 9f))
+    drawPath(eq, stroke(CYAN, 10f))
     val peakX = l + iw * xs[4]; val peakY = t + ih * ys[4]
-    drawCircle(peakX, peakY, 13f, fill(CYAN))
-    drawText("Peak", peakX + 22f, peakY + 10f, paint(30f, INK, bold = true))
-    val floorLabelY = t + ih * floorYs[6] - 16f
-    drawText("Floor", r - paint(30f, AMBER, bold = true).measureText("Floor"), floorLabelY, paint(30f, AMBER, bold = true))
+    drawCircle(peakX, peakY, 14f, fill(CYAN))
+    // "Peak" sits above its point, centred, clear of both lines.
+    val peakP = paint(34f, INK, bold = true)
+    drawText("Peak", peakX - peakP.measureText("Peak") / 2f, peakY - 26f, peakP)
+    // "Floor" at the right end of its line: below it when the line is high, above it when the line is at the bottom.
+    val floorP = paint(34f, AMBER, bold = true)
+    val floorY = t + ih * floorYs[6]
+    val floorLabelY = if (intraday) floorY + 40f else floorY - 18f
+    drawText("Floor", r - floorP.measureText("Floor"), floorLabelY, floorP)
+    // The post's own figures, attached to the events on the Intraday panel: the rise to the peak and the fall from it.
+    if (figures != null && intraday) {
+        val tick = stroke(MUTED, 4f)
+        val bx = l + 6f
+        val startY = t + ih * ys[0]
+        drawLine(bx, peakY, bx, startY, tick)
+        drawLine(bx, peakY, bx + 16f, peakY, tick)
+        drawLine(bx, startY, bx + 16f, startY, tick)
+        val noteP = paint(28f, MUTED)
+        val numP = paint(40f, CYAN, bold = true)
+        // Upper-left of the panel: the curve is low there, so the label clears it.
+        drawText(figures.riseNote, bx + 24f, peakY + 28f, noteP)
+        drawText(figures.riseNumber, bx + 24f, peakY + 70f, numP)
+        val fx = r - 4f
+        val endY = t + ih * ys[6]
+        drawLine(fx, peakY, fx, endY, tick)
+        drawLine(fx - 16f, peakY, fx, peakY, tick)
+        drawLine(fx - 16f, endY, fx, endY, tick)
+        val fallNumW = numP.measureText(figures.fallNumber)
+        val fallNoteW = noteP.measureText(figures.fallNote)
+        // Under the end of its bracket, right-aligned, in the open space between the curve and the floor.
+        val lx = fx - maxOf(fallNumW, fallNoteW)
+        drawText(figures.fallNote, lx, endY + 36f, noteP)
+        drawText(figures.fallNumber, lx, endY + 78f, numP)
+    }
 }
 
 /** Each figure with the words that precede it in the post (small, above the figure). Returns the bottom y. */
@@ -327,11 +360,19 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
             val lineLayout = layoutOf(line, paint(46f, INK, bold = true), 1040, 2)
             c.drawLayout(lineLayout, 80f, 132f)
             val panelTop = 132f + lineLayout.height + 22f
-            val figureRoom = if (card.numbers.isNotEmpty()) 110f else 0f
-            val panelH = CARD_H - 60f - figureRoom - panelTop
-            c.drawTrailingPanel(80f, panelTop, 500f, panelH, "Intraday", true)
-            c.drawTrailingPanel(620f, panelTop, 500f, panelH, "End of day", false)
-            if (card.numbers.isNotEmpty()) c.drawFigureChips(card, 90f, CARD_H - 62f, 1020f)
+            // The two figures attach to the diagram when the post's own words say which is the rise and which is the fall ("Up", "Give back");
+            // otherwise they sit under the panels with the words that precede them.
+            val n0 = card.numbers.getOrNull(0); val n1 = card.numbers.getOrNull(1)
+            val note0 = card.figureNotes.getOrNull(0).orEmpty(); val note1 = card.figureNotes.getOrNull(1).orEmpty()
+            val attach = n0 != null && n1 != null &&
+                Regex("(^|\\s)up$", RegexOption.IGNORE_CASE).containsMatchIn(note0.trim()) &&
+                Regex("(give|gave|lose|lost|drop|back)", RegexOption.IGNORE_CASE).containsMatchIn(note1)
+            val figures = if (attach) TrailingFigures(note0.trim(), n0!!, note1.trim(), n1!!) else null
+            val figureRoom = if (card.numbers.isNotEmpty() && !attach) 110f else 0f
+            val panelH = CARD_H - 34f - figureRoom - panelTop
+            c.drawTrailingPanel(80f, panelTop, 500f, panelH, "Intraday", true, figures)
+            c.drawTrailingPanel(620f, panelTop, 500f, panelH, "End of day", false, null)
+            if (card.numbers.isNotEmpty() && !attach) c.drawFigureChips(card, 90f, CARD_H - 62f, 1020f)
         } else {
             // One big topic illustration on the right, the verbatim line and the labelled figures on the left.
             val leftW = 560
