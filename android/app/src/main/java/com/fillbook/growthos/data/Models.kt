@@ -217,6 +217,8 @@ data class XPostImageCard(
     val numbers: List<String>,
     val sampleData: Boolean,
     val footer: String?,
+    /** Which topic illustration to draw (Risk Blueprint theme); null on older cards, which get the fallback. */
+    val motif: String? = null,
 )
 
 enum class XFeedPostHistoryState { UNPOSTED_DRAFT, POSTED, FAILED }

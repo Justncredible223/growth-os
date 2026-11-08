@@ -216,6 +216,7 @@ class NetworkGrowthOsRepository(
             numbers = optJSONArray("numbers")?.mapStrings() ?: emptyList(),
             sampleData = optBoolean("sampleData", false),
             footer = optStringOrNull("footer"),
+            motif = optStringOrNull("motif"),
         )
     }
 

@@ -13,6 +13,31 @@ import { REFERENCE_TOPICS, numbersInPost } from "./xFeedPostExtras.js";
  * This file builds the CONTENT of the card (what it says). The phone app draws the pixels, so the words and numbers are unit-tested
  * here and the drawing code never decides what the card says.
  */
+/**
+ * The small illustration the phone draws beside the headline (theme "Risk Blueprint", chosen by ChatGPT + Gemini 2026-11-08). It is a
+ * picture of the TOPIC, built from simple shapes with no words and no numbers, so it can never state anything the post does not.
+ * Chosen by rule from the post text, never by a model; "target" is the fallback when the topic is unclear.
+ */
+export type CardMotif = "drawdown" | "loss_limit" | "payout" | "consistency" | "sizing" | "edge_score" | "journal" | "target";
+
+export const CARD_MOTIFS: readonly CardMotif[] = ["drawdown", "loss_limit", "payout", "consistency", "sizing", "edge_score", "journal", "target"];
+
+const MOTIF_RULES: Array<[CardMotif, RegExp]> = [
+  ["edge_score", /\bedge score\b/i],
+  ["drawdown", /\b(?:drawdown|trailing|floor|buffer)\b/i],
+  ["loss_limit", /\b(?:daily (?:loss|limit)|loss limit|max(?:imum)? loss|dll)\b/i],
+  ["payout", /\b(?:payout|withdraw\w*|threshold)\b/i],
+  ["consistency", /\b(?:consisten\w*|best day|biggest day)\b/i],
+  ["sizing", /\b(?:contracts?|position siz\w*|lot size|sizing)\b/i],
+  ["journal", /\b(?:journal\w*|log(?:ged|ging)?|notes?|review)\b/i],
+];
+
+/** The motif for a post: the first rule that matches wins; "target" when none do. */
+export function motifForPost(text: string): CardMotif {
+  const hit = MOTIF_RULES.find(([, re]) => re.test(text));
+  return hit ? hit[0] : "target";
+}
+
 export interface XPostImageCard {
   version: 1;
   /** "post" = a headline card built from the day's draft; "reference" = a fixed card for a Wednesday reference post. */
@@ -25,6 +50,8 @@ export interface XPostImageCard {
   /** True when the card shows numbers that are illustrative: it then carries a SAMPLE DATA label. */
   sampleData: boolean;
   footer?: string;
+  /** Post cards: the topic illustration the phone draws (see CardMotif). Absent on older cards; the phone then draws the fallback. */
+  motif?: CardMotif;
 }
 
 /** Off switch. Anything other than the exact value "off" leaves the card on. */
@@ -114,6 +141,6 @@ export function buildXPostImageCard(
   const headline = cardHeadline(text);
   if (!headline) return null;
   const numbers = numbersInPost(text).slice(0, 3);
-  const card: XPostImageCard = { version: 1, kind: "post", title: headline, rows: [], numbers, sampleData: numbers.length > 0 };
+  const card: XPostImageCard = { version: 1, kind: "post", title: headline, rows: [], numbers, sampleData: numbers.length > 0, motif: motifForPost(text) };
   return cardNumbersTraceToPost(card, text) ? card : null;
 }
