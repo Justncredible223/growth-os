@@ -44,17 +44,14 @@ describe("image spec and posting window", () => {
     expect(buildImageSpec(t, "anything")).toBe(t.imageSpec);
   });
 
-  it("builds a brief from the draft for a normal day, quoting only numbers the post states", () => {
+  it("tells the owner the phone draws the picture, names the topic, and invents no figure (2026-11-08)", () => {
     const text = "Rule: after two losing trades, max size drops to 1 contract. Capped at $300 a day.";
     const spec = buildImageSpec({ key: "x", label: "Discipline" }, text);
-    expect(spec).toContain("Headline in large text:");
-    expect(spec).toContain("$300");
-    expect(spec).toContain("1 contract");
-    expect(spec).not.toMatch(/\d{4,}/);
-  });
-
-  it("says so when the post has no number instead of inventing one", () => {
-    expect(buildImageSpec({ key: "x", label: "Journaling" }, "Most journals die in week three.")).toContain("states no number");
+    expect(spec).toContain("drawn for you from this post");
+    expect(spec).toContain("Discipline");
+    expect(spec).toContain("Open X with text + picture");
+    expect(spec).not.toMatch(/d{4,}/);
+    expect(buildImageSpec({ key: "x", label: "Journaling" }, "Most journals die in week three.")).not.toContain("$");
     expect(numbersInPost("No figures here")).toEqual([]);
   });
 
