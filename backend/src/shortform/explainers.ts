@@ -232,7 +232,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   {
     slug: "edge-score",
     view: "Fillbook's Edge Score blends four areas into one.",
-    hook: { headline: "A 67 hides a 59. Which part?", caption: "Profit, consistency, risk and rule-following each tell a different part.", say: "A 67 Edge Score can hide a weak part.", take: "One weak part can pull the whole score down." },
+    hook: { headline: "Edge Score 67 hides a 59. Why?", caption: "Profit, consistency, risk and rule-following each tell a different part.", say: "Edge Score is one score for four parts of how you trade.", take: "One weak part can pull the whole score down." },
     source: "fresh-21-edge-score-67",
     title: "One score for how you trade, and what drags it down",
     topic: "An Edge Score that blends profitability, consistency, risk control and rule adherence",
