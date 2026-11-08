@@ -162,8 +162,8 @@ export const HUMAN_POST_VOICE_RULES = `FILLBOOK TEAM VOICE FOR PUBLIC POSTS (doe
   "Fillbook's Account Health shows your buffer from your synced trades.", "Fillbook's Insights flags sizing
   that jumps after a loss, for you to review.", "Fillbook's Reports split your results by time of day, by
   weekday and by setup.", "Fillbook's Daily Brief summarizes your last session and the buffer left from your
-  synced trades.", "Fillbook's Edge Score blends profitability, consistency, risk control and rule adherence
-  into one score.", "Fillbook's rule simulator replays your logged trades against a firm's evaluation rules."
+  synced trades.", "Fillbook's Edge Score blends five parts (profitability, consistency, risk control, stop adherence and
+  rule adherence) into one score.", "Fillbook's rule simulator replays your logged trades against a firm's evaluation rules."
 - Never promise or imply profit ("will make you profitable", "guaranteed", "proven"). The honest frame is
   seeing what you're actually doing so you can decide what to change.
 - Never a pitch, a call to action, or "check it out" -- UNLESS the opportunity's rationale below

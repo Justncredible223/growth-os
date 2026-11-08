@@ -556,7 +556,7 @@ export const PILOT_6: ScenePlan = {
   planId: "pilot-6-edge-score",
   title: "One score for how you actually trade.",
   series: "What Your Journal Shows",
-  topic: "One score that blends profitability, consistency, risk control and rule adherence",
+  topic: "One score that blends profitability, consistency, risk control, stop adherence and rule adherence",
   hook: "One score for how you actually trade.",
   experimentId: PILOT_EXPERIMENT_ID,
   variationId: P6,
@@ -584,7 +584,7 @@ export const PILOT_6: ScenePlan = {
     scene({
       sceneId: "p6-s2-map",
       variationId: P6,
-      narration: "It blends profitability, consistency, risk control and rule adherence. Rule adherence scores 87. Profitability, 59.",
+      narration: "It blends five parts: profitability, consistency, risk control, stop adherence and rule adherence. Rule adherence scores 87. Profitability, 59.",
       takeaway: "The breakdown shows which part is holding the score back.",
       assetId: P6_REC,
       crop: { x: 38, y: 235, w: 1004, h: 875 },
@@ -923,7 +923,7 @@ const PILOT_COPY: Record<string, { topic: string; cta: string; captionBody: stri
   [PILOT_6.planId]: {
     topic: PILOT_6.topic,
     cta: "Try it free on your own account for 14 days",
-    captionBody: "One score blending profitability, consistency, risk control and rule adherence. Demo data.",
+    captionBody: "One score blending profitability, consistency, risk control, stop adherence and rule adherence. Demo data.",
     youtubeTitle: "Edge Score: One Number for How You Actually Trade",
   },
   [PILOT_7.planId]: {
