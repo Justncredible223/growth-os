@@ -426,7 +426,7 @@ export function barsEdgeMapPlan(): ScenePlan {
   return buildBarsPlan({
     planId: "chart-bars-edge-map",
     title: "An Edge Score of 67, and what it's made of",
-    topic: "A sample account's Edge Score and the four parts it blends",
+    topic: "A sample account's Edge Score and the five parts it blends",
     variationId: "bars-edge",
     assetId: "rec.p6-edge-score.v1",
     expectedTopic: "edge_score",
