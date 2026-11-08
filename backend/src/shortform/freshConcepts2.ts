@@ -246,9 +246,9 @@ const FRESH2: Daily[] = [
     focus: [f(h("Rule adherence", "87", "good"), 0, 0), f(h("Profitability", "59", "bad"), 0, 1)],
     details: { title: "Edge map · the rest", rows: [["Risk control", "69", "good"], ["Consistency", "63", "bad"], ["Trend · last 3 weeks", "-20", "bad"]] },
     facts: ["edge.score", "edge.map"],
-    say: ["Edge Score: only 67. Developing.", "Rule adherence scores 87.", "But profitability scores only 59.", "Fillbook gives one score for five factors.", "Which factor drags your score down?"],
-    cap: ["Edge Score: 67, Developing.", "Rule adherence: 87.", "Profitability: 59.", "Five factors, one score.", "Which factor drags yours?"],
-    take: ["The Edge Score is only 67.", "Rule adherence scores 87.", "Profitability scores only 59.", "One score covers five factors.", "Which factor drags your score down?"],
+    say: ["Edge Score: only 67. Developing.", "Rule adherence scores 87.", "But profitability scores only 59.", "Fillbook gives one score for four factors.", "Which factor drags your score down?"],
+    cap: ["Edge Score: 67, Developing.", "Rule adherence: 87.", "Profitability: 59.", "Four factors, one score.", "Which factor drags yours?"],
+    take: ["The Edge Score is only 67.", "Rule adherence scores 87.", "Profitability scores only 59.", "One score covers four factors.", "Which factor drags your score down?"],
   },
   // 22
   {
