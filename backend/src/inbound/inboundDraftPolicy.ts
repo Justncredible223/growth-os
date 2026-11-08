@@ -7,10 +7,13 @@ import {
 } from "../content/xReplyGuardrails.js";
 import { INBOUND_APPROVED_LINK_DOMAINS } from "./inboundResponseWriter.js";
 
-/** The one page that carries the real giveaway entry form and the official rules. */
+/** The old giveaway page. It now only redirects home, so no reply may link it. */
 export const INBOUND_GIVEAWAY_LINK = "fillbookhq.com/giveaway";
 
 /** True when the person's message is about the giveaway / a free-year-of-Elite prize / a contest. */
+/** The one email address a public reply may carry (an entrant asking about their own entry). It is not a link. */
+const OWNER_EMAIL = "developer@fillbookhq.com";
+
 export function asksAboutGiveaway(messageText: string): boolean {
   return /\bgive-?\s?aways?\b|\braffle\b|\bsweepstakes?\b|\bfree year\b|\bwin (?:a|an|the)\b|\bcontest\b|\bprize\b/i.test(messageText);
 }
@@ -23,6 +26,10 @@ export function asksIfGiveawayIsReal(messageText: string): boolean {
 export function replyLinksToGiveawayPage(reply: string): boolean {
   return reply.toLowerCase().includes(INBOUND_GIVEAWAY_LINK);
 }
+
+/** Things the ended-giveaway wording forbids: a winner, a draw, the prize or its value, an entry count, or a promise of another giveaway. */
+export const GIVEAWAY_ENDED_FORBIDDEN =
+  /\bwinners?\b|\bwon\b|\bdrawn\b|\bdraw\b|\bprize\b|\$\s?\d|\bvalue\b|\bnext giveaway\b|\banother giveaway\b|\bcoming soon\b|\bentr(?:y|ies) count\b|\b\d[\d,]*\s+(?:entries|entrants)\b/i;
 
 /** "I don't have context...", "can't see the thread", "not sure what you're asking about": a reply that gives up instead of answering. */
 export const LACKS_CONTEXT = /\b(?:i|we)\s*(?:do not|don['’]?t|can['’]?t|cannot)\s+(?:have|see|know)\b[^.!?]{0,40}\b(?:context|thread|conversation|what you(?:['’]re| are)? (?:asking|referring|talking))|\bno context\b|\bnot sure what you(?:['’]re| are)? (?:asking|referring|talking)/i;
@@ -41,9 +48,9 @@ export interface InboundDraftPolicyContext {
 export function assessInboundDraft(candidate: { reply: string; usesLink: boolean }, ctx: InboundDraftPolicyContext): DraftAssessment {
   const aboutGiveaway = asksAboutGiveaway(ctx.messageText);
   const linksGiveaway = replyLinksToGiveawayPage(candidate.reply);
-  // A link is earned when the message asked for contact info/a link, or is about the giveaway (then the
-  // giveaway page is the one extra link allowed). Domain allowlist still applies below.
-  const linkEarned = impliesContactOrLinkRequest(ctx.messageText) || aboutGiveaway;
+  // A link is earned only when the message asked for contact info or a link. The giveaway has ended, so a
+  // giveaway question never earns a link. Domain allowlist still applies below.
+  const linkEarned = impliesContactOrLinkRequest(ctx.messageText);
   let hard: string | null = null;
 
   if (ctx.authorIsOwnAccount) {
@@ -51,8 +58,8 @@ export function assessInboundDraft(candidate: { reply: string; usesLink: boolean
   } else if (candidate.usesLink && !linkEarned) {
     hard = "includes a link, but the original message never asked for contact info or a link";
   } else {
-    const expectsLink = candidate.usesLink || (aboutGiveaway && linksGiveaway);
-    hard = checkReplyGuardrails(candidate.reply, expectsLink, { approvedLinkDomains: INBOUND_APPROVED_LINK_DOMAINS })?.reason ?? null;
+    const expectsLink = candidate.usesLink;
+    hard = checkReplyGuardrails(candidate.reply.split(OWNER_EMAIL).join("the owner"), expectsLink, { approvedLinkDomains: INBOUND_APPROVED_LINK_DOMAINS })?.reason ?? null;
   }
 
   if (!hard && ctx.authorIsOwnAccount) {
@@ -62,8 +69,11 @@ export function assessInboundDraft(candidate: { reply: string; usesLink: boolean
   if (!hard && LACKS_CONTEXT.test(candidate.reply)) {
     hard = "says it lacks context or cannot see the conversation; reply to what they said using the thread given, or ask which part they mean";
   }
-  if (!hard && asksIfGiveawayIsReal(ctx.messageText) && !linksGiveaway) {
-    hard = `does not point to ${INBOUND_GIVEAWAY_LINK} and the official rules, which a question about whether the giveaway is real must do`;
+  if (!hard && linksGiveaway) {
+    hard = `links ${INBOUND_GIVEAWAY_LINK}, which no longer exists (it redirects home); say the giveaway has ended instead`;
+  }
+  if (!hard && aboutGiveaway && GIVEAWAY_ENDED_FORBIDDEN.test(candidate.reply)) {
+    hard = "says more about the ended giveaway than allowed: only that it has ended and thanks for entering, never a winner, a draw, the prize or its value, an entry count or another giveaway";
   }
 
   return { hard, soft: checkReplySoftStyle(candidate.reply)?.reason ?? null };

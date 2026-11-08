@@ -40,8 +40,8 @@ describe("reply wording for retention", () => {
     expect(HUMAN_REPLY_VOICE_RULES).toMatch(/one thing a trader can keep/);
   });
 
-  it("keeps the giveaway answer possible when someone asks how to enter", () => {
-    expect(HUMAN_REPLY_VOICE_RULES).toMatch(/someone asking how to enter the giveaway/);
+  it("answers a giveaway question with only that it has ended", () => {
+    expect(HUMAN_REPLY_VOICE_RULES).toMatch(/someone asking about the giveaway/);
     expect(HUMAN_REPLY_VOICE_RULES).toMatch(/Do not bring up the giveaway, a plan or a price on your own/);
   });
 

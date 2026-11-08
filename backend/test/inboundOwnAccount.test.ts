@@ -134,22 +134,24 @@ describe("stored self-authored item on queue load and drafting", () => {
 describe("giveaway knowledge and guardrails", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("system prompt carries the true giveaway facts and forbids denying them", () => {
+  it("system prompt carries the ended-giveaway facts and forbids linking, winner or prize talk", () => {
     const prompt = buildInboundSystemPrompt("x");
-    expect(prompt).toContain("fillbookhq.com/giveaway");
-    expect(prompt).toContain("$399.90");
+    expect(prompt).toContain("The Fillbook Elite giveaway has ended");
+    expect(prompt).toContain("NEVER link to fillbookhq.com/giveaway");
+    expect(prompt).toContain("developer@fillbookhq.com");
     expect(prompt).toContain("NOT an impersonation");
-    expect(prompt).toContain("NEVER write that Fillbook does not run giveaways");
+    expect(prompt).not.toContain("$399.90");
+    expect(prompt).not.toMatch(/live giveaway/i);
   });
 
-  it("a user asking 'is this giveaway real?' gets an accurate draft pointing at fillbookhq.com/giveaway", async () => {
+  it("a user asking 'is this giveaway real?' gets an accurate draft that says it has ended and never links the old page", async () => {
     const question = "is this giveaway real? looks too good to be true";
-    const good = "Yes, it's real. It's free to enter and the official rules are at fillbookhq.com/giveaway.";
+    const good = "The giveaway has ended. Thank you for entering.";
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(toolResponse("This is an impersonation account. Fillbook does not run giveaways and does not ask anyone to follow or enter."))
-      .mockResolvedValueOnce(toolResponse("Yes it is real, check the details on our page.", false))
-      .mockResolvedValueOnce(toolResponse(good, true));
+      .mockResolvedValueOnce(toolResponse("Yes it is real, rules at fillbookhq.com/giveaway.", true))
+      .mockResolvedValueOnce(toolResponse(good, false));
     const llm = new LlmClient("test-key", fetchMock);
     const { draft } = await draftWithRetries({
       generate: (retryFeedback) =>
@@ -178,7 +180,7 @@ describe("giveaway knowledge and guardrails", () => {
     ]) {
       expect(containsFalseGiveawayClaim(text), text).not.toBeNull();
     }
-    expect(containsFalseGiveawayClaim("Yes it's real, rules at fillbookhq.com/giveaway.")).toBeNull();
+    expect(containsFalseGiveawayClaim("The giveaway has ended. Thank you for entering.")).toBeNull();
     expect(containsFalseGiveawayClaim("We will never ask you to enter your password.")).toBeNull();
   });
 
@@ -189,9 +191,23 @@ describe("giveaway knowledge and guardrails", () => {
   });
 
   it("a lookalike posting the giveaway text may still be called out, and other domains stay rejected", () => {
-    const ok = assessInboundDraft({ reply: "That is not our account. The only official page is fillbookhq.com/giveaway.", usesLink: true }, { messageText: GIVEAWAY_TEXT });
+    const ok = assessInboundDraft({ reply: "That is not our account. The giveaway has ended.", usesLink: false }, { messageText: GIVEAWAY_TEXT });
     expect(ok.hard).toBeNull();
     const bad = assessInboundDraft({ reply: "Go to scam.example.com/giveaway", usesLink: true }, { messageText: GIVEAWAY_TEXT });
     expect(bad.hard).not.toBeNull();
+  });
+
+  it("the ended giveaway: never link the old page, never talk about a winner, a draw, the prize or another giveaway", () => {
+    const ask = { messageText: "did I win the giveaway?" };
+    expect(assessInboundDraft({ reply: "Rules are at fillbookhq.com/giveaway.", usesLink: false }, ask).hard).not.toBeNull();
+    for (const reply of [
+      "A winner was drawn already.",
+      "Someone won a free year, worth $399.90.",
+      "The next giveaway is coming soon.",
+      "We had 120 entries.",
+    ]) {
+      expect(assessInboundDraft({ reply, usesLink: false }, ask).hard, reply).not.toBeNull();
+    }
+    expect(assessInboundDraft({ reply: "The giveaway has ended. Thank you for entering. If you entered, email developer@fillbookhq.com.", usesLink: false }, ask).hard).toBeNull();
   });
 });
