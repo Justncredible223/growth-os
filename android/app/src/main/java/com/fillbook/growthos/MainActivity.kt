@@ -171,17 +171,20 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * of its own, not an occasional check -- worth the permanent slot instead
  * of a trip through More every time.
  *
+ * Engage and Partnerships are RETIRED (owner 2026-11-08, backend flag in retiredSteps.ts): their tabs are no longer shown.
+ * The screens and routes stay registered below so nothing that still links to them (an old share-sheet link) crashes, and
+ * the tables and drafts are kept; to bring a tab back, add it to the lists here again.
+ *
  * Engage took Radar's slot (2026-10-10, owner request): working through the
  * pre-drafted comment queue is a daily habit. Radar itself was removed
  * from the app the same day (unused).
  */
 private val primaryDestinations =
-    listOf(Destination.Home, Destination.Engage, Destination.Prospecting, Destination.Inbound, Destination.Approvals, Destination.VideoStatus)
+    listOf(Destination.Home, Destination.Prospecting, Destination.Inbound, Destination.Approvals, Destination.VideoStatus)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
     Destination.Results,
-    Destination.Partnerships,
     Destination.Analytics,
     Destination.ContentLibrary,
     Destination.System,
