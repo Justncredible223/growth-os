@@ -65,6 +65,8 @@ import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/v
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
 import { handleEngagement } from "../src/engagement/engagementApi.js";
+import { handleHqHandoff } from "../src/hq/hqHandoff.js";
+import { buildXPostImageCard } from "../src/content/xPostImageCard.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -633,6 +635,18 @@ async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<
   }
 }
 
+/** The HQ handoff note stored in content_versions.metadata, or null when this draft did not come from HQ. */
+function hqNoteFromMetadata(metadata: unknown): { verdict: string; revisionCount: number; deskReason: string; imageBrief: string | null } | null {
+  const m = metadata as Record<string, unknown> | null | undefined;
+  if (!m || m.source !== "hq_handoff") return null;
+  return {
+    verdict: typeof m.verdict === "string" ? m.verdict : "",
+    revisionCount: typeof m.revisionCount === "number" ? m.revisionCount : 0,
+    deskReason: typeof m.deskReason === "string" ? m.deskReason : "",
+    imageBrief: typeof m.imageBrief === "string" ? m.imageBrief : null,
+  };
+}
+
 /**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
  * data model) from campaign_assets at 'ready_for_owner' whose campaign is
@@ -661,6 +675,11 @@ async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only the read-only video-status list is open to the automation token; every approve/reject/edit stays app-token only.
+  // HQ handoff has its own token (HQ_HANDOFF_TOKEN) and must run before the app-token check. Reached as /api/hq-handoff via a vercel.json rewrite.
+  if (req.query.resource === "hq-handoff") {
+    await handleHqHandoff(req, res, getServiceClient);
+    return;
+  }
   const allowAutomation = req.method === "GET" && req.query.resource === "video-status";
   if (!requireAppAuth(req, res, { allowAutomation })) return;
   // The engagement assistant is owner-token only: allowAutomation above is never true for it.
@@ -822,7 +841,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       awaitingDecision.map(async (asset: any) => {
         const { data: latestVersion } = await client
           .from("content_versions")
-          .select("id, body")
+          .select("id, body, metadata")
           .eq("campaign_asset_id", asset.id)
           .order("version", { ascending: false })
           .limit(1)
@@ -875,6 +894,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // doesn't have).
           trackingQuery: utmQueryString(utmParams),
           destinationLink,
+          // Fillbook HQ drafts (api/hq-handoff): HQ verdict, desk reason and picture brief, shown as information for the owner. Null for everything else.
+          hqNote: hqNoteFromMetadata(latestVersion?.metadata),
+          // The same picture card Todays X Post shows, for any X feed post (HQ drafts included). Null when off or nothing safe to show.
+          imageCard: asset.asset_type === "x_feed_post" && latestVersion?.body ? buildXPostImageCard(null, latestVersion.body) : null,
         };
       }),
     );
