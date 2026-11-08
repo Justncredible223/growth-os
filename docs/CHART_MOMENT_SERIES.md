@@ -55,8 +55,8 @@ and Site Work's page-facts check. Narration lines are one sentence each, as in t
 ## How we judge it (Marketing reads the numbers from TikTok Studio, read-only, counts only; Metricool is for scheduling only)
 
 Per video, log: hook, first-frame text, length, **organic** average watch time, **share watched fully at 24 hours**, shares, saves,
-new followers. Run each hook three times with a different opening before judging (small sample). Win = a video beats 619 views, or beats
-the account's own average watch time by 20% at 24 hours. Likes are not the measure. Keep paid views out of every comparison.
+new followers. Run each hook three times with a different opening before judging (small sample). A win = a video beats the median of the last 10 organic strategy videos by 20% on average watch time at 24 hours (one lucky
+video cannot decide it; 619 views is only the best single result so far). Likes are not the measure. Marketing marks any paid or boosted video and keeps it out of every comparison.
 
 ## Build order
 
