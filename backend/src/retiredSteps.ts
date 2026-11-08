@@ -26,6 +26,9 @@ export const RETIRED_STEPS: Readonly<Record<string, RetiredStep>> = {
   strategy_evolution: { retiredOn: "2026-10-10", reason: REASON_RADAR },
   // api/growth-pulse.ts. Only the Radar-signal ingestion; x_inbound keeps its own cursor and its own mentions read.
   x_mentions: { retiredOn: "2026-10-10", reason: REASON_RADAR },
+  // api/growth-pulse.ts. Owner decision 2026-11-08 (idle features, nothing downstream uses them): off by flag, nothing deleted.
+  partnerships_discovery: { retiredOn: "2026-11-08", reason: "idle feature, owner retired it" },
+  engagement_autofill: { retiredOn: "2026-11-08", reason: "idle feature, owner retired it; the 13 existing drafts are kept" },
 };
 
 export function isStepRetired(step: string, table: Readonly<Record<string, RetiredStep>> = RETIRED_STEPS): boolean {

@@ -3,15 +3,15 @@ import { RETIRED_STEPS, isStepRetired, retiredStepSkip } from "../src/retiredSte
 
 describe("retired step list", () => {
   it("lists exactly the four owner-retired steps, each dated and with a reason", () => {
-    expect(Object.keys(RETIRED_STEPS).sort()).toEqual(["auto_draft", "generate_opportunities", "strategy_evolution", "x_mentions"]);
+    expect(Object.keys(RETIRED_STEPS).sort()).toEqual(["auto_draft", "engagement_autofill", "generate_opportunities", "partnerships_discovery", "strategy_evolution", "x_mentions"]);
     for (const entry of Object.values(RETIRED_STEPS)) {
-      expect(entry.retiredOn).toBe("2026-10-10");
+      expect(["2026-10-10", "2026-11-08"]).toContain(entry.retiredOn);
       expect(entry.reason.length).toBeGreaterThan(0);
     }
   });
 
   it("kept steps are never on the list", () => {
-    for (const kept of ["search_console", "x_feed_post", "x_inbound", "x_prospecting", "x_own_posts", "partnerships_discovery", "engagement_autofill", "youtube_stats", "youtube_comments", "chart_card_requests", "notifications"]) {
+    for (const kept of ["search_console", "x_feed_post", "x_inbound", "x_prospecting", "x_own_posts", "youtube_stats", "youtube_comments", "chart_card_requests", "notifications"]) {
       expect(isStepRetired(kept)).toBe(false);
       expect(retiredStepSkip(kept)).toBeNull();
     }
