@@ -625,14 +625,14 @@ describe("the creator watchlist in the search loop (2026-10-25)", () => {
     expect(result.topicsSearched[0]).toBe("watchlist");
   });
 
-  it("an owner-tapped search alternates creators, topics, creators", async () => {
+  it("an owner-tapped search alternates topics, creators, topics (topics first: the watchlist is where the same handles come from)", async () => {
     const queries: string[] = [];
     const adapter = { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) };
     const repo = new FakeProspectingRepo();
     repo.watchRows = creators(6);
     await run(repo, adapter, { runIndexOverride: 4 });
     expect(queries).toHaveLength(3);
-    expect(queries.map((q) => q.startsWith("(from:"))).toEqual([true, false, true]);
+    expect(queries.map((q) => q.startsWith("(from:"))).toEqual([false, true, false]);
   });
 
   it("falls back to topics only when fewer than four creators are known, or the list cannot be read", async () => {

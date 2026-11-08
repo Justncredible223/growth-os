@@ -201,6 +201,18 @@ export async function listProspectingQueue(
   }
   selected = [...overridden, ...selected];
 
+  // A post past the reply window is removed, not kept as backlog (owner 2026-11-08: a comment on an old post will not be seen, so it cannot
+  // build traction). Status "expired" is terminal and the post is never re-discovered (upsertIfNew skips anything already on file).
+  // Owner-chosen cards (Draft anyway) are exempt: they are held for 24 hours on purpose.
+  const pastWindowIds = tooOldForToday.filter((c) => !overriddenIds.has(c.id)).map((c) => c.id);
+  if (pastWindowIds.length > 0) {
+    try {
+      await Promise.all(pastWindowIds.map((id) => repo.updateStatus(id, "expired")));
+    } catch {
+      // Never block the queue on cleanup; the next load tries again.
+    }
+  }
+
   const newIds = selected.filter((c) => c.status === "new").map((c) => c.id);
   await repo.markShown(newIds);
   const candidates = selected.map((c) => (newIds.includes(c.id) ? { ...c, status: "shown" as const } : c));
