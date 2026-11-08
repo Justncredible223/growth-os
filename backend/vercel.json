@@ -21,6 +21,12 @@
       "schedule": "0 1 * * *"
     }
   ],
+  "rewrites": [
+    {
+      "source": "/api/hq-handoff",
+      "destination": "/api/approvals?resource=hq-handoff"
+    }
+  ],
   "functions": {
     "api/run-campaign.ts": {
       "maxDuration": 120

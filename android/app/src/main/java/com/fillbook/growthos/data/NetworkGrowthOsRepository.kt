@@ -306,6 +306,15 @@ class NetworkGrowthOsRepository(
                 reviewPassCount = item.optInt("reviewPassCount", 0),
                 reviewFailCount = item.optInt("reviewFailCount", 0),
                 trackingQuery = item.optStringOrNull("trackingQuery") ?: "",
+                hqNote = item.optJSONObject("hqNote")?.let { note ->
+                    HqNote(
+                        verdict = note.optString("verdict"),
+                        revisionCount = note.optInt("revisionCount", 0),
+                        deskReason = note.optString("deskReason"),
+                        imageBrief = note.optStringOrNull("imageBrief"),
+                    )
+                },
+                imageCard = item.optJSONObject("imageCard")?.toXPostImageCard(),
             )
         }
     }

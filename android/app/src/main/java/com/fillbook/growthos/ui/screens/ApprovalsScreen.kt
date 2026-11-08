@@ -407,6 +407,19 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(12.dp))
         ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
+        asset.hqNote?.let { note ->
+            Spacer(Modifier.height(8.dp))
+            InsetRow {
+                Column {
+                    Text("From Fillbook HQ (information only)", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                    val revisions = if (note.revisionCount == 1) "1 revision" else "${note.revisionCount} revisions"
+                    Text("HQ check: ${note.verdict}, $revisions", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    if (note.deskReason.isNotBlank()) Text(note.deskReason, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    note.imageBrief?.let { Text("Picture idea: $it", style = MaterialTheme.typography.bodySmall, color = TextSecondary) }
+                }
+            }
+        }
+        asset.imageCard?.let { XPostImageCardSection(it, asset.id) }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             if (total > 0) {
