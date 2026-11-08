@@ -75,7 +75,25 @@ export interface DailySelectionResult {
  *    survive steps 1-4, that's a correct, expected result -- show fewer,
  *    not padding.
  */
-export function selectDailyWorkingSet(candidates: ProspectingCandidate[], now: Date = new Date()): DailySelectionResult {
+/**
+ * Authors the owner replied to in the last AUTHOR_COOLDOWN_DAYS days. One reply per author per DAY was already the rule, but a prolific
+ * account (a watchlist creator who posts all day) came back every day and filled the queue: in a 100-row sample one account was 15 of
+ * the 100 and 67 accounts made up the rest. Owner 2026-11-08: "it just loops the same poster accounts over and over". An author inside
+ * the cooldown is deferred (still backlog, not discarded) so other accounts take the slots.
+ */
+export const AUTHOR_COOLDOWN_DAYS = 3;
+
+/** The key selection uses for an author: the stable X id when known, else the handle. */
+export function authorKeyOf(candidate: { authorExternalId: string | null; authorHandle: string | null; id: string }): string {
+  return candidate.authorExternalId ?? candidate.authorHandle ?? candidate.id;
+}
+
+export interface DailySelectionOptions {
+  /** Author keys (see authorKeyOf) replied to within AUTHOR_COOLDOWN_DAYS; their posts are deferred. */
+  cooldownAuthorKeys?: ReadonlySet<string>;
+}
+
+export function selectDailyWorkingSet(candidates: ProspectingCandidate[], now: Date = new Date(), options: DailySelectionOptions = {}): DailySelectionResult {
   const tooOldForToday: ProspectingCandidate[] = [];
   const withinFreshnessWindow: ProspectingCandidate[] = [];
   for (const candidate of candidates) {
@@ -100,8 +118,8 @@ export function selectDailyWorkingSet(candidates: ProspectingCandidate[], now: D
   const deferred: ProspectingCandidate[] = [];
 
   for (const candidate of eligible) {
-    const authorKey = candidate.authorExternalId ?? candidate.authorHandle ?? candidate.id;
-    const alreadyPicked = seenAuthors.has(authorKey);
+    const authorKey = authorKeyOf(candidate);
+    const alreadyPicked = seenAuthors.has(authorKey) || (options.cooldownAuthorKeys?.has(authorKey) ?? false);
     if (!alreadyPicked && selected.length < DAILY_SET_MAX) {
       seenAuthors.add(authorKey);
       selected.push(candidate);
