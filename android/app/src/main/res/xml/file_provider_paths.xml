@@ -3,4 +3,6 @@
     <!-- Covers Environment.DIRECTORY_DOWNLOADS on the primary external volume,
          which is where DownloadManager saves fillbook-video-*.mp4 files. -->
     <external-path name="downloads" path="Download/" />
+    <!-- X post picture, written here just before it is shared. -->
+    <cache-path name="x_cards" path="x_cards/" />
 </paths>

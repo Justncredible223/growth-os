@@ -15,6 +15,7 @@ import { SupabaseNotificationRepository } from "../src/notifications/supabaseNot
 import { llmKeySource } from "../src/content/llmKey.js";
 import { breakdownCostEvents, getTodaySpendUsd, selectCostEvents, selectCostEventsResult, sumCostUsd } from "../src/cost/costTracking.js";
 import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
+import { buildXPostImageCard } from "../src/content/xPostImageCard.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
 import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
 import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
@@ -361,7 +362,10 @@ async function computeTodayXPostViewOrThrow(client: SupabaseClient, now: Date): 
     previewText = latestVersion?.body ?? null;
   }
 
-  return deriveTodayXPostView(run, asset?.stage ?? null, dismissed, previewText);
+  const view = deriveTodayXPostView(run, asset?.stage ?? null, dismissed, previewText);
+  // The picture for the post (xPostImageCard.ts): content only, drawn by the phone app. Null when off or when a figure cannot be traced to the post.
+  const imageCard = view.previewText ? buildXPostImageCard(run.topicKey, view.previewText) : null;
+  return imageCard ? { ...view, imageCard } : view;
 }
 
 /**
