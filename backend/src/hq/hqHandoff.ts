@@ -56,12 +56,16 @@ export function hqHandoffTokenMatches(header: string | undefined, env: Record<st
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
+/** Markdown bold markers, or a line that starts with a draft label ("Draft 1", "Option 2", "Version A"). */
+const MARKDOWN_LABEL = /\*\*|^\s*(?:draft|option|version|variant)\s*(?:#?\d+|[a-c])\s*(?:[:.)\]-]|\(|$)/im;
 
 export function validateHqHandoffBody(body: unknown): HqHandoffValidation {
   const bad = (error: string): HqHandoffValidation => ({ ok: false, status: 400, error });
   if (!body || typeof body !== "object") return bad("Body must be a JSON object");
   const b = body as Record<string, any>;
-  if (typeof b.hqDraftId !== "string" || !ID_PATTERN.test(b.hqDraftId)) return bad("hqDraftId must be 1-80 letters, digits or _ . : -");
+  // HQ numbers its drafts (#44, #46): a whole number is accepted and stored as its text.
+  const hqDraftId = typeof b.hqDraftId === "number" && Number.isSafeInteger(b.hqDraftId) && b.hqDraftId >= 0 ? String(b.hqDraftId) : b.hqDraftId;
+  if (typeof hqDraftId !== "string" || !ID_PATTERN.test(hqDraftId)) return bad("hqDraftId must be 1-80 letters, digits or _ . : - (a whole number is also accepted)");
   if (b.role !== "social") return bad('role must be "social"');
   if (b.platform !== "x") return bad('platform must be "x"');
   if (b.contentType !== "x_post") return bad('contentType must be "x_post"');
@@ -82,6 +86,9 @@ export function validateHqHandoffBody(body: unknown): HqHandoffValidation {
   const imageBrief = b.imageBrief ?? null;
   if (imageBrief !== null && (typeof imageBrief !== "string" || imageBrief.length > 240)) return bad("imageBrief must be null or a string of at most 240 characters");
 
+  // The owner copies this text straight into X, so it must be ONE clean post: no markdown labels such as "**Draft 1 (X)**" and no
+  // multi-part drafts (HQ's Social agent writes those; HQ now sends only the chosen post body).
+  if (MARKDOWN_LABEL.test(text)) return { ok: false, status: 422, error: "text must be one clean post body: remove markdown labels such as **Draft 1 (X)** and send a single post" };
   if (containsLink(text)) return { ok: false, status: 422, error: "text must not contain a link" };
   const violation = containsUnverifiedClaim(text) ?? containsFalseGiveawayClaim(text) ?? dashProblem(text);
   if (violation) return { ok: false, status: 422, error: `text refused: ${violation.reason}` };
@@ -89,7 +96,7 @@ export function validateHqHandoffBody(body: unknown): HqHandoffValidation {
   return {
     ok: true,
     draft: {
-      hqDraftId: b.hqDraftId,
+      hqDraftId,
       text,
       verdict: compliance.verdict,
       revisionCount,
