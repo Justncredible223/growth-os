@@ -40,8 +40,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.fillbook.growthos.data.ReceiptLine
 import com.fillbook.growthos.data.XPostImageCard
+import com.fillbook.growthos.ui.theme.Success
+import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
+import com.fillbook.growthos.ui.theme.Warning
 import java.io.File
 
 /**
@@ -444,6 +448,20 @@ private fun openXWithPicture(context: Context, bmp: Bitmap, text: String) {
     // Always through Android's chooser, never straight into the X app: a direct launch lets the phone remember a pick (X offers "Post" and
     // "Chat" as separate targets) and then reuse it every time. The chooser has no "always" option, so the owner picks Post each time.
     context.startActivity(Intent.createChooser(send, "Post to X with the picture").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
+/** What was checked on this exact draft, right before the owner posts. A failing line is shown in the warning colour, never hidden. */
+@Composable
+internal fun PostReceipt(lines: List<ReceiptLine>) {
+    if (lines.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Text("Checked before you post", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+    lines.forEach { line ->
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(if (line.ok) "\u2713" else "!", style = MaterialTheme.typography.bodySmall, color = if (line.ok) Success else Warning)
+            Text(line.label, style = MaterialTheme.typography.bodySmall, color = if (line.ok) TextSecondary else Warning)
+        }
+    }
 }
 
 /**

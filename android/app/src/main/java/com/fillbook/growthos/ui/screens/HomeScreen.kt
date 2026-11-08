@@ -581,6 +581,7 @@ private fun TodayXPostCard(
                     Spacer(Modifier.height(4.dp))
                     Text(reason, style = MaterialTheme.typography.bodySmall, color = TextTertiary, maxLines = 12, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
+                PostReceipt(post.receipt)
                 post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId, post.previewText) }
             }
             TodayXPostState.RUNNING -> {
@@ -604,6 +605,7 @@ private fun TodayXPostCard(
                     }
                 }
                 // Still offered after opening X: the picture goes with the text through Open X with text + picture, or is saved or shared.
+                PostReceipt(post.receipt)
                 post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId, post.previewText) }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onMarkPosted, enabled = !busy) { Text(if (busy) "Marking..." else "Mark posted") }

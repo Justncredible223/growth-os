@@ -15,7 +15,8 @@ import { SupabaseNotificationRepository } from "../src/notifications/supabaseNot
 import { llmKeySource } from "../src/content/llmKey.js";
 import { breakdownCostEvents, getTodaySpendUsd, selectCostEvents, selectCostEventsResult, sumCostUsd } from "../src/cost/costTracking.js";
 import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
-import { buildXPostImageCard } from "../src/content/xPostImageCard.js";
+import { buildXPostImageCard, type XPostImageCard } from "../src/content/xPostImageCard.js";
+import { buildPostReceipt, type ReceiptItem } from "../src/content/xPostReceipt.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
 import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
 import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
@@ -324,6 +325,34 @@ export async function computeTodayXPostView(client: SupabaseClient, now: Date): 
   }
 }
 
+/** What was checked on this draft (xPostReceipt.ts): the saved reviewer verdicts for its latest version plus the mechanical checks. Never throws: a lookup failure just means no receipt. */
+async function buildReceiptFor(
+  client: SupabaseClient,
+  runRepo: SupabaseXFeedPostRunRepository,
+  campaignAssetId: string,
+  text: string,
+  imageCard: XPostImageCard | null,
+  operatingDate: string,
+): Promise<ReceiptItem[] | null> {
+  try {
+    const { data: version } = await client.from("content_versions").select("id").eq("campaign_asset_id", campaignAssetId).order("version", { ascending: false }).limit(1).maybeSingle();
+    let passed = 0;
+    let total = 0;
+    if (version) {
+      const { data: scores } = await client.from("content_scores").select("verdict").eq("content_version_id", (version as { id: string }).id);
+      for (const row of (scores ?? []) as Array<{ verdict: string }>) {
+        total++;
+        if (row.verdict === "pass") passed++;
+      }
+    }
+    const since = new Date(new Date(`${operatingDate}T00:00:00Z`).getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const recent = (await runRepo.listRecentRuns(since)).filter((r) => r.operatingDate < operatingDate && r.postedText).map((r) => r.postedText as string);
+    return buildPostReceipt({ text, reviewersPassed: passed, reviewersTotal: total, recentPostedTexts: recent, imageCard });
+  } catch {
+    return null;
+  }
+}
+
 async function computeTodayXPostViewOrThrow(client: SupabaseClient, now: Date): Promise<TodayXPostView> {
   const operatingDate = getOperatingDate(now, getScheduleTimezone());
   const runRepo = new SupabaseXFeedPostRunRepository(client);
@@ -365,7 +394,8 @@ async function computeTodayXPostViewOrThrow(client: SupabaseClient, now: Date): 
   const view = deriveTodayXPostView(run, asset?.stage ?? null, dismissed, previewText);
   // The picture for the post (xPostImageCard.ts): content only, drawn by the phone app. Null when off or when a figure cannot be traced to the post.
   const imageCard = view.previewText ? buildXPostImageCard(run.topicKey, view.previewText) : null;
-  return imageCard ? { ...view, imageCard } : view;
+  const receipt = view.previewText ? await buildReceiptFor(client, runRepo, run.campaignAssetId, view.previewText, imageCard, operatingDate) : null;
+  return { ...view, ...(imageCard ? { imageCard } : {}), ...(receipt ? { receipt } : {}) };
 }
 
 /**

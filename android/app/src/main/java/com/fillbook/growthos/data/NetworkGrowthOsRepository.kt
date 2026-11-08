@@ -204,6 +204,7 @@ class NetworkGrowthOsRepository(
             selectionReason = optStringOrNull("selectionReason"),
             canRegenerate = optBoolean("canRegenerate", false),
             imageCard = optJSONObject("imageCard")?.toXPostImageCard(),
+            receipt = optJSONArray("receipt")?.map { ReceiptLine(it.optString("label"), it.optBoolean("ok", false)) } ?: emptyList(),
         )
     }
 
