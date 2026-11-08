@@ -1,4 +1,4 @@
-import { REFERENCE_TOPICS, headlineFromPost, numbersInPost } from "./xFeedPostExtras.js";
+import { REFERENCE_TOPICS, numbersInPost } from "./xFeedPostExtras.js";
 
 /**
  * The picture for Today's X Post (owner direction 2026-11-08: the owner's standing rule is that every X post carries a custom image,
@@ -65,6 +65,21 @@ const REFERENCE_CARDS: Record<string, Omit<XPostImageCard, "version" | "kind" | 
   },
 };
 
+/** A headline longer than this is cut at a word boundary (the phone app wraps and shrinks anything up to it onto the card). */
+export const CARD_HEADLINE_MAX = 150;
+
+/**
+ * The card headline: the post's first sentence, whole when it fits. headlineFromPost cut at 70 characters, which on a card read as a
+ * sentence chopped mid-clause ("...give it all back, a..."). Never reworded; if it must be cut it ends at a word with an ellipsis.
+ */
+export function cardHeadline(text: string): string {
+  const first = (text.split(/\n/).find((l) => l.trim().length > 0) ?? "").trim();
+  const sentence = first.split(/(?<=[.!?])\s/)[0] ?? first;
+  if (sentence.length <= CARD_HEADLINE_MAX) return sentence;
+  const cut = sentence.slice(0, CARD_HEADLINE_MAX - 3);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1)).trimEnd().replace(/[,;:]$/, "")}...`;
+}
+
 /** Every digit run in a string, as written ("$1,500" gives "1,500"). */
 function digitRuns(text: string): string[] {
   return text.match(/\d[\d,]*(?:\.\d+)?/g) ?? [];
@@ -96,7 +111,7 @@ export function buildXPostImageCard(
     return { version: 1, kind: "reference", ...fixed, numbers: [], sampleData: false };
   }
 
-  const headline = headlineFromPost(text);
+  const headline = cardHeadline(text);
   if (!headline) return null;
   const numbers = numbersInPost(text).slice(0, 3);
   const card: XPostImageCard = { version: 1, kind: "post", title: headline, rows: [], numbers, sampleData: numbers.length > 0 };
