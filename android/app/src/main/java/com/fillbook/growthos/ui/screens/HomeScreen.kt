@@ -578,6 +578,7 @@ private fun TodayXPostCard(
                     Spacer(Modifier.height(4.dp))
                     Text(reason, style = MaterialTheme.typography.bodySmall, color = TextTertiary, maxLines = 12, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
+                post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId) }
             }
             TodayXPostState.RUNNING -> {
                 Spacer(Modifier.height(4.dp))
@@ -586,6 +587,8 @@ private fun TodayXPostCard(
             TodayXPostState.HANDED_OFF -> {
                 Spacer(Modifier.height(4.dp))
                 Text("You already opened X with this draft today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                // Still offered after opening X: the image is attached by hand in the composer.
+                post.imageCard?.let { XPostImageCardSection(it, post.campaignAssetId) }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onMarkPosted, enabled = !busy) { Text(if (busy) "Marking..." else "Mark posted") }
             }

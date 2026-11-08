@@ -1,3 +1,4 @@
+import type { XPostImageCard } from "./xPostImageCard.js";
 import type { CampaignFactory } from "./campaignFactory.js";
 import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { LlmClient, LlmUsage } from "./llmClient.js";
@@ -1172,6 +1173,8 @@ export interface TodayXPostView {
   selectionReason?: string;
   /** True when a Regenerate action should be offered (a failed attempt, or a post the owner explicitly dismissed today). */
   canRegenerate: boolean;
+  /** The picture for the post: what it says (the phone app draws it). Absent when switched off or when no safe card exists. See xPostImageCard.ts. */
+  imageCard?: XPostImageCard;
 }
 
 /**

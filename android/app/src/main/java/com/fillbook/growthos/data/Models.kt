@@ -192,6 +192,20 @@ data class TodayXPost(
     /** Why this angle was selected over the other candidates actually compared for today -- see backend's selectFeedPostAngle. Null for a run created before this field existed, or when not yet generated. */
     val selectionReason: String? = null,
     val canRegenerate: Boolean = false,
+    /** What the post's picture says (backend xPostImageCard.ts); the app draws it. Null when switched off or no safe card exists. */
+    val imageCard: XPostImageCard? = null,
+)
+
+data class XPostImageCardRow(val label: String, val note: String?)
+
+/** Content of the X post picture. "post" = headline card, "reference" = fixed Wednesday card. Numbers are copied verbatim from the post (checked on the backend). */
+data class XPostImageCard(
+    val kind: String,
+    val title: String,
+    val rows: List<XPostImageCardRow>,
+    val numbers: List<String>,
+    val sampleData: Boolean,
+    val footer: String?,
 )
 
 enum class XFeedPostHistoryState { UNPOSTED_DRAFT, POSTED, FAILED }

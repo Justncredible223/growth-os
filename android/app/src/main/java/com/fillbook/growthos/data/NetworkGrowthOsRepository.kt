@@ -203,6 +203,19 @@ class NetworkGrowthOsRepository(
             reason = optStringOrNull("reason"),
             selectionReason = optStringOrNull("selectionReason"),
             canRegenerate = optBoolean("canRegenerate", false),
+            imageCard = optJSONObject("imageCard")?.toXPostImageCard(),
+        )
+    }
+
+    private fun JSONObject.toXPostImageCard(): XPostImageCard? {
+        val title = optStringOrNull("title") ?: return null
+        return XPostImageCard(
+            kind = optStringOrNull("kind") ?: "post",
+            title = title,
+            rows = optJSONArray("rows")?.map { XPostImageCardRow(it.optString("label"), it.optStringOrNull("note")) } ?: emptyList(),
+            numbers = optJSONArray("numbers")?.mapStrings() ?: emptyList(),
+            sampleData = optBoolean("sampleData", false),
+            footer = optStringOrNull("footer"),
         )
     }
 
