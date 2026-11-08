@@ -21,13 +21,14 @@ second. Marketing's organic numbers say a hook-first opening about doubled the s
   rulebook was checked (only Earn2Trade has been re-verified), any advice or signal.
 - Product shows up as the last 2 seconds, a short caption mention and a pinned comment. Pinned comment template (always sample data):
   "Illustration, not a recommendation. Fillbook is a journal: log your own trades and check them against your own rules."
-- One post a day at most. Series name on every video so viewers expect the next one.
+- One post a day at most. Series name on every video: **Chart Moment**, so viewers expect the next one.
+- Posting policy (Marketing): the owner posts by hand or signs off the exact file and caption first; Metricool is TikTok and YouTube only, capped at 20 posts a month and 1 a day, and the first TikTok has autoPublish off. 7 concepts x 3 openings is 21 videos, so they run over several weeks and stay under the cap. Nothing is scheduled before the owner's sign-off.
 
 ## First seven concepts (hook max 7 words and 34 characters; same chart art, so no new drawing work)
 
 | # | Chart scenario | Hook (first frame) | Payoff line | Closing question |
 |---|---|---|---|---|
-| 1 | orbBreak | Closed outside the range. Then? | This one ran after a close outside. | Would your plan have taken it? |
+| 1 | orbBreak | Closed outside the range. Then? | This one ran. The next might not. | Would your plan have taken it? |
 | 2 | orbFake | Broke the high. Then it didn't. | The close came back inside. Stop hit. Small loss. | Where was your stop? |
 | 3 | vwapPullback | Pulled back to VWAP. Held? | It held. Then the first push. | Did you wait for the hold? |
 | 4 | vwapChop | VWAP crossed 8 times. Trend? | No trend. Eight crosses is chop. | Do you trade the chop? |
@@ -46,12 +47,12 @@ claim about traders; ends with "check your firm's rulebook"; the 34-character li
 
 ## Voice and cost
 
-Checklist before posting: the TikTok "AI-generated content" label is on for every video narrated with the cloned voice (owner rule).
+Checklist before posting: the TikTok "AI-generated content" label is on for EVERY video narrated with the cloned voice, confirmed in the pre-post check (owner rule).
 
 Short videos need about 30 spoken words each. They are recorded in ElevenLabs by Marketing only after the owner's explicit credits OK
 and Site Work's page-facts check. Narration lines are one sentence each, as in the strategy videos, so one take can be cut at pauses.
 
-## How we judge it (Marketing pulls the numbers; Metricool or TikTok Studio; counts only)
+## How we judge it (Marketing reads the numbers from TikTok Studio, read-only, counts only; Metricool is for scheduling only)
 
 Per video, log: hook, first-frame text, length, **organic** average watch time, **share watched fully at 24 hours**, shares, saves,
 new followers. Run each hook three times with a different opening before judging (small sample). Win = a video beats 619 views, or beats
