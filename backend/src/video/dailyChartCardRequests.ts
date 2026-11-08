@@ -50,7 +50,7 @@ export function isVideoRequestDay(now: Date, days: readonly number[] = VIDEO_REQ
 export const STRATEGY_FIRST_BASELINE = { strategy: 3, explainer: 6 } as const;
 export const STRATEGY_PER_EXPLAINER = 3;
 
-const isStrategyConcept = (id: string): boolean => id.startsWith("strategy-");
+const isStrategyConcept = (id: string): boolean => id.startsWith("strategy-") || id.startsWith("chartmoment-");
 
 /** `unused` (already in day order) reordered for requesting: strategy first, an explainer when one is due or no strategy concept is left. */
 export function requestOrder<T extends { id: string }>(unused: readonly T[], usedIds: readonly string[]): T[] {

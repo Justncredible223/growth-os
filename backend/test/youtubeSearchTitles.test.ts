@@ -54,7 +54,7 @@ describe("search-style YouTube description", () => {
   it("every concept's description keeps the demo-data line, and a strategy video says its charts are illustrations instead", () => {
     for (const p of MOTION_SCENE_PLANS) {
       const d = buildVideoScriptFromScenePlan(p).youtubeDescription;
-      if (p.planId.startsWith("strategy-")) {
+      if (p.planId.startsWith("strategy-") || p.planId.startsWith("chartmoment-")) {
         expect(d, p.planId).toContain("drawn illustration, not a real market and not a recommendation");
         expect(d, p.planId).not.toMatch(/demo data/i);
       } else expect(d, p.planId).toContain("demo data from a sample Fillbook account");

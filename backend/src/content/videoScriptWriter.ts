@@ -537,7 +537,7 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
   // Tags by the video's own topic (owner request 2026-10-17); they were the same three on every video.
   const hashtags = videoHashtags(title, topic);
-  if (plan.planId.startsWith("strategy-")) {
+  if (plan.planId.startsWith("strategy-") || plan.planId.startsWith("chartmoment-")) {
     // A strategy video (strategyVideos.ts) shows drawn illustrations, not an account's data: its own title is already the search
     // phrase, and every caption says the charts are illustrations and not a recommendation.
     const illustration = "Every chart is a drawn illustration, not a real market and not a recommendation.";

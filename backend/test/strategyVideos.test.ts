@@ -113,3 +113,31 @@ describe("closing card names one Fillbook view (2026-10-24)", () => {
   });
 });
 
+
+describe("chart-moment series (first batch)", () => {
+  it("builds three short plans of three cards, each a cut of an existing strategy chart, with their own plan ids", async () => {
+    const { CHART_MOMENT_PILOTS, CHART_MOMENTS, isChartMomentPlan } = await import("../src/shortform/strategyVideos");
+    expect(CHART_MOMENT_PILOTS).toHaveLength(3);
+    expect(CHART_MOMENT_PILOTS.map((p) => p.planId)).toEqual(["chartmoment-01-orb-close", "chartmoment-02-orb-fake", "chartmoment-03-vwap-hold"]);
+    for (const p of CHART_MOMENT_PILOTS) {
+      expect(isChartMomentPlan(p)).toBe(true);
+      expect(p.scenes).toHaveLength(3);
+      expect(p.scenes[0]!.teach?.chart).toBeDefined();
+      expect(p.scenes[1]!.teach?.chart).toBeDefined();
+      for (const s of p.scenes) expect(s.captionText).toBe("Illustration, not a recommendation.");
+      expect(p.scenes[0]!.headline.length).toBeLessThanOrEqual(34);
+      expect(p.scenes[0]!.headline.split(/\s+/).length).toBeLessThanOrEqual(7);
+    }
+    expect(CHART_MOMENTS.map((c) => c.hook.say)).toEqual([
+      "The price closed outside the range. Then what happened?",
+      "It broke the high, and then it did not hold.",
+      "Price pulled back to VWAP. Did it hold?",
+    ]);
+  });
+
+  it("never states a rule or a statistic as fact, and never says a stop protects anyone", async () => {
+    const { CHART_MOMENT_PILOTS } = await import("../src/shortform/strategyVideos");
+    const spoken = CHART_MOMENT_PILOTS.flatMap((p) => p.scenes.map((s) => s.narration)).join(" ").toLowerCase();
+    expect(spoken).not.toMatch(/\b(always|never|guarantee|proven|often|most traders|works|protect)/);
+  });
+});
