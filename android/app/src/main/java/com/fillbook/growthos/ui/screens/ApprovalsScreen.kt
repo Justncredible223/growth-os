@@ -411,7 +411,7 @@ private fun ApprovalCard(
             Spacer(Modifier.height(8.dp))
             InsetRow {
                 Column {
-                    Text("From Fillbook HQ (information only)", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                    Text("From the HQ agents (information only)", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
                     val revisions = if (note.revisionCount == 1) "1 revision" else "${note.revisionCount} revisions"
                     Text("HQ check: ${note.verdict}, $revisions", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     if (note.deskReason.isNotBlank()) Text(note.deskReason, style = MaterialTheme.typography.bodySmall, color = TextSecondary)

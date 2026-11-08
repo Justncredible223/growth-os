@@ -63,7 +63,7 @@ data class ApprovalAsset(
     /** The daily concept behind a motion video draft and its day (1-30); null for any other draft. */
     val conceptTitle: String? = null,
     val conceptDay: Int? = null,
-    /** Fillbook HQ drafts only (api/hq-handoff): HQ's verdict, desk reason and picture brief, shown as information. HQ never approves anything. */
+    /** HQ-agent drafts only (api/hq-handoff): HQ's verdict, desk reason and picture brief, shown as information. HQ never approves anything. */
     val hqNote: HqNote? = null,
     /** The picture card for an X post (same card Today's X Post shows); null when there is nothing safe to show. */
     val imageCard: XPostImageCard? = null,
