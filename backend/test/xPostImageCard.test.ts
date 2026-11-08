@@ -64,3 +64,23 @@ describe("cardHeadline", () => {
     expect(h.replace("...", "").trim().split(" ").every((w) => w === "word")).toBe(true);
   });
 });
+
+describe("topic motif (Risk Blueprint theme)", () => {
+  it("picks a motif by rule from the post text, never from a model", async () => {
+    const { motifForPost } = await import("../src/content/xPostImageCard");
+    expect(motifForPost("Your Edge Score is one number for five parts.")).toBe("edge_score");
+    expect(motifForPost("Trailing drawdown only moves up.")).toBe("drawdown");
+    expect(motifForPost("Hit the daily loss limit and you are done.")).toBe("loss_limit");
+    expect(motifForPost("Five numbers before a payout request.")).toBe("payout");
+    expect(motifForPost("One big day can break the consistency rule.")).toBe("consistency");
+    expect(motifForPost("Trade fewer contracts than you think.")).toBe("sizing");
+    expect(motifForPost("Journal two lines after each session.")).toBe("journal");
+    expect(motifForPost("Markets are open Monday.")).toBe("target");
+  });
+
+  it("a post card carries its motif, and the motif adds no words or numbers", () => {
+    const card = buildXPostImageCard("drawdown", "Trailing drawdown only moves up when you make new highs.", {})!;
+    expect(card.motif).toBe("drawdown");
+    expect(card.numbers).toEqual([]);
+  });
+});

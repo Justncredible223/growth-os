@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Build
 import android.provider.MediaStore
@@ -55,10 +56,15 @@ private const val SAFE_TOP = 150f
 private const val SAFE_BOTTOM = 560f
 
 private val BG = Color.parseColor("#0B1220")
-private val INK = Color.parseColor("#F4F7FB")
-private val MUTED = Color.parseColor("#9AA7BD")
-private val CYAN = Color.parseColor("#3DD6F5")
-private val AMBER = Color.parseColor("#F5B83D")
+private val PANEL = Color.parseColor("#141F30")
+private val GRID = Color.parseColor("#1B2A3E")
+private val INK = Color.parseColor("#F1F5F9")
+private val MUTED = Color.parseColor("#94A3B8")
+private val CYAN = Color.parseColor("#22D3EE")
+private val AMBER = Color.parseColor("#FBBF24")
+private val GREEN = Color.parseColor("#34D399")
+private val COPPER = Color.parseColor("#C98A5A")
+private val EVERGREEN = Color.parseColor("#2F8F6B")
 
 private fun paint(size: Float, color: Int, bold: Boolean = false, spacing: Float = 0f) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
     textSize = size
@@ -79,11 +85,167 @@ private fun Canvas.drawLayout(l: StaticLayout, x: Float, y: Float) {
     save(); translate(x, y); l.draw(this); restore()
 }
 
+
+// ---- Theme "Risk Blueprint" (ChatGPT + Gemini, 2026-11-08): faint grid, brand mark, headline on the left 60%, a topic illustration on
+// the right 40%, figures under the headline, a small seasonal accent. The illustration is built from simple shapes only: no words, no
+// numbers, nothing that could state more than the post does. The seasonal accent is under 5% of the card and sits in a corner.
+
+private fun stroke(color: Int, width: Float, round: Boolean = true) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    this.color = color
+    style = Paint.Style.STROKE
+    strokeWidth = width
+    if (round) { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+}
+
+private fun fill(color: Int) = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color; style = Paint.Style.FILL }
+
+private fun Canvas.drawBlueprintBackdrop() {
+    val p = stroke(GRID, 1.5f, round = false)
+    var x = 0f
+    while (x <= CARD_W) { drawLine(x, 0f, x, CARD_H.toFloat(), p); x += 60f }
+    var y = 0f
+    while (y <= CARD_H) { drawLine(0f, y, CARD_W.toFloat(), y, p); y += 60f }
+}
+
+/** The month's accent: Oct amber spark (Halloween), Nov copper leaf (Thanksgiving), Dec evergreen corner, Jan cyan arcs, Mar-Apr amber calendar grid. */
+private fun Canvas.drawSeasonalAccent(month: Int) {
+    val x0 = CARD_W - 150f
+    val y0 = CARD_H - 135f
+    when (month) {
+        10 -> { // amber spark
+            val p = stroke(AMBER, 5f)
+            val cx = x0 + 60f; val cy = y0 + 55f
+            drawLine(cx, cy - 36f, cx, cy + 36f, p); drawLine(cx - 36f, cy, cx + 36f, cy, p)
+            drawLine(cx - 22f, cy - 22f, cx + 22f, cy + 22f, p); drawLine(cx - 22f, cy + 22f, cx + 22f, cy - 22f, p)
+        }
+        11 -> { // copper leaf outline
+            val path = android.graphics.Path().apply {
+                moveTo(x0 + 20f, y0 + 90f)
+                quadTo(x0 + 10f, y0 + 20f, x0 + 90f, y0 + 10f)
+                quadTo(x0 + 100f, y0 + 80f, x0 + 20f, y0 + 90f)
+                close()
+            }
+            drawPath(path, stroke(COPPER, 5f))
+            drawLine(x0 + 20f, y0 + 90f, x0 + 70f, y0 + 35f, stroke(COPPER, 4f))
+        }
+        12 -> { // restrained evergreen corner
+            val p = stroke(EVERGREEN, 5f)
+            drawLine(CARD_W - 40f, CARD_H - 120f, CARD_W - 40f, CARD_H - 40f, p)
+            drawLine(CARD_W - 120f, CARD_H - 40f, CARD_W - 40f, CARD_H - 40f, p)
+            drawLine(CARD_W - 40f, CARD_H - 120f, CARD_W - 100f, CARD_H - 60f, p)
+        }
+        1 -> { // thin cyan arcs
+            val p = stroke(CYAN, 4f)
+            drawArc(RectF(x0, y0, x0 + 110f, y0 + 110f), 180f, 90f, false, p)
+            drawArc(RectF(x0 + 22f, y0 + 22f, x0 + 88f, y0 + 88f), 180f, 90f, false, p)
+        }
+        3, 4 -> { // understated amber calendar grid
+            val p = stroke(AMBER, 3f)
+            val gx = x0 + 20f; val gy = y0 + 20f
+            drawRect(gx, gy, gx + 90f, gy + 78f, p)
+            drawLine(gx, gy + 22f, gx + 90f, gy + 22f, p)
+            drawLine(gx + 30f, gy + 22f, gx + 30f, gy + 78f, p); drawLine(gx + 60f, gy + 22f, gx + 60f, gy + 78f, p)
+            drawLine(gx, gy + 50f, gx + 90f, gy + 50f, p)
+        }
+        else -> {}
+    }
+}
+
+/** Draws the topic illustration into the box (left, top, width, height). Shapes only. */
+private fun Canvas.drawMotif(motif: String?, left: Float, top: Float, w: Float, h: Float) {
+    val panel = RectF(left, top, left + w, top + h)
+    drawRoundRect(panel, 18f, 18f, fill(PANEL))
+    drawRoundRect(panel, 18f, 18f, stroke(GRID, 3f))
+    val pad = 34f
+    val l = left + pad; val t = top + pad; val r = left + w - pad; val b = top + h - pad
+    val iw = r - l; val ih = b - t
+    when (motif) {
+        "drawdown" -> { // a stepped, descending line that stops above a dashed floor
+            val line = stroke(CYAN, 8f)
+            val pts = floatArrayOf(l, t + ih * 0.12f, l + iw * 0.25f, t + ih * 0.12f, l + iw * 0.25f, t + ih * 0.35f, l + iw * 0.5f, t + ih * 0.35f,
+                l + iw * 0.5f, t + ih * 0.55f, l + iw * 0.75f, t + ih * 0.55f, l + iw * 0.75f, t + ih * 0.68f, r, t + ih * 0.68f)
+            val path = android.graphics.Path().apply {
+                moveTo(pts[0], pts[1]); var i = 2
+                while (i < pts.size) { lineTo(pts[i], pts[i + 1]); i += 2 }
+            }
+            drawPath(path, line)
+            val dash = stroke(AMBER, 6f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(22f, 14f), 0f) }
+            drawLine(l, b - ih * 0.06f, r, b - ih * 0.06f, dash)
+        }
+        "loss_limit" -> { // a semicircle gauge with a boundary marker
+            val cx = (l + r) / 2f; val cy = b - ih * 0.12f; val rad = minOf(iw / 2f, ih * 0.8f)
+            val oval = RectF(cx - rad, cy - rad, cx + rad, cy + rad)
+            drawArc(oval, 180f, 180f, false, stroke(GRID, 22f, round = false).apply { color = Color.parseColor("#24364B") })
+            drawArc(oval, 180f, 120f, false, stroke(CYAN, 22f, round = false))
+            val ang = Math.toRadians(300.0)
+            val mx = cx + (rad * Math.cos(ang)).toFloat(); val my = cy + (rad * Math.sin(ang)).toFloat()
+            val mx2 = cx + ((rad - 44f) * Math.cos(ang)).toFloat(); val my2 = cy + ((rad - 44f) * Math.sin(ang)).toFloat()
+            drawLine(mx, my, mx2, my2, stroke(AMBER, 9f))
+        }
+        "payout" -> { // stacked checklist panels with a threshold line
+            val rowH = ih / 3.6f
+            for (i in 0 until 3) {
+                val ry = t + i * (rowH + ih * 0.06f)
+                drawRoundRect(RectF(l, ry, r, ry + rowH), 10f, 10f, stroke(MUTED, 3f))
+                drawRoundRect(RectF(l + 14f, ry + rowH * 0.28f, l + 14f + rowH * 0.44f, ry + rowH * 0.72f), 6f, 6f, if (i < 2) fill(GREEN) else stroke(MUTED, 3f))
+                drawLine(l + 14f + rowH * 0.7f, ry + rowH / 2f, r - 20f, ry + rowH / 2f, stroke(MUTED, 5f))
+            }
+            val dash = stroke(AMBER, 5f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(16f, 12f), 0f) }
+            drawLine(l, b, r, b, dash)
+        }
+        "consistency" -> { // near-equal bars, one slightly taller
+            val n = 5; val gap = 16f; val bw = (iw - gap * (n - 1)) / n
+            val heights = floatArrayOf(0.62f, 0.7f, 0.66f, 0.88f, 0.6f)
+            for (i in 0 until n) {
+                val bx = l + i * (bw + gap); val bh = ih * heights[i]
+                drawRoundRect(RectF(bx, b - bh, bx + bw, b), 6f, 6f, fill(if (i == 3) AMBER else CYAN))
+            }
+            drawLine(l, b, r, b, stroke(MUTED, 4f))
+        }
+        "sizing" -> { // contract blocks growing in size
+            val sizes = floatArrayOf(0.28f, 0.45f, 0.65f)
+            var bx = l
+            for (s in sizes) {
+                val side = ih * s
+                drawRoundRect(RectF(bx, b - side, bx + side, b), 8f, 8f, fill(CYAN))
+                bx += side + 18f
+            }
+            drawLine(l, b, r, b, stroke(MUTED, 4f))
+        }
+        "edge_score" -> { // five connected nodes
+            val cx = (l + r) / 2f; val cy = (t + b) / 2f; val rad = minOf(iw, ih) * 0.42f
+            val pts = (0 until 5).map { i ->
+                val a = Math.toRadians(-90.0 + i * 72.0)
+                Pair(cx + (rad * Math.cos(a)).toFloat(), cy + (rad * Math.sin(a)).toFloat())
+            }
+            val edge = stroke(MUTED, 4f)
+            for (i in pts.indices) { val a = pts[i]; val nb = pts[(i + 1) % 5]; drawLine(a.first, a.second, nb.first, nb.second, edge) }
+            pts.forEachIndexed { i, p -> drawCircle(p.first, p.second, if (i == 0) 20f else 16f, fill(if (i == 0) AMBER else CYAN)) }
+        }
+        "journal" -> { // a timeline with entry markers
+            val cy = (t + b) / 2f
+            drawLine(l, cy, r, cy, stroke(MUTED, 5f))
+            for (i in 0 until 5) {
+                val mx = l + iw * (i / 4f)
+                drawCircle(mx, cy, if (i == 3) 18f else 14f, fill(if (i == 3) AMBER else CYAN))
+                drawLine(mx, cy - ih * 0.22f, mx, cy - 24f, stroke(MUTED, 4f))
+            }
+        }
+        else -> { // target: concentric rings (also the fallback)
+            val cx = (l + r) / 2f; val cy = (t + b) / 2f; val rad = minOf(iw, ih) * 0.46f
+            drawCircle(cx, cy, rad, stroke(MUTED, 5f))
+            drawCircle(cx, cy, rad * 0.66f, stroke(CYAN, 6f))
+            drawCircle(cx, cy, rad * 0.32f, fill(AMBER))
+        }
+    }
+}
+
 /** Draws the card to a bitmap. Pure drawing: text wraps and shrinks to fit, nothing is added or changed. */
 fun renderXPostImageCard(card: XPostImageCard): Bitmap {
     val bmp = Bitmap.createBitmap(CARD_W, CARD_H, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     c.drawColor(BG)
+    c.drawBlueprintBackdrop()
     val textW = (CARD_W - 2 * MARGIN_X).toInt()
 
     // Brand mark, top-left (inside the safe zone).
@@ -113,25 +275,34 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
         }
     } else {
         // Headline card: shrink the headline until headline + figures fit the safe zone.
-        val sizes = listOf(66f, 58f, 50f, 44f, 40f)
-        var headline = layoutOf(card.title, paint(sizes.last(), INK, bold = true), textW)
+        // Left 60% holds the headline and the figures; the topic illustration sits in the right 40% so it never sits under the words.
+        val leftW = 640
+        val sizes = listOf(56f, 50f, 44f, 40f, 36f)
+        var headline = layoutOf(card.title, paint(sizes.last(), INK, bold = true), leftW)
         for (s in sizes) {
-            val l = layoutOf(card.title, paint(s, INK, bold = true), textW, 5)
+            val l = layoutOf(card.title, paint(s, INK, bold = true), leftW, 7)
             val figures = if (card.numbers.isNotEmpty()) 36f + 104f else 0f
             headline = l
             if (l.height + figures <= SAFE_BOTTOM - SAFE_TOP) break
         }
+        c.drawMotif(card.motif, 790f, SAFE_TOP - 10f, 300f, SAFE_BOTTOM - SAFE_TOP + 10f)
         c.drawLayout(headline, MARGIN_X, SAFE_TOP)
         if (card.numbers.isNotEmpty()) {
-            val figP = paint(96f, CYAN, bold = true)
+            var figSize = 96f
+            val figGap = 40f
+            // Shrink the row of figures until it fits the left column.
+            while (figSize > 48f && card.numbers.sumOf { paint(figSize, CYAN, bold = true).measureText(it).toDouble() } + figGap * (card.numbers.size - 1) > leftW) figSize -= 6f
+            val figP = paint(figSize, CYAN, bold = true)
             var x = MARGIN_X
             val y = SAFE_TOP + headline.height + 36f + 90f
             card.numbers.forEach { n ->
                 c.drawText(n, x, y, figP)
-                x += figP.measureText(n) + 56f
+                x += figP.measureText(n) + figGap
             }
         }
     }
+
+    c.drawSeasonalAccent(java.time.LocalDate.now().monthValue)
 
     // Illustrative figures always carry the label (owner rule).
     if (card.sampleData) {
