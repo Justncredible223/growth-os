@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REFERENCE_TOPICS } from "../src/content/xFeedPostExtras";
-import { buildXPostImageCard, cardNumbersTraceToPost, xPostImageCardEnabled, type XPostImageCard } from "../src/content/xPostImageCard";
+import { buildXPostImageCard, cardHeadline, cardNumbersTraceToPost, xPostImageCardEnabled, type XPostImageCard } from "../src/content/xPostImageCard";
 
 const POST = "Intraday trailing: run a trade to +$1,500 open, give it all back, and your floor can still move up $1,500.\n\nFillbook shows the buffer from your synced trades.";
 
@@ -46,5 +46,21 @@ describe("buildXPostImageCard (deterministic: no model writes anything on the ca
   it("empty text gives no card", () => {
     expect(buildXPostImageCard("drawdown", "   ", {})).toBeNull();
     expect(buildXPostImageCard("drawdown", null, {})).toBeNull();
+  });
+});
+
+describe("cardHeadline", () => {
+  it("keeps a whole first sentence that fits on the card instead of chopping it at 70 characters", () => {
+    const h = cardHeadline(POST);
+    expect(h).toBe("Intraday trailing: run a trade to +$1,500 open, give it all back, and your floor can still move up $1,500.");
+    expect(h.endsWith("...")).toBe(false);
+  });
+
+  it("a very long sentence is cut at a word, never mid-word, with an ellipsis", () => {
+    const long = `${"word ".repeat(60).trim()}.`;
+    const h = cardHeadline(long);
+    expect(h.length).toBeLessThanOrEqual(150);
+    expect(h.endsWith("...")).toBe(true);
+    expect(h.replace("...", "").trim().split(" ").every((w) => w === "word")).toBe(true);
   });
 });
