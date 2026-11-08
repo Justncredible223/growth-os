@@ -55,7 +55,7 @@ function strategyChartOf(plan: ScenePlan): StrategyChartSpec | null {
 
 export function thumbnailSpecFor(plan: ScenePlan): ThumbnailSpec {
   const headline = clean(plan.hook);
-  const isStrategy = plan.planId.startsWith("strategy-");
+  const isStrategy = plan.planId.startsWith("strategy-") || plan.planId.startsWith("chartmoment-");
   const mock = plan.scenes.find((s) => s.chart?.kind === "mock")?.chart;
   const tag = isStrategy ? "STRATEGY" : plan.series === "Explained" ? "EXPLAINED" : "FILLBOOK";
   const accent: ThumbnailSpec["accent"] = isStrategy ? "cyan" : mock?.accent === "bad" ? "bad" : mock?.accent === "good" ? "good" : "cyan";

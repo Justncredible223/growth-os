@@ -12,7 +12,7 @@ import { FRESH_PILOTS } from "./freshConcepts.js";
 import { FRESH2_PILOTS } from "./freshConcepts2.js";
 import { RECORDING_PILOTS } from "./freshRecordingConcepts.js";
 import { EXPLAINERS_OFFERED, EXPLAINER_PILOTS, isExplainerPlan } from "./explainers.js";
-import { STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
+import { CHART_MOMENT_PILOTS, STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
 
 /**
  * Every verified ScenePlan a motion concept can be requested for: the original pilots plus the payoff redesign
@@ -20,7 +20,7 @@ import { STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
  * "Create Fillbook Video" list and the render worker use) and the campaign pipeline (which drafts the script)
  * resolve a concept id against, so they can never disagree about what exists.
  */
-export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS, ...EXPLAINER_PILOTS, ...STRATEGY_PILOTS];
+export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS, ...EXPLAINER_PILOTS, ...STRATEGY_PILOTS, ...CHART_MOMENT_PILOTS];
 
 /**
  * True when this plan is a chart card (the "chart" layout). Since 2026-10-01 these are the only concepts the app offers

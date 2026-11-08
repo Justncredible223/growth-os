@@ -313,3 +313,103 @@ export const STRATEGY_ORDER: string[] = STRATEGY_PILOTS.map((p) => p.planId);
 
 /** The order the strategy videos go out in (every third day): the four setups rotated, so no setup runs twice in a row. */
 export const STRATEGY_DAY_ORDER: readonly string[] = [1, 4, 6, 9, 2, 5, 7, 10, 3, 8].map((n) => STRATEGY_ORDER[n - 1]!);
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Chart-moment series (team decision 2026-11-08, docs/CHART_MOMENT_SERIES.md): three cards of about 4.5 seconds each, cut from the
+// same drawn charts as the strategy videos. Card 1 is the hook (the question or the cut-off outcome, chart already moving), card 2
+// the payoff (the chart finishes, one plain line that describes the drawing and never states a rule or a statistic), card 3 the
+// closing question and the Fillbook card (sample data; the same verified view line as the strategy video it comes from).
+// Wording rules from HQ's review: no "this setup works", no unsourced statistic, a stop is never described as protecting anyone.
+// ---------------------------------------------------------------------------------------------------------------------------------
+const CHART_MOMENT_PREFIX = "chartmoment";
+const ILLUSTRATION_CAPTION = "Illustration, not a recommendation.";
+
+export interface ChartMomentInput {
+  slug: string;
+  /** The strategy video (STRATEGIES slug) whose drawn chart and verified Fillbook view line this cut uses. */
+  from: string;
+  /** Beat indexes of that strategy video: the hook card's chart and the payoff card's chart. */
+  hookBeat: number;
+  payoffBeat: number;
+  title: string;
+  topic: string;
+  /** Up to 7 words and 34 characters; the first frame. */
+  hook: { headline: string; say: string };
+  payoff: { headline: string; say: string };
+  close: { headline: string; say: string };
+}
+
+export function buildChartMoment(n: number, input: ChartMomentInput): ScenePlan {
+  const base = STRATEGIES.find((s) => s.slug === input.from);
+  if (!base) throw new Error(`chart moment ${input.slug}: unknown strategy video ${input.from}`);
+  const id = String(n).padStart(2, "0");
+  const variationId = `${CHART_MOMENT_PREFIX}-${id}`;
+  const beat = (b: { headline: string; say: string }, src: StrategyBeat, take: string): StrategyBeat => ({ step: "", headline: b.headline, caption: ILLUSTRATION_CAPTION, say: b.say, take, ...(src.chart ? { chart: src.chart } : {}) });
+  const hook = beat(input.hook, base.beats[input.hookBeat]!, "A chart moment, drawn.");
+  const payoff = beat(input.payoff, base.beats[input.payoffBeat]!, "What the drawing shows.");
+  const scenes = [
+    scene(variationId, 1, hook, base.scenario, null),
+    scene(variationId, 2, payoff, base.scenario, null),
+    scene(variationId, 3, { step: "Your turn", headline: input.close.headline, caption: ILLUSTRATION_CAPTION, say: input.close.say, take: "A question for your own plan." }, base.scenario, closingCta(base.view)),
+  ];
+  return {
+    planId: `${CHART_MOMENT_PREFIX}-${id}-${input.slug}`,
+    title: input.title,
+    series: EXPLAINER_SERIES,
+    topic: input.topic,
+    hook: input.hook.headline,
+    experimentId: PILOT_EXPERIMENT_ID,
+    variationId,
+    platforms: ["tiktok", "youtube_shorts"],
+    voice: "ElevenLabs supplied recording; fallback en-US-AndrewNeural at +8%",
+    visualStyle: "chart-card-v1",
+    requiredAssets: [],
+    voiceover: "narrated",
+    scenes,
+  };
+}
+
+/** True for a chart-moment video (its scenes are drawn cards cut from a strategy video's charts). */
+export function isChartMomentPlan(plan: ScenePlan): boolean {
+  return plan.planId.startsWith(`${CHART_MOMENT_PREFIX}-`);
+}
+
+/** The first batch (concepts 1 to 3 of the brief). More follow when the team has reviewed the first numbers. */
+export const CHART_MOMENTS: readonly ChartMomentInput[] = [
+  {
+    slug: "orb-close",
+    from: "orb-range-trigger",
+    hookBeat: 0,
+    payoffBeat: 2,
+    title: "Opening range breakout: a close outside the range",
+    topic: "A drawn opening range breakout where a candle closes outside the range, and what the drawing does next",
+    hook: { headline: "Closed outside the range. Then?", say: "The price closed outside the range. Then what happened?" },
+    payoff: { headline: "This one ran.", say: "This one ran. The next might not." },
+    close: { headline: "Would your plan take it?", say: "Would your plan have taken it?" },
+  },
+  {
+    slug: "orb-fake",
+    from: "orb-fake-breakout",
+    hookBeat: 0,
+    payoffBeat: 3,
+    title: "Opening range breakout: back inside one candle later",
+    topic: "A drawn opening range breakout where the next candle closes back inside the range, and a stop that was set in advance",
+    hook: { headline: "Broke the high. Then it didn't.", say: "It broke the high, and then it did not hold." },
+    payoff: { headline: "Back inside. Stop hit.", say: "The close came back inside. The stop was hit, for a small loss." },
+    close: { headline: "Where was your stop?", say: "Where was your stop?" },
+  },
+  {
+    slug: "vwap-hold",
+    from: "vwap-pullback",
+    hookBeat: 0,
+    payoffBeat: 3,
+    title: "VWAP pullback: a hold, drawn",
+    topic: "A drawn pullback to VWAP in a trend, where the price holds and then makes its first push",
+    hook: { headline: "Pulled back to VWAP. Held?", say: "Price pulled back to VWAP. Did it hold?" },
+    payoff: { headline: "It held. Then the push.", say: "It held. Then came the first push." },
+    close: { headline: "Did you wait for the hold?", say: "Did you wait for the hold?" },
+  },
+];
+
+export const CHART_MOMENT_PILOTS: ScenePlan[] = CHART_MOMENTS.map((c, i) => buildChartMoment(i + 1, c));
+export const CHART_MOMENT_ORDER: string[] = CHART_MOMENT_PILOTS.map((p) => p.planId);
