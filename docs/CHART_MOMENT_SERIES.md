@@ -27,21 +27,26 @@ second. Marketing's organic numbers say a hook-first opening about doubled the s
 
 | # | Chart scenario | Hook (first frame) | Payoff line | Closing question |
 |---|---|---|---|---|
-| 1 | orbBreak | Closed outside the range. Then? | It ran. A close, not a wick, was the trigger. | Would your plan have taken it? |
-| 2 | orbFake | Broke the high. Then it didn't. | The close came back inside. The stop did its job. | Where was your stop? |
+| 1 | orbBreak | Closed outside the range. Then? | This one ran after a close outside. | Would your plan have taken it? |
+| 2 | orbFake | Broke the high. Then it didn't. | The close came back inside. Stop hit. Small loss. | Where was your stop? |
 | 3 | vwapPullback | Pulled back to VWAP. Held? | It held. Then the first push. | Did you wait for the hold? |
 | 4 | vwapChop | VWAP crossed 8 times. Trend? | No trend. Eight crosses is chop. | Do you trade the chop? |
-| 5 | breakRetest | The retest held. Or did it? | It held on a close, not a dip. | A close or a dip? |
-| 6 | breakFail | The retest failed. Where's your stop? | A close back under ended it. Small loss. | Was your stop set before? |
-| 7 | demandSupply | Back at the zone. Hold or fail? | First return held. Later returns often fail. | First return or fifth? |
+| 5 | breakRetest | The retest held. Or did it? | This one held on a close. | A close or a dip? |
+| 6 | breakFail | Retest failed. Where's your stop? | A close back under. Stop hit. Small loss. | Was your stop set before? |
+| 7 | demandSupply | Back at the zone. Hold or fail? | First return held. Here, the fifth did not. | First return or fifth? |
+
+Wording rules from the team review (HQ): a payoff describes what the drawing shows and never states a trading rule or a market statistic as fact ("this one ran", not "a close is the trigger"; no "later returns often fail"); a stop is never described as protecting anyone ("stop hit, small loss"); "Illustration, not a recommendation" is visible on EVERY card, not only in the pinned comment.
 
 ## Phase 2 (rule moments, same format, needs a short mock card, labeled sample data)
 
-HQ's angles, kept as hooks for a second batch: "I was $40 from the daily limit." (near-miss, sample data), "Trailing drawdown
-moves. Most traders miss when." (ends with "check your firm's rulebook"), "Which candle blew this account? Comment yours."
-(a past chart, labeled, no advice).
+HQ's angles, kept as hooks for a second batch (reworded after review): "A trader was $40 from the limit." (a composite, so the
+"Sample data" label must be in the FIRST frame; never first person), "Do you know when trailing drawdown moves?" (a question, not a
+claim about traders; ends with "check your firm's rulebook"; the 34-character limit applies to the chart hooks, a mock card may run longer),
+"Which candle blew this account? Comment yours." (a past chart, labeled, no advice).
 
 ## Voice and cost
+
+Checklist before posting: the TikTok "AI-generated content" label is on for every video narrated with the cloned voice (owner rule).
 
 Short videos need about 30 spoken words each. They are recorded in ElevenLabs by Marketing only after the owner's explicit credits OK
 and Site Work's page-facts check. Narration lines are one sentence each, as in the strategy videos, so one take can be cut at pauses.
