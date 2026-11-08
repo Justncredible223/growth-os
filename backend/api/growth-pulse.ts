@@ -30,6 +30,8 @@ import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
 import { isMissingPostingTables, saveOwnTweets, syncYoutubeStats } from "../src/posting/postingRepository.js";
 import { recordXOwnedReadCostEvent } from "../src/cost/costTracking.js";
 import { loadOwnPostsSyncState, runOwnPostsStep } from "../src/posting/ownPostsRefresh.js";
+import { reconcilePostedDrafts, supabaseReconcileDeps } from "../src/content/xFeedPostReconcile.js";
+import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
 import { runFollowerSnapshotStep } from "../src/posting/followerSnapshots.js";
 import { runWeeklyDigestStep } from "../src/posting/weeklyDigest.js";
 import { runEngagementAutoFill } from "../src/engagement/engagementAutoFill.js";
@@ -432,6 +434,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           recordCost: (n) => recordXOwnedReadCostEvent(client, n, { endpoint: "users/tweets", purpose: "results_tracking" }),
           save: (tweets) => saveOwnTweets(client, tweets, now),
         });
+      }),
+    );
+    results.push(
+      await runStep("x_post_reconcile", async () => {
+        // Which of the last few days' drafts actually went out: matched against the own tweets the step above just saved (no X call, no cost).
+        // The owner's Mark posted stays as a correction; this only ever adds a posted mark on a clear text match.
+        const { error: tableError } = await client.from("x_own_posts").select("tweet_id").limit(1);
+        if (tableError) return "skipped -- x_own_posts not available";
+        const out = await reconcilePostedDrafts(supabaseReconcileDeps(client, new SupabaseXFeedPostRunRepository(client)), now);
+        return `checked ${out.checked} unposted draft(s), marked ${out.matched} as posted${out.markedDates.length ? ` (${out.markedDates.join(", ")})` : ""}`;
       }),
     );
     results.push(
