@@ -12,7 +12,7 @@ import { FRESH_PILOTS } from "./freshConcepts.js";
 import { FRESH2_PILOTS } from "./freshConcepts2.js";
 import { RECORDING_PILOTS } from "./freshRecordingConcepts.js";
 import { EXPLAINERS_OFFERED, EXPLAINER_PILOTS, isExplainerPlan } from "./explainers.js";
-import { CHART_MOMENT_PILOTS, STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
+import { CHART_MOMENT_ORDER, CHART_MOMENT_PILOTS, STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
 
 /**
  * Every verified ScenePlan a motion concept can be requested for: the original pilots plus the payoff redesign
@@ -102,7 +102,7 @@ export const RETIRED_FRESH_DAILY_ORDER: readonly string[] = [
  * cleared with the rest; "chart-bars-conviction" still resolves). An id added here must still be a product mock that clears the
  * render bar and is not a near-copy of another offered concept; the narration rules in test/narratedMocks.test.ts apply to it too.
  */
-export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = [];
+export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = CHART_MOMENT_ORDER;
 
 /**
  * True when the app offers this plan for a new video: one of OFFERED_DAILY_CONCEPT_IDS or EXTRA_OFFERED_CONCEPT_IDS. Every older

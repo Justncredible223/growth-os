@@ -141,3 +141,11 @@ describe("chart-moment series (first batch)", () => {
     expect(spoken).not.toMatch(/\b(always|never|guarantee|proven|often|most traders|works|protect)/);
   });
 });
+
+describe("chart moments pass the story bar as clips (2026-11-08)", () => {
+  it("each of the three renders: grade A or better", async () => {
+    const { renderBar } = await import("../src/shortform/storyScore");
+    const { CHART_MOMENT_PILOTS } = await import("../src/shortform/strategyVideos");
+    for (const p of CHART_MOMENT_PILOTS) expect(renderBar(p).ok, `${p.planId}: ${JSON.stringify(renderBar(p))}`).toBe(true);
+  });
+});

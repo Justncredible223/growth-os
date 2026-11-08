@@ -1,3 +1,4 @@
+import { CHART_MOMENT_ORDER } from "../src/shortform/strategyVideos";
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -33,9 +34,9 @@ function deps(opts: { now?: Date; paused?: boolean; today?: string | null; state
 
 describe("the concepts the daily refill draws from", () => {
   it("are the explainers only: no extras, no clips, none of the 30 older daily concepts, none of the first twelve, none of the illustrative win-rate ones", () => {
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
-    expect(concepts).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length);
-    expect(concepts.every((c) => /^(explain|strategy)-/.test(c.id))).toBe(true);
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(CHART_MOMENT_ORDER); // the chart-moment series (2026-11-08)
+    expect(concepts).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length + EXTRA_OFFERED_CONCEPT_IDS.length);
+    expect(concepts.every((c) => /^(explain|strategy|chartmoment)-/.test(c.id))).toBe(true);
     expect(concepts.some((c) => DAILY_CONCEPT_ORDER.includes(c.id))).toBe(false);
     expect(concepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
   });

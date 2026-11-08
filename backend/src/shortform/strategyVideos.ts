@@ -383,9 +383,9 @@ export const CHART_MOMENTS: readonly ChartMomentInput[] = [
     payoffBeat: 2,
     title: "Opening range breakout: a close outside the range",
     topic: "A drawn opening range breakout where a candle closes outside the range, and what the drawing does next",
-    hook: { headline: "Closed outside the range. Then?", say: "The price closed outside the range. Then what happened?" },
+    hook: { headline: "1 close outside the range. Then?", say: "The price closed outside the range. Then what happened?" },
     payoff: { headline: "This one ran.", say: "This one ran. The next might not." },
-    close: { headline: "Would your plan take it?", say: "Would your plan have taken it?" },
+    close: { headline: "Take a close outside the range?", say: "Would your plan have taken it?" },
   },
   {
     slug: "orb-fake",
@@ -394,9 +394,9 @@ export const CHART_MOMENTS: readonly ChartMomentInput[] = [
     payoffBeat: 3,
     title: "Opening range breakout: back inside one candle later",
     topic: "A drawn opening range breakout where the next candle closes back inside the range, and a stop that was set in advance",
-    hook: { headline: "Broke the high. Then it didn't.", say: "It broke the high, and then it did not hold." },
+    hook: { headline: "1 break. Then back inside?", say: "It broke the high, and then it did not hold." },
     payoff: { headline: "Back inside. Stop hit.", say: "The close came back inside. The stop was hit, for a small loss." },
-    close: { headline: "Where was your stop?", say: "Where was your stop?" },
+    close: { headline: "Back inside: where's your stop?", say: "Where was your stop?" },
   },
   {
     slug: "vwap-hold",
@@ -405,9 +405,9 @@ export const CHART_MOMENTS: readonly ChartMomentInput[] = [
     payoffBeat: 3,
     title: "VWAP pullback: a hold, drawn",
     topic: "A drawn pullback to VWAP in a trend, where the price holds and then makes its first push",
-    hook: { headline: "Pulled back to VWAP. Held?", say: "Price pulled back to VWAP. Did it hold?" },
+    hook: { headline: "1 pullback to VWAP. Then?", say: "Price pulled back to VWAP. Did it hold?" },
     payoff: { headline: "It held. Then the push.", say: "It held. Then came the first push." },
-    close: { headline: "Did you wait for the hold?", say: "Did you wait for the hold?" },
+    close: { headline: "Pullback to VWAP: did it hold?", say: "Did you wait for the hold?" },
   },
 ];
 

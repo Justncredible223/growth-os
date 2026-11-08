@@ -180,17 +180,17 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     // concepts and every older concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
     expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["explain-01-copy-trading-risk", "explain-02-consistency-rule", "explain-03-moving-stops"]));
     // The 30 explainers in their day order.
-    expect(body.motionConcepts.map((c) => c.id)).toEqual(OFFERED_DAILY_CONCEPT_IDS.slice(0, 30));
+    expect(body.motionConcepts.map((c) => c.id).slice(0, 30)).toEqual(OFFERED_DAILY_CONCEPT_IDS.slice(0, 30));
     // 2026-10-07: nothing else is offered (EXTRA_OFFERED_CONCEPT_IDS is empty; the conviction video is cleared too).
-    expect(body.motionConcepts.every((c) => /^(explain|strategy)-/.test(c.id))).toBe(true);
-    expect(body.motionConcepts.length).toBe(30);
-    expect(body.motionConcepts.filter((c) => !/^(explain|strategy)-/.test(c.id))).toEqual([]);
+    expect(body.motionConcepts.every((c) => /^(explain|strategy|chartmoment)-/.test(c.id))).toBe(true);
+    expect(body.motionConcepts.length).toBeGreaterThanOrEqual(30); // 30 + the chart moments (2026-11-08); the variety guard may hide a near-copy
+    expect(body.motionConcepts.filter((c) => !/^(explain|strategy|chartmoment)-/.test(c.id))).toEqual([]);
     // Each concept carries its day in the fixed daily order, and nextConceptId is the first one on offer.
     const withDay = (result.body as { motionConcepts: Array<{ id: string; day: number }>; nextConceptId: string | null }).motionConcepts;
-    expect(withDay.map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect(withDay.slice(0, 30).map((c) => c.day)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1)); // the chart moments follow the 30 (2026-11-08)
     expect((result.body as { nextConceptId: string | null }).nextConceptId).toBe("strategy-01-orb-range-trigger"); // strategy videos first (2026-10-25)
-    // No explainer is a near-copy of another, so none is hidden.
-    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toEqual([]);
+    // No explainer is a near-copy of another, so none is hidden. A chart moment is a cut of a strategy chart, so the guard may hide one.
+    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds.every((id) => id.startsWith("chartmoment-"))).toBe(true);
   });
 
   it("POST for a retired (older-style) concept is refused with 409, and a custom-topic or Radar video request is refused too", async () => {

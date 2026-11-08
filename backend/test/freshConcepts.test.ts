@@ -1,3 +1,4 @@
+import { CHART_MOMENT_ORDER } from "../src/shortform/strategyVideos";
 import { describe, it, expect } from "vitest";
 import { FRESH_PILOTS, FRESH_CONCEPT_ORDER } from "../src/shortform/freshConcepts";
 import { DAILY_PILOTS } from "../src/shortform/dailyConcepts";
@@ -15,7 +16,7 @@ describe("the first 9 fresh hook-first concepts (part of the offered pool since 
     expect(FRESH_PILOTS).toHaveLength(9);
     // The offered pool is these 9 plus the 21 of freshConcepts2.ts; its size, order and lane mix are checked in freshConcepts2.test.ts.
     for (const id of FRESH_CONCEPT_ORDER) expect(RETIRED_FRESH_DAILY_ORDER, id).toContain(id);
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]);
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(CHART_MOMENT_ORDER); // the chart-moment series (2026-11-08)
     FRESH_PILOTS.forEach((p) => expect(dailyPosition(p.planId)).toBe(-1));
     for (const p of DAILY_PILOTS) {
       expect(MOTION_SCENE_PLANS).toContain(p);

@@ -106,7 +106,8 @@ export function scoreStory(plan: ScenePlan): StoryScore {
   const total = plan.scenes.reduce((n, s) => n + s.durationSeconds, 0);
   const pace = total / plan.scenes.length;
   // An explainer (explainers.ts) teaches one rule over about 30-45 seconds; a clip states one finding in 12-20.
-  if (plan.series === "Explained") {
+  // A chart moment (strategyVideos.ts, team decision 2026-11-08) is a 12-15 second cut, so it is judged as a clip, not as a 30-45 second explainer.
+  if (plan.series === "Explained" && !plan.planId.startsWith("chartmoment-")) {
     add("length", "30 to 45 seconds (explainer)", 8, total >= 28 && total <= 45 ? 8 : total > 45 && total <= 55 ? 4 : 0, `${total.toFixed(1)}s planned.`);
     add("pace", "A new beat every 2.5 to 5.5 seconds (explainer)", 7, pace >= 2.5 && pace <= 5.5 ? 7 : pace > 5.5 && pace <= 7 ? 3 : pace < 2.5 ? 3 : 0, `${pace.toFixed(1)}s per scene on average.`);
   } else {

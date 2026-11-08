@@ -28,15 +28,17 @@ second. Marketing's organic numbers say a hook-first opening about doubled the s
 
 | # | Chart scenario | Hook (first frame) | Payoff line | Closing question |
 |---|---|---|---|---|
-| 1 | orbBreak | Closed outside the range. Then? | This one ran. The next might not. | Would your plan have taken it? |
-| 2 | orbFake | Broke the high. Then it didn't. | The close came back inside. Stop hit. Small loss. | Where was your stop? |
-| 3 | vwapPullback | Pulled back to VWAP. Held? | It held. Then the first push. | Did you wait for the hold? |
+| 1 | orbBreak | 1 close outside the range. Then? | This one ran. The next might not. | Would your plan have taken it? |
+| 2 | orbFake | 1 break. Then back inside? | The close came back inside. Stop hit. Small loss. | Where was your stop? |
+| 3 | vwapPullback | 1 pullback to VWAP. Then? | It held. Then the first push. | Did you wait for the hold? |
 | 4 | vwapChop | VWAP crossed 8 times. Trend? | No trend. Eight crosses is chop. | Do you trade the chop? |
 | 5 | breakRetest | The retest held. Or did it? | This one held on a close. | A close or a dip? |
 | 6 | breakFail | Retest failed. Where's your stop? | A close back under. Stop hit. Small loss. | Was your stop set before? |
 | 7 | demandSupply | Back at the zone. Hold or fail? | First return held. Here, the fifth did not. | First return or fifth? |
 
 Wording rules from the team review (HQ): a payoff describes what the drawing shows and never states a trading rule or a market statistic as fact ("this one ran", not "a close is the trigger"; no "later returns often fail"); a stop is never described as protecting anyone ("stop hit, small loss"); "Illustration, not a recommendation" is visible on EVERY card, not only in the pinned comment.
+
+Built 2026-11-08: the on-screen hooks above carry a number and a turn so the story bar (storyScore.ts) grades them A or better as 12-15 second clips; the recorded voice lines are unchanged. The first three are offered in the app.
 
 ## Phase 2 (rule moments, same format, needs a short mock card, labeled sample data)
 
