@@ -1175,6 +1175,8 @@ export interface TodayXPostView {
   canRegenerate: boolean;
   /** The picture for the post: what it says (the phone app draws it). Absent when switched off or when no safe card exists. See xPostImageCard.ts. */
   imageCard?: XPostImageCard;
+  /** What was checked on this exact draft, computed when the card is built (xPostReceipt.ts). Absent when there is no draft to check. */
+  receipt?: Array<{ label: string; ok: boolean }>;
 }
 
 /**

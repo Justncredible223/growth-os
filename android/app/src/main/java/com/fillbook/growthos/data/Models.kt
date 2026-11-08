@@ -205,7 +205,12 @@ data class TodayXPost(
     val canRegenerate: Boolean = false,
     /** What the post's picture says (backend xPostImageCard.ts); the app draws it. Null when switched off or no safe card exists. */
     val imageCard: XPostImageCard? = null,
+    /** What was checked on this exact draft right now (backend xPostReceipt.ts); empty when there is no draft to check. */
+    val receipt: List<ReceiptLine> = emptyList(),
 )
+
+/** One line of the receipt shown under Today's X Post: what was checked, and whether it passed. */
+data class ReceiptLine(val label: String, val ok: Boolean)
 
 data class XPostImageCardRow(val label: String, val note: String?)
 
