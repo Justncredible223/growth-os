@@ -894,7 +894,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // doesn't have).
           trackingQuery: utmQueryString(utmParams),
           destinationLink,
-          // Fillbook HQ drafts (api/hq-handoff): HQ verdict, desk reason and picture brief, shown as information for the owner. Null for everything else.
+          // HQ-agent drafts (api/hq-handoff): HQ verdict, desk reason and picture brief, shown as information for the owner. Null for everything else.
           hqNote: hqNoteFromMetadata(latestVersion?.metadata),
           // The same picture card Todays X Post shows, for any X feed post (HQ drafts included). Null when off or nothing safe to show.
           imageCard: asset.asset_type === "x_feed_post" && latestVersion?.body ? buildXPostImageCard(null, latestVersion.body) : null,

@@ -8,7 +8,7 @@ import { errorMessage } from "../lib/errorMessage.js";
 
 /**
  * POST /api/hq-handoff (served from api/approvals.ts through a vercel.json rewrite, because the Hobby plan is capped at 12
- * functions). Fillbook HQ's social agent writes at most one X draft a day and sends it here so it appears in the app's Approvals
+ * functions). The HQ social agent writes at most one X draft a day and sends it here so it appears in the app's Approvals
  * list, where the owner posts it by hand exactly like Today's X Post. Rules, all enforced here and tested:
  *  - OFF unless HQ_HANDOFF_TOKEN is set (and at least 32 characters) and HQ_HANDOFF is not "off". When off the route answers 404,
  *    which HQ's client treats as "stop and retry later".
@@ -135,7 +135,7 @@ export async function storeHqDraft(client: SupabaseClient, draft: HqHandoffDraft
       score: 0,
       urgency: "normal",
       confidence: 1,
-      rationale: "Draft written by Fillbook HQ's social agent and handed over for the owner to review and post by hand.",
+      rationale: "Draft written by the HQ social agent and handed over for the owner to review and post by hand.",
       recommended_channels: ["x"],
       recommended_campaign_type: "x_feed_post",
       approval_class: "EXTERNAL_DRAFT",
