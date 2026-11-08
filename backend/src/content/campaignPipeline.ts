@@ -116,6 +116,19 @@ export interface PipelineResult {
 let catalogSpokenScripts: Set<string> | null = null;
 
 /** True when `text` is a stored draft of one of the verified motion catalog's own scripts (compared on the spoken script, as the originality gate does). */
+/**
+ * Owner decision 2026-11-08 (trio: Claude + ChatGPT + Gemini agreed): a catalog motion-concept video whose ONLY failing reviewer is the
+ * copy editor still goes to the owner's Approvals, flagged. The copy editor judges style on narration that is already recorded and
+ * cannot be reworded without paying to re-record, it gave different notes on every retry of the same script, and every fact, claims,
+ * brand and integrity reviewer had passed. The failed verdict stays recorded, so the Approvals card shows "Flagged by review" and the
+ * owner reads it before approving. Any other failing reviewer, or any non-catalog draft, still blocks as before.
+ */
+export function isCopyEditorOnlyFailure(deepReview: { passed: boolean; verdicts: Array<{ agent: string; pass: boolean }> }): boolean {
+  if (deepReview.passed) return false;
+  const failing = deepReview.verdicts.filter((v) => !v.pass);
+  return failing.length > 0 && failing.every((v) => v.agent === "copy_editor");
+}
+
 export function isCatalogMotionScript(text: string): boolean {
   catalogSpokenScripts ??= new Set(MOTION_SCENE_PLANS.map((p) => buildVideoScriptFromScenePlan(p).script.trim()));
   return catalogSpokenScripts.has(spokenScriptOf(text).trim());
@@ -305,7 +318,8 @@ export async function runCampaignPipeline(
     pitchEvidenceExcerpts: context.pitchEvidenceExcerpts,
   });
 
-  if (!deepReview.passed) {
+  const styleOnlyFlag = Boolean(motionConceptId) && isCopyEditorOnlyFailure(deepReview);
+  if (!deepReview.passed && !styleOnlyFlag) {
     return {
       campaignId,
       campaignAssetId,
