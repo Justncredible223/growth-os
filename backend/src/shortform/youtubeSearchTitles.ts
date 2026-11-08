@@ -162,7 +162,7 @@ export const SEARCH_TOPICS: readonly SearchTopic[] = [
     phrase: "Trading performance score explained",
     short: "Trading score",
     tags: ["FuturesTrading", "TradingJournal", "TradingPerformance"],
-    explainer: "One score that blends profitability, consistency, risk control and rule adherence shows which habit is weakest, not just which trade.",
+    explainer: "One score that blends five parts, from profitability to rule adherence, shows which habit is weakest, not just which trade.",
   },
   {
     id: "habits",
