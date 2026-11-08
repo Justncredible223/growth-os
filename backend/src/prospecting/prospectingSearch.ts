@@ -17,7 +17,7 @@ import {
   selectPrioritizedTopicsForRun,
 } from "./prospectingEligibility.js";
 import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
-import { MIN_DAILY_SET_SCORE, selectDailyWorkingSet } from "./prospectingDailySelection.js";
+import { AUTHOR_COOLDOWN_DAYS, MIN_DAILY_SET_SCORE, authorKeyOf, selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { MIN_WATCHLIST_SIZE, PROSPECTING_SEED_CREATORS, isSeedCreator, WATCHLIST_LOOKBACK_DAYS, buildWatchlist, chunkWatchlist, parseHandleList, watchlistQuery } from "./prospectingWatchlist.js";
 import type { ProspectingRepository } from "./types.js";
 
@@ -185,11 +185,22 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // How many of the waiting candidates the owner would actually be shown right now (same gate + selection the queue
   // endpoint applies). Scheduled and refill runs skip when the buffer is already met; an owner-tapped "search now"
   // (runIndexOverride) always searches, and keeps going until it finds one more usable post.
+  // Accounts replied to in the last AUTHOR_COOLDOWN_DAYS days are hidden from the queue (prospectingHandlers.ts), so they must not count as
+  // "waiting" here either: before, a manual search stopped as soon as it found one more post from an account the queue then hid, which is why
+  // pressing Search several times kept returning the same handles (owner 2026-11-08).
+  let cooldownAuthorKeys: Set<string> = new Set();
+  try {
+    const recent = await deps.repo.listRepliedSince(new Date(now.getTime() - AUTHOR_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
+    cooldownAuthorKeys = new Set(recent.map((r) => authorKeyOf(r)));
+  } catch {
+    cooldownAuthorKeys = new Set();
+  }
   const countSelectable = async (): Promise<number> => {
     const rows = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], BACKLOG_SCAN_LIMIT);
     return selectDailyWorkingSet(
       rows.filter((c) => isReplyWorthyPost(c.postText, { trustedAuthor: isSeedCreator(c.authorHandle) }) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
       now,
+      { cooldownAuthorKeys },
     ).selected.length;
   };
   const selectable = await countSelectable();
@@ -222,7 +233,9 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // breadth.maxTopics is how many X requests this run may make. With a watchlist, every other request (the first, the third) reads the
   // creators and the rest search topics; each topic request covers up to TOPICS_PER_QUERY topics.
   type PlannedRequest = { kind: "creators"; handles: string[] } | { kind: "topics"; group: ProspectingTopic[]; anchored: boolean };
-  const isCreatorSlot = (i: number) => watchGroups.length > 0 && i % 2 === 0;
+  // An owner-tapped search reads topics FIRST: the watchlist of about 50 creators is where the same handles come from, and a manual press
+  // was reading it before anything else. Scheduled runs keep creators first.
+  const isCreatorSlot = (i: number) => watchGroups.length > 0 && i % 2 === (isManual ? 1 : 0);
   const topicSlots = Array.from({ length: breadth.maxTopics }, (_, i) => i).filter((i) => !isCreatorSlot(i)).length;
   // Plan more topic groups than the run needs, drop the ones whose exact query was just searched, and keep the first few that are left. When
   // every group was searched recently the run makes no topic request at all (and spends nothing).

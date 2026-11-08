@@ -878,3 +878,32 @@ describe("listProspectingQueue -- the Maybe list (model-screen rejections)", () 
     expect((await listProspectingQueue(fakeClient, NOW, { repo })).maybe).toEqual([]);
   });
 });
+
+describe("listProspectingQueue -- posts past the reply window are removed, not kept (owner 2026-11-08)", () => {
+  const NOW = new Date("2026-11-08T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000).toISOString();
+
+  it("expires a post older than the 12 hour window and leaves a fresh one in the queue", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
+    repo.seed(candidate({ id: "old", status: "shown", opportunityScore: 90, postCreatedAt: hoursAgo(20), authorExternalId: "b" }));
+
+    const { candidates } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates.map((c) => c.id)).toEqual(["fresh"]);
+    expect(repo.rows.get("old")?.status).toBe("expired");
+    expect(repo.rows.get("fresh")?.status).not.toBe("expired");
+  });
+
+  it("an author replied to in the last 3 days is deferred, not expired", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "done", status: "replied", opportunityScore: 70, postCreatedAt: hoursAgo(30), authorExternalId: "same", repliedAt: hoursAgo(24) }));
+    repo.seed(candidate({ id: "again", status: "new", opportunityScore: 80, postCreatedAt: hoursAgo(1), authorExternalId: "same" }));
+    repo.seed(candidate({ id: "other", status: "new", opportunityScore: 60, postCreatedAt: hoursAgo(1), authorExternalId: "different" }));
+
+    const { candidates } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates.map((c) => c.id)).toEqual(["other"]);
+    expect(repo.rows.get("again")?.status).not.toBe("expired");
+  });
+});
