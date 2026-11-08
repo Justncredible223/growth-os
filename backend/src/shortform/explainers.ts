@@ -232,7 +232,7 @@ export const EXPLAINERS: readonly ExplainerInput[] = [
   {
     slug: "edge-score",
     view: "Fillbook's Edge Score blends five areas into one.",
-    hook: { headline: "Edge Score 67 hides a 59. Why?", caption: "Each part of the Edge Score tells a different story.", say: "Edge Score is one score for five parts of how you trade.", take: "One weak part can pull the whole score down." },
+    hook: { headline: "Edge Score 67 blends a 59. Why?", caption: "Each part of the Edge Score tells a different story.", say: "Edge Score is one score for five parts of how you trade.", take: "One weak part can pull the whole score down." },
     source: "fresh-21-edge-score-67",
     title: "One score for how you trade, and what drags it down",
     topic: "A sample account's Edge Score and its weakest factor",

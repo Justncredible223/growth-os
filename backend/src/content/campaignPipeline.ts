@@ -316,6 +316,7 @@ export async function runCampaignPipeline(
     pitchRecipientOrganization: context.pitchRecipientOrganization,
     pitchChannel: context.pitchChannel,
     pitchEvidenceExcerpts: context.pitchEvidenceExcerpts,
+    isCatalogExplainer: Boolean(motionConceptId),
   });
 
   const styleOnlyFlag = Boolean(motionConceptId) && isCopyEditorOnlyFailure(deepReview);
