@@ -257,9 +257,11 @@ private fun Canvas.drawTrailingPanel(left: Float, top: Float, w: Float, h: Float
     val l = left + 40f; val r = left + w - 40f; val t = top + 112f; val b = top + h - 40f
     val iw = r - l; val ih = b - t
     val xs = floatArrayOf(0f, 0.14f, 0.28f, 0.42f, 0.55f, 0.78f, 0.92f)
-    val ys = floatArrayOf(0.80f, 0.64f, 0.70f, 0.40f, 0.12f, 0.30f, 0.40f)
-    // The floor: moves up with every new high when intraday, stays put when end of day.
-    val floorYs = if (intraday) floatArrayOf(0.96f, 0.96f, 0.96f, 0.88f, 0.74f, 0.74f, 0.74f) else floatArrayOf(0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f)
+    // The equity line rises 0.52 of the panel to its peak, then gives back 0.30 of it (the post's $1,500 up and $900 given back are 1.0 : 0.6).
+    val ys = floatArrayOf(0.62f, 0.50f, 0.54f, 0.32f, 0.10f, 0.26f, 0.40f)
+    // The floor: a fixed distance under the highest point so far when intraday (so it rises exactly as far as the peak did, and the line
+    // that gave back part of it ends close above its floor); it stays where it started when end of day.
+    val floorYs = if (intraday) floatArrayOf(0.96f, 0.88f, 0.88f, 0.70f, 0.48f, 0.48f, 0.48f) else floatArrayOf(0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f, 0.96f)
     val floor = android.graphics.Path()
     for (i in xs.indices) { val px = l + iw * xs[i]; val py = t + ih * floorYs[i]; if (i == 0) floor.moveTo(px, py) else floor.lineTo(px, py) }
     drawPath(floor, stroke(AMBER, 8f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(26f, 15f), 0f) })
@@ -285,7 +287,7 @@ private fun Canvas.drawTrailingPanel(left: Float, top: Float, w: Float, h: Float
         drawLine(bx, peakY, bx + 16f, peakY, tick)
         drawLine(bx, startY, bx + 16f, startY, tick)
         val noteP = paint(28f, MUTED)
-        val numP = paint(40f, CYAN, bold = true)
+        val numP = paint(36f, CYAN, bold = true)
         // Upper-left of the panel: the curve is low there, so the label clears it.
         drawText(figures.riseNote, bx + 24f, peakY + 28f, noteP)
         drawText(figures.riseNumber, bx + 24f, peakY + 70f, numP)
@@ -296,10 +298,10 @@ private fun Canvas.drawTrailingPanel(left: Float, top: Float, w: Float, h: Float
         drawLine(fx - 16f, endY, fx, endY, tick)
         val fallNumW = numP.measureText(figures.fallNumber)
         val fallNoteW = noteP.measureText(figures.fallNote)
-        // Under the end of its bracket, right-aligned, in the open space between the curve and the floor.
-        val lx = fx - maxOf(fallNumW, fallNoteW)
-        drawText(figures.fallNote, lx, endY + 36f, noteP)
-        drawText(figures.fallNumber, lx, endY + 78f, numP)
+        // Above the falling line, right-aligned to its bracket: the open corner between the peak and the right edge.
+        val lx = fx - 20f - maxOf(fallNumW, fallNoteW)
+        drawText(figures.fallNote, lx, t + 4f, noteP)
+        drawText(figures.fallNumber, lx, t + 40f, numP)
     }
 }
 

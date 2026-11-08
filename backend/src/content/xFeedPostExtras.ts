@@ -115,13 +115,9 @@ export function headlineFromPost(text: string): string {
 export function buildImageSpec(topic: { key: string; label: string }, draftText: string): string {
   const reference = REFERENCE_TOPICS.find((t) => t.key === topic.key);
   if (reference) return reference.imageSpec;
-  const numbers = numbersInPost(draftText);
-  return (
-    `One clean card on a dark background, topic: ${topic.label}. ` +
-    `Headline in large text: "${headlineFromPost(draftText)}". ` +
-    (numbers.length > 0 ? `Show these numbers from the post, large: ${numbers.join(", ")}. ` : "The post states no number, so use a simple labeled diagram, not a number. ") +
-    "Small Fillbook wordmark bottom-left. No firm logos and no screenshots of a real account."
-  );
+  // The phone app draws the picture itself (xPostImageCard.ts, theme Risk Blueprint), so the note says so instead of describing one to make by
+  // hand. The wording is kept short because the owner reads it under the post.
+  return `The picture is drawn for you from this post (topic: ${topic.label}). Check it under the post, then use Open X with text + picture. It shows only words and figures from the post, labeled sample data.`;
 }
 
 /** The owner-facing note stored on the run: why the angle was picked, then the image brief and the posting window. */
