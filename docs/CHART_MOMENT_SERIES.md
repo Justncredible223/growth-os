@@ -21,36 +21,42 @@ second. Marketing's organic numbers say a hook-first opening about doubled the s
   rulebook was checked (only Earn2Trade has been re-verified), any advice or signal.
 - Product shows up as the last 2 seconds, a short caption mention and a pinned comment. Pinned comment template (always sample data):
   "Illustration, not a recommendation. Fillbook is a journal: log your own trades and check them against your own rules."
-- One post a day at most. Series name on every video so viewers expect the next one.
+- One post a day at most. Series name on every video: **Chart Moment**, so viewers expect the next one.
+- Posting policy (Marketing): the owner posts by hand or signs off the exact file and caption first; Metricool is TikTok and YouTube only, capped at 20 posts a month and 1 a day, and the first TikTok has autoPublish off. 7 concepts x 3 openings is 21 videos, so they run over several weeks and stay under the cap. Nothing is scheduled before the owner's sign-off.
 
 ## First seven concepts (hook max 7 words and 34 characters; same chart art, so no new drawing work)
 
 | # | Chart scenario | Hook (first frame) | Payoff line | Closing question |
 |---|---|---|---|---|
-| 1 | orbBreak | Closed outside the range. Then? | It ran. A close, not a wick, was the trigger. | Would your plan have taken it? |
-| 2 | orbFake | Broke the high. Then it didn't. | The close came back inside. The stop did its job. | Where was your stop? |
+| 1 | orbBreak | Closed outside the range. Then? | This one ran. The next might not. | Would your plan have taken it? |
+| 2 | orbFake | Broke the high. Then it didn't. | The close came back inside. Stop hit. Small loss. | Where was your stop? |
 | 3 | vwapPullback | Pulled back to VWAP. Held? | It held. Then the first push. | Did you wait for the hold? |
 | 4 | vwapChop | VWAP crossed 8 times. Trend? | No trend. Eight crosses is chop. | Do you trade the chop? |
-| 5 | breakRetest | The retest held. Or did it? | It held on a close, not a dip. | A close or a dip? |
-| 6 | breakFail | The retest failed. Where's your stop? | A close back under ended it. Small loss. | Was your stop set before? |
-| 7 | demandSupply | Back at the zone. Hold or fail? | First return held. Later returns often fail. | First return or fifth? |
+| 5 | breakRetest | The retest held. Or did it? | This one held on a close. | A close or a dip? |
+| 6 | breakFail | Retest failed. Where's your stop? | A close back under. Stop hit. Small loss. | Was your stop set before? |
+| 7 | demandSupply | Back at the zone. Hold or fail? | First return held. Here, the fifth did not. | First return or fifth? |
+
+Wording rules from the team review (HQ): a payoff describes what the drawing shows and never states a trading rule or a market statistic as fact ("this one ran", not "a close is the trigger"; no "later returns often fail"); a stop is never described as protecting anyone ("stop hit, small loss"); "Illustration, not a recommendation" is visible on EVERY card, not only in the pinned comment.
 
 ## Phase 2 (rule moments, same format, needs a short mock card, labeled sample data)
 
-HQ's angles, kept as hooks for a second batch: "I was $40 from the daily limit." (near-miss, sample data), "Trailing drawdown
-moves. Most traders miss when." (ends with "check your firm's rulebook"), "Which candle blew this account? Comment yours."
-(a past chart, labeled, no advice).
+HQ's angles, kept as hooks for a second batch (reworded after review): "A trader was $40 from the limit." (a composite, so the
+"Sample data" label must be in the FIRST frame; never first person), "Do you know when trailing drawdown moves?" (a question, not a
+claim about traders; ends with "check your firm's rulebook"; the 34-character limit applies to the chart hooks, a mock card may run longer),
+"Which candle blew this account? Comment yours." (a past chart, labeled, no advice).
 
 ## Voice and cost
+
+Checklist before posting: the TikTok "AI-generated content" label is on for EVERY video narrated with the cloned voice, confirmed in the pre-post check (owner rule).
 
 Short videos need about 30 spoken words each. They are recorded in ElevenLabs by Marketing only after the owner's explicit credits OK
 and Site Work's page-facts check. Narration lines are one sentence each, as in the strategy videos, so one take can be cut at pauses.
 
-## How we judge it (Marketing pulls the numbers; Metricool or TikTok Studio; counts only)
+## How we judge it (Marketing reads the numbers from TikTok Studio, read-only, counts only; Metricool is for scheduling only)
 
 Per video, log: hook, first-frame text, length, **organic** average watch time, **share watched fully at 24 hours**, shares, saves,
-new followers. Run each hook three times with a different opening before judging (small sample). Win = a video beats 619 views, or beats
-the account's own average watch time by 20% at 24 hours. Likes are not the measure. Keep paid views out of every comparison.
+new followers. Run each hook three times with a different opening before judging (small sample). A win = a video beats the median of the last 10 organic strategy videos by 20% on average watch time at 24 hours (one lucky
+video cannot decide it; 619 views is only the best single result so far). Likes are not the measure. Marketing marks any paid or boosted video and keeps it out of every comparison.
 
 ## Build order
 
