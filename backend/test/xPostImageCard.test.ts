@@ -74,6 +74,9 @@ describe("topic motif (Risk Blueprint theme)", () => {
     expect(motifForPost("Five numbers before a payout request.")).toBe("payout");
     expect(motifForPost("One big day can break the consistency rule.")).toBe("consistency");
     expect(motifForPost("Trade fewer contracts than you think.")).toBe("sizing");
+    expect(motifForPost("Clean-slate size comes from your plan. Position sizing in the hour after a loss comes from the number you want back.")).toBe("sizing");
+    // The sizing picture shows size crossing the plan, so a neutral sizing post gets the fallback instead.
+    expect(motifForPost("Pick your contracts from your stop distance.")).toBe("target");
     expect(motifForPost("Journal two lines after each session.")).toBe("journal");
     expect(motifForPost("Markets are open Monday.")).toBe("target");
   });

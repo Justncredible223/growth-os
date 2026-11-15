@@ -206,15 +206,18 @@ private fun Canvas.drawMotif(motif: String?, left: Float, top: Float, w: Float, 
             }
             drawLine(l, b, r, b, stroke(MUTED, 4f))
         }
-        "sizing" -> { // contract blocks growing in size
-            val sizes = floatArrayOf(0.28f, 0.45f, 0.65f)
-            var bx = l
-            for (s in sizes) {
-                val side = ih * s
-                drawRoundRect(RectF(bx, b - side, bx + side, b), 8f, 8f, fill(CYAN))
-                bx += side + 18f
-            }
-            drawLine(l, b, r, b, stroke(MUTED, 4f))
+        "sizing" -> { // planned size against reactive size (ChatGPT 2026-11-15): a stack of 3 cyan contracts, a stack of 5 amber ones,
+            // and a dashed line at the planned size that only the amber stack crosses. No staircase, so it never reads as "size up".
+            val gap = 12f
+            val colW = iw * 0.34f
+            val blockH = (ih - gap * 4) / 5f
+            val leftX = l + iw * 0.08f
+            val rightX = r - iw * 0.08f - colW
+            for (k in 0 until 3) { val by = b - k * (blockH + gap); drawRoundRect(RectF(leftX, by - blockH, leftX + colW, by), 8f, 8f, fill(CYAN)) }
+            for (k in 0 until 5) { val by = b - k * (blockH + gap); drawRoundRect(RectF(rightX, by - blockH, rightX + colW, by), 8f, 8f, fill(AMBER)) }
+            val planY = b - 3 * (blockH + gap) + gap / 2f
+            drawLine(l, planY, r, planY, stroke(INK, 4f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(18f, 12f), 0f) })
+            drawLine(l, b + 10f, r, b + 10f, stroke(MUTED, 4f))
         }
         "edge_score" -> { // five connected nodes
             val cx = (l + r) / 2f; val cy = (t + b) / 2f; val rad = minOf(iw, ih) * 0.42f
@@ -381,16 +384,24 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
             if (card.numbers.isNotEmpty() && !attach) c.drawFigureChips(card, 90f, CARD_H - 62f, 1020f)
         } else {
             // One big topic illustration on the right, the verbatim line and the labelled figures on the left.
+            // A short line is drawn large and centred beside the illustration, with a cyan rule under it, so it does not sit small at the
+            // top with the rest of the left side empty. Room for the figures is kept only when there are figures.
             val leftW = 560
-            val sizes = listOf(54f, 48f, 44f, 40f, 36f)
+            val maxH = if (card.numbers.isNotEmpty()) 300f else 400f
+            val sizes = listOf(76f, 68f, 60f, 54f, 48f, 44f, 40f, 36f)
             var headline = layoutOf(line, paint(sizes.last(), INK, bold = true), leftW)
             for (sz in sizes) {
                 val l = layoutOf(line, paint(sz, INK, bold = true), leftW, 6)
                 headline = l
-                if (l.height <= 300f) break
+                if (l.height <= maxH) break
             }
-            c.drawMotif(card.motif, 700f, 130f, 420f, 440f)
-            c.drawLayout(headline, 80f, 150f)
+            val motifTop = 130f; val motifH = 440f
+            c.drawMotif(card.motif, 700f, motifTop, 420f, motifH)
+            val blockH = headline.height + 34f
+            val bottom = if (card.numbers.isNotEmpty()) CARD_H - 150f else motifTop + motifH
+            val top = maxOf(150f, motifTop + (bottom - motifTop - blockH) / 2f)
+            c.drawLayout(headline, 80f, top)
+            c.drawRoundRect(RectF(82f, top + headline.height + 26f, 82f + 96f, top + headline.height + 34f), 4f, 4f, fill(CYAN))
             if (card.numbers.isNotEmpty()) c.drawFigureChips(card, 90f, CARD_H - 62f, 560f)
         }
     }
