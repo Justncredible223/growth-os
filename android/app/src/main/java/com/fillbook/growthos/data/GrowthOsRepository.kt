@@ -204,6 +204,12 @@ interface GrowthOsRepository {
     suspend fun retryVideoRender(videoRenderId: String): String?
 
     /**
+     * The Metricool package for a ready render (backend metricoolPackage.ts): plain text to copy, with the package id, the
+     * file's SHA256 and one Metricool post per network. Nothing is posted; copying it is not approval.
+     */
+    suspend fun getMetricoolPackageText(videoRenderId: String): String
+
+    /**
      * Records the real external URL the owner pasted in after manually
      * posting a 'ready' video (TikTok/YouTube/Instagram). This is what
      * lets the backend's YouTube comment monitoring know which real, live

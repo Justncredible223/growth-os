@@ -61,6 +61,7 @@ import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { dayForTitle } from "../src/video/todaysVideo.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../src/opportunities/manualMotionConcept.js";
 import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, retryFailedRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
+import { getMetricoolPackage, metricoolPackageText, MetricoolPackageError } from "../src/video/metricoolPackage.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
@@ -500,6 +501,24 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
         res.status(200).json(await retryFailedRender(client, body.videoRenderId));
       } catch (err) {
         if (err instanceof VideoStatusActionError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      return;
+    }
+    // App token only (POST): the Metricool package carries a 24-hour link to the private video. Nothing is posted here.
+    if (body?.action === "metricool-package") {
+      if (!body.videoRenderId) {
+        res.status(400).json({ error: "Body must include { action: 'metricool-package', videoRenderId: string }" });
+        return;
+      }
+      try {
+        const pkg = await getMetricoolPackage(client, body.videoRenderId);
+        res.status(200).json({ ...pkg, text: metricoolPackageText(pkg) });
+      } catch (err) {
+        if (err instanceof MetricoolPackageError) {
           res.status(400).json({ error: err.message });
           return;
         }

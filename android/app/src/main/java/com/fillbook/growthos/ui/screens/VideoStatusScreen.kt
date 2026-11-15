@@ -381,6 +381,19 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
 
+    // The Metricool package (2026-11-14): copied for the session that queues posts. Copying is not approval; Justin approves by id.
+    fun copyMetricoolPackage(render: VideoRenderStatus) {
+        scope.launch {
+            try {
+                val text = repo.getMetricoolPackageText(render.id)
+                copyToClipboard(context, "Metricool package", text)
+                snackbarHostState.showSnackbar("Metricool package copied. Paste it to the Marketing session, then approve it by its id.")
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't build the Metricool package — pull to refresh and try again.")
+            }
+        }
+    }
+
     fun retry(render: VideoRenderStatus) {
         scope.launch {
             try {
@@ -527,6 +540,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         onDownloadThumbnail = { downloadThumbnail(render) },
                         onDismiss = { if (needsDismissConfirm(render)) dismissTarget = render else dismiss(render) },
                         onRetry = { retry(render) },
+                        onCopyMetricool = { copyMetricoolPackage(render) },
                     )
                 }
 
@@ -823,6 +837,7 @@ private fun VideoRenderCard(
     onDownloadThumbnail: () -> Unit,
     onDismiss: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null,
+    onCopyMetricool: (() -> Unit)? = null,
 ) {
     val tone = statusTone(render.status)
     GrowthCard(accentBar = statusToneColor(tone)) {
@@ -862,6 +877,9 @@ private fun VideoRenderCard(
         render.error?.let { error ->
             Text(error, style = MaterialTheme.typography.bodySmall, color = Danger, maxLines = 4)
             Spacer(Modifier.height(6.dp))
+        }
+        if (render.status == "ready" && onCopyMetricool != null) {
+            TextButton(onClick = onCopyMetricool) { Text("Copy Metricool package") }
         }
         if (render.status == "failed" && onRetry != null) {
             TextButton(onClick = onRetry) { Text("Retry render") }
