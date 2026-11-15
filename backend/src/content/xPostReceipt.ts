@@ -61,6 +61,10 @@ export function buildPostReceipt(input: ReceiptInput): ReceiptItem[] {
     items.push({ label: traced ? "Every figure in the picture is in the post" : "A figure in the picture is not in the post", ok: traced });
     items.push({ label: "Picture is labelled sample data", ok: card.sampleData });
   }
+  if (card && card.kind === "post") {
+    // The picture style test (xPostImageCard.ts CardStyle): say which arm this post is in, so the owner knows what he is attaching.
+    items.push({ label: card.style === "screen" ? "Picture: real Fillbook screen, made-up sample data (style test)" : "Picture: drawn card (style test)", ok: card.style !== "screen" || card.sampleData });
+  }
   const worst = input.recentPostedTexts.reduce((m, t) => Math.max(m, wordOverlap(text, t)), 0);
   items.push({ label: worst >= REPEAT_OVERLAP ? "Close to a recent post" : "Different from your recent posts", ok: worst < REPEAT_OVERLAP });
   return items;

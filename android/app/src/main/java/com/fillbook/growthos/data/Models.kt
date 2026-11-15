@@ -230,6 +230,10 @@ data class XPostImageCard(
     val hook: String? = null,
     /** The words just before each figure in the post, so no figure is shown bare. */
     val figureNotes: List<String> = emptyList(),
+    /** Picture style test arm: "screen" = a real Fillbook screen (made-up sample data) bundled in the app, otherwise the drawn card. */
+    val style: String? = null,
+    /** Which bundled screen to draw when style is "screen": assets/xscreens/<screen>.jpg. */
+    val screen: String? = null,
 )
 
 enum class XFeedPostHistoryState { UNPOSTED_DRAFT, POSTED, FAILED }
@@ -242,6 +246,8 @@ data class XFeedPostHistoryEntry(
     val previewText: String?,
     val reason: String?,
     val campaignAssetId: String?,
+    /** Posted entries: picture style test arm ("screen", "drawn" or "not_eligible"); null on older responses. */
+    val pictureArm: String? = null,
 )
 
 data class CampaignAsset(
