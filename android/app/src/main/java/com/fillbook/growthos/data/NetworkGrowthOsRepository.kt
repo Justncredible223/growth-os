@@ -971,6 +971,11 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=video-status", JSONObject().put("action", "dismiss").put("videoRenderId", videoRenderId))
     }
 
+    override suspend fun getMetricoolPackageText(videoRenderId: String): String {
+        val json = post("/api/approvals?resource=video-status", JSONObject().put("action", "metricool-package").put("videoRenderId", videoRenderId))
+        return json.getString("text")
+    }
+
     override suspend fun retryVideoRender(videoRenderId: String): String? {
         val json = post("/api/approvals?resource=video-status", JSONObject().put("action", "retry-render").put("videoRenderId", videoRenderId))
         return if (json.optBoolean("queued", false)) null else json.optString("reason", "The render could not be queued.")
