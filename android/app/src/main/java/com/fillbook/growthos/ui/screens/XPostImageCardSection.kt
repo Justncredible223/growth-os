@@ -206,19 +206,17 @@ private fun Canvas.drawMotif(motif: String?, left: Float, top: Float, w: Float, 
             }
             drawLine(l, b, r, b, stroke(MUTED, 4f))
         }
-        "sizing" -> { // stacks of contract blocks (1, 2, 3, then 5), sized to fill the panel; the oversized last stack in amber
-            val counts = intArrayOf(1, 2, 3, 5)
+        "sizing" -> { // planned size against reactive size (ChatGPT 2026-11-15): a stack of 3 cyan contracts, a stack of 5 amber ones,
+            // and a dashed line at the planned size that only the amber stack crosses. No staircase, so it never reads as "size up".
             val gap = 12f
-            val side = minOf((iw - gap * (counts.size - 1)) / counts.size, (ih - gap * (counts.max() - 1)) / counts.max())
-            val totalW = side * counts.size + gap * (counts.size - 1)
-            var bx = l + (iw - totalW) / 2f
-            counts.forEachIndexed { i, n ->
-                for (k in 0 until n) {
-                    val by = b - k * (side + gap)
-                    drawRoundRect(RectF(bx, by - side, bx + side, by), 8f, 8f, fill(if (i == counts.size - 1) AMBER else CYAN))
-                }
-                bx += side + gap
-            }
+            val colW = iw * 0.34f
+            val blockH = (ih - gap * 4) / 5f
+            val leftX = l + iw * 0.08f
+            val rightX = r - iw * 0.08f - colW
+            for (k in 0 until 3) { val by = b - k * (blockH + gap); drawRoundRect(RectF(leftX, by - blockH, leftX + colW, by), 8f, 8f, fill(CYAN)) }
+            for (k in 0 until 5) { val by = b - k * (blockH + gap); drawRoundRect(RectF(rightX, by - blockH, rightX + colW, by), 8f, 8f, fill(AMBER)) }
+            val planY = b - 3 * (blockH + gap) + gap / 2f
+            drawLine(l, planY, r, planY, stroke(INK, 4f).apply { pathEffect = android.graphics.DashPathEffect(floatArrayOf(18f, 12f), 0f) })
             drawLine(l, b + 10f, r, b + 10f, stroke(MUTED, 4f))
         }
         "edge_score" -> { // five connected nodes

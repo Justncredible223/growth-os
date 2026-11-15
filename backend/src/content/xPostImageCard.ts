@@ -68,9 +68,16 @@ export function figureNotesFor(text: string, numbers: string[]): string[] {
   });
 }
 
+/**
+ * The sizing picture shows a planned stack against a bigger reactive one crossing the plan line (ChatGPT 2026-11-15), so it is used only
+ * when the post is about size going past the plan: after a loss, revenge, bigger, doubling, too many. A neutral sizing post gets the fallback.
+ */
+const SIZING_DEVIATION = /\b(?:loss(?:es)?|revenge|bigger|larger|doubl\w*|increas\w*|size up|sizing up|fewer|too (?:many|big|large)|over-?siz\w*|add(?:ed|ing)? (?:a )?contracts?)\b/i;
+
 /** The motif for a post: the first rule that matches wins; "target" when none do. */
 export function motifForPost(text: string): CardMotif {
   const hit = MOTIF_RULES.find(([, re]) => re.test(text));
+  if (hit && hit[0] === "sizing" && !SIZING_DEVIATION.test(text)) return "target";
   return hit ? hit[0] : "target";
 }
 
