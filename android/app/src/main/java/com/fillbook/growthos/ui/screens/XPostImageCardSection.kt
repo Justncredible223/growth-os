@@ -206,15 +206,20 @@ private fun Canvas.drawMotif(motif: String?, left: Float, top: Float, w: Float, 
             }
             drawLine(l, b, r, b, stroke(MUTED, 4f))
         }
-        "sizing" -> { // contract blocks growing in size
-            val sizes = floatArrayOf(0.28f, 0.45f, 0.65f)
-            var bx = l
-            for (s in sizes) {
-                val side = ih * s
-                drawRoundRect(RectF(bx, b - side, bx + side, b), 8f, 8f, fill(CYAN))
-                bx += side + 18f
+        "sizing" -> { // stacks of contract blocks (1, 2, 3, then 5), sized to fill the panel; the oversized last stack in amber
+            val counts = intArrayOf(1, 2, 3, 5)
+            val gap = 12f
+            val side = minOf((iw - gap * (counts.size - 1)) / counts.size, (ih - gap * (counts.max() - 1)) / counts.max())
+            val totalW = side * counts.size + gap * (counts.size - 1)
+            var bx = l + (iw - totalW) / 2f
+            counts.forEachIndexed { i, n ->
+                for (k in 0 until n) {
+                    val by = b - k * (side + gap)
+                    drawRoundRect(RectF(bx, by - side, bx + side, by), 8f, 8f, fill(if (i == counts.size - 1) AMBER else CYAN))
+                }
+                bx += side + gap
             }
-            drawLine(l, b, r, b, stroke(MUTED, 4f))
+            drawLine(l, b + 10f, r, b + 10f, stroke(MUTED, 4f))
         }
         "edge_score" -> { // five connected nodes
             val cx = (l + r) / 2f; val cy = (t + b) / 2f; val rad = minOf(iw, ih) * 0.42f
@@ -381,16 +386,24 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
             if (card.numbers.isNotEmpty() && !attach) c.drawFigureChips(card, 90f, CARD_H - 62f, 1020f)
         } else {
             // One big topic illustration on the right, the verbatim line and the labelled figures on the left.
+            // A short line is drawn large and centred beside the illustration, with a cyan rule under it, so it does not sit small at the
+            // top with the rest of the left side empty. Room for the figures is kept only when there are figures.
             val leftW = 560
-            val sizes = listOf(54f, 48f, 44f, 40f, 36f)
+            val maxH = if (card.numbers.isNotEmpty()) 300f else 400f
+            val sizes = listOf(76f, 68f, 60f, 54f, 48f, 44f, 40f, 36f)
             var headline = layoutOf(line, paint(sizes.last(), INK, bold = true), leftW)
             for (sz in sizes) {
                 val l = layoutOf(line, paint(sz, INK, bold = true), leftW, 6)
                 headline = l
-                if (l.height <= 300f) break
+                if (l.height <= maxH) break
             }
-            c.drawMotif(card.motif, 700f, 130f, 420f, 440f)
-            c.drawLayout(headline, 80f, 150f)
+            val motifTop = 130f; val motifH = 440f
+            c.drawMotif(card.motif, 700f, motifTop, 420f, motifH)
+            val blockH = headline.height + 34f
+            val bottom = if (card.numbers.isNotEmpty()) CARD_H - 150f else motifTop + motifH
+            val top = maxOf(150f, motifTop + (bottom - motifTop - blockH) / 2f)
+            c.drawLayout(headline, 80f, top)
+            c.drawRoundRect(RectF(82f, top + headline.height + 26f, 82f + 96f, top + headline.height + 34f), 4f, 4f, fill(CYAN))
             if (card.numbers.isNotEmpty()) c.drawFigureChips(card, 90f, CARD_H - 62f, 560f)
         }
     }
