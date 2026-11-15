@@ -160,9 +160,13 @@ describe("strategy hooks: a question about the account, never about the trade", 
 });
 
 describe("the offered order", () => {
-  it("is the 20 rule cuts in the explainers' day order while no hook is recorded", () => {
-    expect(STRATEGY_HOOKS.every((h) => !h.recorded)).toBe(true);
-    expect([...AFTER_THE_TRADE_ORDER]).toEqual(RULE_CUTS.map((p) => p.planId));
+  it("with all seven hooks recorded (2026-11-15), is 20 videos: every third place a hook cut, in place of its explainer's rule cut", () => {
+    expect(STRATEGY_HOOKS.every((h) => h.recorded)).toBe(true);
+    expect(AFTER_THE_TRADE_ORDER).toHaveLength(RULE_CUTS.length);
+    expect(AFTER_THE_TRADE_ORDER.filter((id) => id.startsWith("after-hook-"))).toEqual(HOOK_CUTS.map((p) => p.planId));
+    expect([...AFTER_THE_TRADE_ORDER]).toEqual(afterTheTradeOrder(STRATEGY_HOOKS));
+    // The rule-cut-only order is still what a run with no recorded hook gives.
+    expect(afterTheTradeOrder(STRATEGY_HOOKS.map((h) => ({ ...h, recorded: false })))).toEqual(RULE_CUTS.map((p) => p.planId));
     expect([...OFFERED_DAILY_CONCEPT_IDS]).toEqual([...AFTER_THE_TRADE_ORDER]);
     expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).every((p) => p.planId.startsWith("after-"))).toBe(true);
   });
