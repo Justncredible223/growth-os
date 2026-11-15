@@ -144,7 +144,7 @@ async function buildVerifiedMotionPlan(
   // implying the real edge-tts voice was used.
   // A plan with voiceover "none" has no speech: a silent track under the music bed, scenes as authored. Product mocks are narrated (MOCK_SPEECH_RATE, beats padded to MOCK_MIN_BEAT_SECONDS).
   // A recording the owner supplied (assets/voice/, see suppliedVoice.ts) is used for a narrated mock that has one; every other video keeps the built-in voice.
-  const supplied = isNarratedMockPlan(scenePlan) ? findSuppliedVoice(scenePlan.planId, scenePlan.scenes.length) : null;
+  const supplied = isNarratedMockPlan(scenePlan) ? findSuppliedVoice(scenePlan.planId, scenePlan.scenes.length, undefined, scenePlan.voiceParts) : null;
   const narration = scenePlan.voiceover === "none"
     ? await synthesizeSilentNarration(scenePlan, outDir, runner)
     : supplied

@@ -5,7 +5,8 @@ import { DETAIL_FOOTER, HOOK_MOTION, MOCK_BOXES, MOCK_CANVAS, MOCK_FONT, MOCK_SA
 import { CLASSIC_MOCK_STYLE, type MockStyle } from "../../src/shortform/mockStyle.js";
 import { ILLUSTRATION_TAG, strategyChartSvg, type StrategyChartSpec } from "../../src/shortform/strategyCharts.js";
 import { THUMB_SAFE, headlinePieces, type ThumbnailSpec } from "../../src/shortform/thumbnails.js";
-import type { ChartSpec, ChartTone, MockRow, Rect } from "../../src/shortform/types.js";
+import { OFFICIAL_HANDLE, type ChartSpec, type ChartTone, type MockRow, type Rect } from "../../src/shortform/types.js";
+import { CLOSE_LINE } from "../../src/shortform/afterTheTrade.js";
 import { VideoFactoryError } from "./types.js";
 
 /**
@@ -32,6 +33,16 @@ export interface MockFrame {
 }
 
 const esc = (t: string): string => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * The closing invitation's HTML. The "After the trade" close (afterTheTrade.ts, 2026-11-14) shows its agreed sentence on its
+ * own and the handle on a line below it, never run into the sentence; every other close is unchanged.
+ */
+export function ctaHtml(cta: string): string {
+  const handle = ` ${OFFICIAL_HANDLE}`;
+  if (cta.startsWith(CLOSE_LINE) && cta.endsWith(handle)) return `<div>${esc(cta.slice(0, -handle.length))}<span class="cta-handle">${esc(OFFICIAL_HANDLE)}</span></div>`;
+  return esc(cta);
+}
 const url = (name: string): string => pathToFileURL(join(ASSETS, name)).href;
 const toneClass = (t: ChartTone): string => (t === "bad" ? "bad" : "good");
 
@@ -70,7 +81,7 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .det .row .l{font-size:34px;line-height:40px}.det .row .v{font-size:38px}
 .foot{height:${DETAIL_FOOTER}px;line-height:${DETAIL_FOOTER}px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 .caption{font:700 ${MOCK_FONT.caption}px/${MOCK_BOXES.caption.h}px MR;color:var(--ink);white-space:nowrap;overflow:hidden}
-.cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:28px;padding:0 44px;font:700 50px/66px SG;color:var(--ink)}
+.cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid var(--ctaborder);background:var(--ctabg);border-radius:28px;padding:0 44px;font:700 50px/66px SG;color:var(--ink)}.cta-handle{display:block;margin-top:14px;font:700 34px/46px MR;letter-spacing:.06em;color:var(--cyan)}
 .hookwrap{position:absolute;inset:0;transform-origin:490px 700px}
 .hooktxt{font:800 150px/1.04 SG;letter-spacing:-.025em;color:var(--ink);overflow:hidden;display:flex;flex-direction:column;justify-content:center}.hooktxt>div{display:block}.hooktxt em{font-style:normal;color:var(--good)}.hooktxt em.bad{color:var(--bad)}
 .figs{display:flex;flex-direction:column;gap:20px;justify-content:center}
@@ -267,7 +278,7 @@ export function buildMockHtml(frame: MockFrame): string {
   } else {
     showCaption = false;
     content += bigText(frame.captionText);
-    if (frame.cta) content += `<div ${box("cta")} class="cta"${a("pop", 200)}>${esc(frame.cta)}</div>`;
+    if (frame.cta) content += `<div ${box("cta")} class="cta"${a("pop", 200)}>${ctaHtml(frame.cta)}</div>`;
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}${styleCss(style)}</style></head><body data-origin="${style.align === "center" ? "center center" : "left center"}"${hookFirst && !hookBeat ? ` data-fast="1"` : ""}>
 <img ${box("logo")} class="logo" src="${url(style.palette.light ? "fillbook-horizontal-dark.svg" : "fillbook-horizontal-white.svg")}">
@@ -329,7 +340,7 @@ ${chartContent}
     `<div ${box("teachHead")} class="thead" data-autofit="${opening ? 150 : 120}" data-fit${headStyle}${a("settle", 80)}><div>${head}</div></div>` +
     `<div class="tbar" style="left:${MOCK_BOXES.teachBody.x}px;top:${MOCK_BOXES.teachBody.y - 34}px"${a("fade", 200)}></div>` +
     (frame.cta
-      ? `<div ${box("teachBody")} class="cta" data-fit${a("pop", 220)}>${esc(frame.cta)}</div>`
+      ? `<div ${box("teachBody")} class="cta" data-fit${a("pop", 220)}>${ctaHtml(frame.cta)}</div>`
       : `<div ${box("teachBody")} class="tbody" data-fit${a("fade", 260)}>${esc(frame.captionText)}</div>`) +
     (frame.progress && !frame.cta
       ? `<div ${box("teachTrack")} class="track"${a("fade", 320)}><div class="lbl">STEP ${frame.progress.index} OF ${frame.progress.of}</div><div class="segs">${Array.from({ length: frame.progress.of }, (_, k) => `<i class="${k + 1 === frame.progress!.index ? "on" : k + 1 < frame.progress!.index ? "done" : ""}"></i>`).join("")}</div></div>`

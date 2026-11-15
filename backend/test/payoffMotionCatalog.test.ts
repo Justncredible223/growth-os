@@ -14,6 +14,7 @@ import { FRESH2_PILOTS } from "../src/shortform/freshConcepts2";
 import { RECORDING_PILOTS } from "../src/shortform/freshRecordingConcepts";
 import { EXPLAINER_PILOTS } from "../src/shortform/explainers";
 import { CHART_MOMENT_PILOTS, STRATEGY_PILOTS } from "../src/shortform/strategyVideos";
+import { AFTER_THE_TRADE_PILOTS } from "../src/shortform/afterTheTrade";
 import { listMotionConcepts, resolveMotionScenePlan } from "../scripts/video-factory/motionCatalog";
 import { buildVideoScriptFromScenePlan } from "../src/content/videoScriptWriter";
 import { manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept";
@@ -25,7 +26,7 @@ describe("the motion catalog includes the payoff variants", () => {
   it("lists every original pilot, the three payoff variants and the story rebuilds, once each", () => {
     const ids = listMotionConcepts().map((c) => c.id);
     expect(ids).toEqual(MOTION_SCENE_PLANS.map((p) => p.planId));
-    expect(ids.length).toBe(PILOTS.length + PAYOFF_PILOTS.length + STORY_PILOTS.length + MORE_STORY_PILOTS.length + PILOT7_STORY_PILOTS.length + CHART_PILOTS.length + BARS_PILOTS.length + OUTCOMES_PILOTS.length + DAILY_PILOTS.length + FRESH_PILOTS.length + FRESH2_PILOTS.length + RECORDING_PILOTS.length + EXPLAINER_PILOTS.length + STRATEGY_PILOTS.length + CHART_MOMENT_PILOTS.length);
+    expect(ids.length).toBe(PILOTS.length + PAYOFF_PILOTS.length + STORY_PILOTS.length + MORE_STORY_PILOTS.length + PILOT7_STORY_PILOTS.length + CHART_PILOTS.length + BARS_PILOTS.length + OUTCOMES_PILOTS.length + DAILY_PILOTS.length + FRESH_PILOTS.length + FRESH2_PILOTS.length + RECORDING_PILOTS.length + EXPLAINER_PILOTS.length + STRATEGY_PILOTS.length + CHART_MOMENT_PILOTS.length + AFTER_THE_TRADE_PILOTS.length);
     for (const p of PAYOFF_PILOTS) expect(ids).toContain(p.planId);
     expect(new Set(ids).size).toBe(ids.length);
   });

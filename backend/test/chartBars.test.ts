@@ -162,7 +162,7 @@ describe("the daily queue", () => {
     const ids = offeredChartConcepts().map((c) => c.id);
     expect(ids).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
     expect(ids).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length + EXTRA_OFFERED_CONCEPT_IDS.length);
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(CHART_MOMENT_ORDER); // the chart-moment series (2026-11-08)
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]); // the chart moments left the offer with the strategy videos (2026-11-14)
     expect(ids.some((id) => DAILY_CONCEPT_ORDER.includes(id))).toBe(false);
     expect(ids.some((id) => BARS_PILOTS.some((p) => p.planId === id))).toBe(false);
   });

@@ -555,16 +555,27 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
       motionScenePlan: { scenePlanId: plan.planId, scenePlanHash: computeScenePlanHash(plan) },
     };
   }
+  // A strategy-hook cut (afterTheTrade.ts) opens on a drawn chart before the demo account's figures: both are said plainly.
+  const hookChartNote = plan.planId.startsWith("after-hook-") ? " Chart: illustration, not a recommendation." : "";
   return {
     hook: plan.hook,
     script,
     shotList,
     // Search-style title and an explainer-first description (owner analytics 2026-10-17: YouTube search brought the
     // views, number teasers did not). Still plain that the numbers are a sample account's demo data: that line closes it.
-    youtubeTitle: youtubeSearchTitle(title, topic),
-    youtubeDescription: youtubeSearchDescription(title, topic, OFFICIAL_HANDLE),
-    tiktokCaption: `${plan.hook} Demo account data. ${OFFICIAL_HANDLE}`,
-    instagramCaption: `${plan.hook} ${topic}. Demo data from a sample account, not a real trader. ${OFFICIAL_HANDLE}`,
+    // An "After the trade" cut (afterTheTrade.ts) is titled by its own words, so it never shares a YouTube title with its
+    // explainer or with the clip its demo beats came from: a hook cut by its new opening line, a rule cut by its "What to
+    // check" card (the fourth beat).
+    youtubeTitle: plan.planId.startsWith("after-hook-")
+      ? youtubeSearchTitle(publicConceptText(plan.hook), topic)
+      : plan.planId.startsWith("after-") && plan.scenes[3]
+        ? youtubeSearchTitle(publicConceptText(plan.scenes[3].headline), topic)
+        : youtubeSearchTitle(title, topic),
+    youtubeDescription: hookChartNote
+      ? `${youtubeSearchDescription(title, topic, OFFICIAL_HANDLE)}\n\nThe opening chart is a drawn illustration, not a real market and not a recommendation.`
+      : youtubeSearchDescription(title, topic, OFFICIAL_HANDLE),
+    tiktokCaption: `${plan.hook}${hookChartNote} Demo account data. ${OFFICIAL_HANDLE}`,
+    instagramCaption: `${plan.hook} ${topic}.${hookChartNote} Demo data from a sample account, not a real trader. ${OFFICIAL_HANDLE}`,
     hashtags,
     disclosureCta,
     youtubeThumbnailConcept: `${plan.hook} -- bold text overlay over the plan's own opening scene visual.`,

@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { EXPLAINERS, EXPLAINERS_OFFERED, EXPLAINER_PILOTS, EXPLAINER_ORDER, EXPLAINER_SERIES, isExplainerPlan } from "../src/shortform/explainers";
 import { STRATEGY_ORDER } from "../src/shortform/strategyVideos";
 import { findSuppliedVoice } from "../scripts/video-factory/suppliedVoice";
-import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, RETIRED_FRESH_DAILY_ORDER, dailyPosition, isNarratedMockPlan, isOfferedPlan } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS, RETIRED_EXPLAINER_STRATEGY_ORDER, RETIRED_FRESH_DAILY_ORDER, dailyPosition, isNarratedMockPlan, isOfferedPlan } from "../src/shortform/motionPlans";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
 import { FRESH_PILOTS } from "../src/shortform/freshConcepts";
@@ -17,18 +17,17 @@ const POSTED = RETIRED_FRESH_DAILY_ORDER.slice(0, 9);
 const cardOf = (id: string) => id.replace(/^(fresh-\d{2})b-(.*)-recording$/, "$1-$2");
 
 describe("the explainers", () => {
-  it("fill 20 of the 30 days, the other 10 (every third day) going to the strategy videos", () => {
+  it("are no longer offered (since 2026-11-14 the 'After the trade' cuts of the 20 offered ones are), but every one still resolves", () => {
     expect(EXPLAINER_PILOTS).toHaveLength(30);
     expect(EXPLAINERS_OFFERED).toHaveLength(20);
-    expect(OFFERED_DAILY_CONCEPT_IDS).toHaveLength(30);
-    expect(new Set(OFFERED_DAILY_CONCEPT_IDS).size).toBe(30);
-    OFFERED_DAILY_CONCEPT_IDS.forEach((id, i) => {
-      expect(dailyPosition(id)).toBe(i);
-      expect(id.startsWith((i + 1) % 3 === 0 ? "strategy-" : "explain-"), `day ${i + 1}: ${id}`).toBe(true);
-    });
-    expect(OFFERED_DAILY_CONCEPT_IDS.filter((id) => id.startsWith("explain-"))).toEqual([...EXPLAINERS_OFFERED]);
-    expect([...OFFERED_DAILY_CONCEPT_IDS.filter((id) => id.startsWith("strategy-"))].sort()).toEqual([...STRATEGY_ORDER].sort());
-    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...CHART_MOMENT_ORDER].sort());
+    // The retired 2026-10-17 order: 20 explainers, every third day a strategy video.
+    expect(RETIRED_EXPLAINER_STRATEGY_ORDER).toHaveLength(30);
+    RETIRED_EXPLAINER_STRATEGY_ORDER.forEach((id, i) => expect(id.startsWith((i + 1) % 3 === 0 ? "strategy-" : "explain-"), `day ${i + 1}: ${id}`).toBe(true));
+    expect([...RETIRED_EXPLAINER_STRATEGY_ORDER.filter((id) => id.startsWith("strategy-"))].sort()).toEqual([...STRATEGY_ORDER].sort());
+    OFFERED_DAILY_CONCEPT_IDS.forEach((id, i) => expect(dailyPosition(id)).toBe(i));
+    expect(OFFERED_DAILY_CONCEPT_IDS.some((id) => /^(explain|strategy|chartmoment)-/.test(id))).toBe(false);
+    expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).map((p) => p.planId).sort()).toEqual([...OFFERED_DAILY_CONCEPT_IDS].sort());
+    for (const id of [...EXPLAINER_ORDER, ...STRATEGY_ORDER, ...CHART_MOMENT_ORDER]) expect(MOTION_SCENE_PLANS.some((p) => p.planId === id), id).toBe(true);
     for (const p of EXPLAINER_PILOTS) {
       expect(p.series).toBe(EXPLAINER_SERIES);
       expect(isExplainerPlan(p)).toBe(true);
@@ -44,7 +43,7 @@ describe("the explainers", () => {
   it("every offered video has a recorded voice part for each beat", () => {
     for (const id of OFFERED_DAILY_CONCEPT_IDS) {
       const plan = MOTION_SCENE_PLANS.find((p) => p.planId === id)!;
-      expect(findSuppliedVoice(plan.planId, plan.scenes.length)?.kind, id).toBe("parts");
+      expect(findSuppliedVoice(plan.planId, plan.scenes.length, undefined, plan.voiceParts)?.kind, id).toBe("parts");
     }
   });
 

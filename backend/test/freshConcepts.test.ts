@@ -16,7 +16,7 @@ describe("the first 9 fresh hook-first concepts (part of the offered pool since 
     expect(FRESH_PILOTS).toHaveLength(9);
     // The offered pool is these 9 plus the 21 of freshConcepts2.ts; its size, order and lane mix are checked in freshConcepts2.test.ts.
     for (const id of FRESH_CONCEPT_ORDER) expect(RETIRED_FRESH_DAILY_ORDER, id).toContain(id);
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(CHART_MOMENT_ORDER); // the chart-moment series (2026-11-08)
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]); // the chart moments left the offer with the strategy videos (2026-11-14)
     FRESH_PILOTS.forEach((p) => expect(dailyPosition(p.planId)).toBe(-1));
     for (const p of DAILY_PILOTS) {
       expect(MOTION_SCENE_PLANS).toContain(p);

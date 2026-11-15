@@ -436,6 +436,11 @@ export interface ScenePlan {
    * still holds the sentence each scene says in text (it is what the claim checks read). Omitted means narrated.
    */
   voiceover?: "narrated" | "none";
+  /**
+   * The supplied-voice file stem for each scene, in order, when the scenes reuse another plan's recorded parts (the "After the
+   * trade" cuts, afterTheTrade.ts, reuse the explainers' ElevenLabs parts). Omitted means `<planId>-<n>` (suppliedVoice.ts).
+   */
+  voiceParts?: string[];
 }
 
 export type IssueSeverity = "error" | "review";
