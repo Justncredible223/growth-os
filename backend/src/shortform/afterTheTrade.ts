@@ -62,17 +62,17 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
   {
     explainer: "explain-06-drawdown-vs-loss-limit",
     chartFrom: "orb-range-trigger",
-    headline: "2 limits. Only 1 counts today.",
-    caption: "Two limits apply before the first trade. Only the smaller one counts today.",
-    say: "There are two limits before the open, but only the smaller one counts today, so which one is it?",
+    headline: "2 limits, not 1. Which to watch?",
+    caption: "A prop account can have two limits at once. Check which one is closer today.",
+    say: "Your account has two limits, not one, so which one is closer to being hit today?",
     recorded: false,
   },
   {
     explainer: "explain-03-moving-stops",
     chartFrom: "orb-stop-placement",
-    headline: "1 stop, set before. Moved after?",
-    caption: "A stop is set once before the trade. How often does it move after?",
-    say: "The stop is set once before the trade, but how often does it move once the trade is on?",
+    headline: "1 stop moved later. What changed?",
+    caption: "Your journal records when a stop was moved. See what that changed.",
+    say: "Your stop was set before the trade, but what did moving it later change?",
     recorded: false,
   },
   {
@@ -86,9 +86,9 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
   {
     explainer: "explain-02-consistency-rule",
     chartFrom: "demand-zone",
-    headline: "1 big day. But payout on hold?",
-    caption: "Under a consistency rule, one day can hold too big a share of your profit.",
-    say: "One day can make the month, but under a consistency rule that one day can still block a payout.",
+    headline: "1 big profit day. Payout at risk?",
+    caption: "Some firms cap how much profit one day can hold. Check yours.",
+    say: "One big profit day can look great, but does it affect your payout eligibility under your firm's rule?",
     recorded: false,
   },
   {
