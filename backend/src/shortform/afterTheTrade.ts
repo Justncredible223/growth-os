@@ -55,8 +55,9 @@ export interface StrategyHook {
 }
 
 /**
- * Seven hooks, each a question a trader asks about the account before or after a common situation. None is recorded yet
- * (2026-11-14): recording them waits for the owner's yes on ElevenLabs credits.
+ * Seven hooks, each a question a trader asks about the account before or after a common situation. All seven recorded
+ * 2026-11-15 on the owner's yes: ElevenLabs, Jessica Anne Bogart, Eleven v4, stability 50%, similarity 89%, MP3 44.1 kHz
+ * 192 kbps, one line per file, VWAP typed "vee-wap". Pace 2.5-3.3 words/s against 2.82 for the explainers' teaching lines.
  */
 export const STRATEGY_HOOKS: readonly StrategyHook[] = [
   {
@@ -65,7 +66,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "2 limits, not 1. Which to watch?",
     caption: "A prop account can have two limits at once. Check which one is closer today.",
     say: "Your account has two limits, not one, so which one is closer to being hit today?",
-    recorded: false,
+    recorded: true,
   },
   {
     explainer: "explain-03-moving-stops",
@@ -73,7 +74,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "1 stop moved later. What changed?",
     caption: "Your journal records when a stop was moved. See what that changed.",
     say: "Your stop was set before the trade, but what did moving it later change?",
-    recorded: false,
+    recorded: true,
   },
   {
     explainer: "explain-12-losing-setup",
@@ -81,7 +82,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "1 setup name. Not 1 result.",
     caption: "A setup's name says nothing about what your own trades with it made.",
     say: "A setup has one name, but your own trades with it can still lose, so what do they add up to?",
-    recorded: false,
+    recorded: true,
   },
   {
     explainer: "explain-02-consistency-rule",
@@ -89,7 +90,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "1 big profit day. Payout at risk?",
     caption: "Some firms cap how much profit one day can hold. Check yours.",
     say: "One big profit day can look great, but does it affect your payout eligibility under your firm's rule?",
-    recorded: false,
+    recorded: true,
   },
   {
     explainer: "explain-09-normal-trade-count",
@@ -97,7 +98,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "8 VWAP crosses. Not 8 trades.",
     caption: "On a choppy day it is easy to trade far past your normal pace.",
     say: "Price can cross VWAP 8 times on a choppy day, but how many trades did you take against your normal?",
-    recorded: false,
+    recorded: true,
   },
   {
     explainer: "explain-04-time-of-day",
@@ -105,7 +106,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "First 15 minutes. What costs you?",
     caption: "Compare your own trades at the open with your trades later in the day.",
     say: "The first 15 minutes move fast, but which time of day actually costs you?",
-    recorded: false,
+    recorded: true,
   },
   {
     explainer: "explain-07-one-day-carries-month",
@@ -113,7 +114,7 @@ export const STRATEGY_HOOKS: readonly StrategyHook[] = [
     headline: "Only 1 day carrying your month?",
     caption: "One strong day can hide what the rest of the month made.",
     say: "One trend day can carry a whole month, but what did the rest of your days add up to?",
-    recorded: false,
+    recorded: true,
   },
 ];
 

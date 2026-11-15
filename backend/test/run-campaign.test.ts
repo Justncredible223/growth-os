@@ -178,7 +178,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
     // 2026-10-17: only the 30 explainers are offered (explainers.ts). The fresh clips, the first twelve product mocks, the 30 earlier daily
     // concepts and every older concept are retired from the list but stay in the catalog so a script already drafted or approved still renders.
-    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["after-01-copy-trading-risk", "after-02-consistency-rule", "after-03-moving-stops"]));
+    expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["after-01-copy-trading-risk", "after-08-edge-score", "after-10-weak-hour"]));
     // The 30 explainers in their day order.
     expect(body.motionConcepts.map((c) => c.id).slice(0, 30)).toEqual(OFFERED_DAILY_CONCEPT_IDS.slice(0, 30));
     // 2026-10-07: nothing else is offered (EXTRA_OFFERED_CONCEPT_IDS is empty; the conviction video is cleared too).
@@ -279,8 +279,8 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
 
 describe("api/run-campaign.ts handler -- a concept is used up once requested (owner rule 2026-09-25)", () => {
   const A = "Motion concept request: After the trade: copying one trade to two accounts copies the loss too";
-  const B = "Motion concept request: After the trade: the consistency rule: when your best day is too big";
-  const C = "Motion concept request: After the trade: what moving your stop loss actually costs";
+  const B = "Motion concept request: After the trade: one score for how you trade, and what drags it down";
+  const C = "Motion concept request: After the trade: the one hour of the day that loses";
   let handler: typeof import("../api/run-campaign").default;
   let state: ReturnType<typeof createFakeClient>;
 
@@ -312,12 +312,12 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
     const ids = body.motionConcepts.map((c) => c.id);
     expect(ids).not.toContain("after-01-copy-trading-risk");
-    expect(ids).not.toContain("after-02-consistency-rule");
-    expect(ids).toContain("after-03-moving-stops");
+    expect(ids).not.toContain("after-08-edge-score");
+    expect(ids).toContain("after-10-weak-hour");
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "after-01-copy-trading-risk", state: "made" }),
-        expect.objectContaining({ id: "after-02-consistency-rule", state: "waiting" }),
+        expect.objectContaining({ id: "after-08-edge-score", state: "waiting" }),
       ]),
     );
   });
@@ -330,7 +330,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "after-01-copy-trading-risk", state: "rejected" }),
-        expect.objectContaining({ id: "after-03-moving-stops", state: "waiting" }),
+        expect.objectContaining({ id: "after-10-weak-hour", state: "waiting" }),
       ]),
     );
   });
@@ -341,7 +341,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain("after-01-copy-trading-risk");
-    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "after-03-moving-stops", state: "rejected" })]));
+    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "after-10-weak-hour", state: "rejected" })]));
     expect(body.unavailableMotionConcepts.map((c) => c.id)).not.toContain("after-01-copy-trading-risk");
   });
 
@@ -358,7 +358,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept waiting in Approvals is refused with 409", async () => {
     await load({ campaignRows: [{ thesis: B, status: "in_review" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "after-02-consistency-rule" }), res);
+    await handler(fakeReq({ motionConceptId: "after-08-edge-score" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("waiting in Approvals");
   });
@@ -366,7 +366,7 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   it("POST for a concept whose request is still queued is refused with 409, so it can't be run twice", async () => {
     await load({ pendingRuns: [{ opportunity_id: "opp-queued", title: C }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "after-03-moving-stops" }), res);
+    await handler(fakeReq({ motionConceptId: "after-10-weak-hour" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already in progress");
     expect(state.calls).toHaveLength(0);
@@ -401,13 +401,13 @@ describe("api/run-campaign.ts handler -- one new concept request a day (owner ru
   });
 
   it("refuses a second request on the same day with a 409 that names today's concept, before anything is created or queued", async () => {
-    await load("Motion concept request: After the trade: the consistency rule: when your best day is too big");
+    await load("Motion concept request: After the trade: one score for how you trade, and what drags it down");
     const { res, result } = fakeRes();
     await handler(fakeReq({ motionConceptId: "after-01-copy-trading-risk" }), res);
     expect(result.statusCode).toBe(409);
     const error = (result.body as { error: string }).error;
     expect(error).toMatch(/One video a day/);
-    expect(error).toContain("After the trade: the consistency rule: when your best day is too big");
+    expect(error).toContain("After the trade: one score for how you trade, and what drags it down");
     expect(error).toMatch(/Arizona/);
     expect(state.calls.filter((c) => c.kind === "enqueue_campaign_run")).toEqual([]);
     expect(state.insertedOpportunities).toEqual([]);
@@ -422,11 +422,11 @@ describe("api/run-campaign.ts handler -- one new concept request a day (owner ru
   });
 
   it("GET tells the app which concept was requested today and when the next request opens", async () => {
-    await load("Motion concept request: After the trade: the consistency rule: when your best day is too big");
+    await load("Motion concept request: After the trade: one score for how you trade, and what drags it down");
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { dailyLimit: { requestedToday: string | null; nextRequestAt: string | null } };
-    expect(body.dailyLimit.requestedToday).toContain("After the trade: the consistency rule");
+    expect(body.dailyLimit.requestedToday).toContain("After the trade: one score for how you trade");
     expect(new Date(body.dailyLimit.nextRequestAt!).getTime()).toBeGreaterThan(Date.now());
 
     await load(null);
