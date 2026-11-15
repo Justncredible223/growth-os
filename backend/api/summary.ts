@@ -16,7 +16,7 @@ import { llmKeySource } from "../src/content/llmKey.js";
 import { breakdownCostEvents, getTodaySpendUsd, selectCostEvents, selectCostEventsResult, sumCostUsd } from "../src/cost/costTracking.js";
 import { MONTHLY_BACKGROUND_PAUSE_SHARE, monthlyBudgetState, monthlyCapUsd, utcMonthStart } from "../src/cost/llmBudget.js";
 import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
-import { buildXPostImageCard, type XPostImageCard } from "../src/content/xPostImageCard.js";
+import { buildXPostImageCard, type XPostImageCard, PICTURE_TEST_START, pictureArmForPost, pictureTestTally, type PictureArm } from "../src/content/xPostImageCard.js";
 import { buildPostReceipt, type ReceiptItem } from "../src/content/xPostReceipt.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
 import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
@@ -464,6 +464,8 @@ export interface XFeedPostHistoryEntry {
   previewText?: string;
   reason?: string;
   campaignAssetId?: string;
+  /** Posted entries: which arm of the picture style test the post was in (xPostImageCard.ts pictureArmForPost). */
+  pictureArm?: PictureArm;
 }
 
 /** How many days back Previous drafts/history looks -- deliberately independent of RECENT_EDITORIAL_HISTORY_DAYS (that one drives repetition scoring; this one is just how far back the owner can browse). */
@@ -496,6 +498,7 @@ async function computeXFeedPostHistory(client: SupabaseClient, now: Date): Promi
           topicLabel: feedPostTopicLabel(run.topicKey) ?? undefined,
           previewText: run.postedText ?? undefined,
           campaignAssetId: run.campaignAssetId,
+          ...(run.postedText ? { pictureArm: pictureArmForPost(run.postedText) } : {}),
         });
       } else {
         const { data: latestVersion } = await client
@@ -530,8 +533,14 @@ async function handleXFeedPostHistory(req: VercelRequest, res: VercelResponse): 
   }
   try {
     const client = getServiceClient();
-    const entries = await computeXFeedPostHistory(client, new Date());
-    res.status(200).json({ entries });
+    const now = new Date();
+    const entries = await computeXFeedPostHistory(client, now);
+    // The picture style test's split by topic and arm since it began (posted posts only), so the team can check balance before reading results.
+    const today = getOperatingDate(now, getScheduleTimezone());
+    const posted = (await new SupabaseXFeedPostRunRepository(client).listRecentRuns(PICTURE_TEST_START))
+      .filter((r) => r.postedAt && r.postedText && r.operatingDate <= today)
+      .map((r) => r.postedText as string);
+    res.status(200).json({ entries, pictureTest: { since: PICTURE_TEST_START, ...pictureTestTally(posted) } });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }

@@ -331,7 +331,32 @@ private fun Canvas.drawFigureChips(card: XPostImageCard, left: Float, baseline: 
 }
 
 /** Draws the card to a bitmap. Pure drawing: text wraps and shrinks to fit, nothing is added or changed. */
-fun renderXPostImageCard(card: XPostImageCard): Bitmap {
+/** A real Fillbook screen drawn in a framed panel (the picture style test, backend xPostImageCard.ts CardStyle): scaled to fit, centred. */
+private fun Canvas.drawScreenPanel(screen: Bitmap, left: Float, top: Float, w: Float, h: Float) {
+    val scale = minOf(w / screen.width, h / screen.height)
+    val dw = screen.width * scale
+    val dh = screen.height * scale
+    val x = left + (w - dw) / 2f
+    val y = top + (h - dh) / 2f
+    val frame = RectF(x, y, x + dw, y + dh)
+    // A soft cyan halo so the screen reads as a product shot rather than a pasted image.
+    for (k in 3 downTo 1) drawRoundRect(RectF(frame.left - k * 5f, frame.top - k * 5f, frame.right + k * 5f, frame.bottom + k * 5f), 24f + k * 5f, 24f + k * 5f, fill(android.graphics.Color.argb(18 * (4 - k), 34, 211, 238)))
+    save()
+    val clip = android.graphics.Path().apply { addRoundRect(frame, 22f, 22f, android.graphics.Path.Direction.CW) }
+    clipPath(clip)
+    drawBitmap(screen, null, frame, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+    restore()
+    drawRoundRect(frame, 22f, 22f, stroke(GRID, 3f))
+}
+
+/** The bundled real screen for a "screen" style card, or null (then the drawn card is used). */
+internal fun loadXScreen(context: Context, card: XPostImageCard): Bitmap? {
+    if (card.style != "screen") return null
+    val name = card.screen?.takeIf { Regex("^[a-z_]+$").matches(it) } ?: return null
+    return try { context.assets.open("xscreens/$name.jpg").use { android.graphics.BitmapFactory.decodeStream(it) } } catch (_: Exception) { null }
+}
+
+fun renderXPostImageCard(card: XPostImageCard, screen: Bitmap? = null): Bitmap {
     val bmp = Bitmap.createBitmap(CARD_W, CARD_H, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     c.drawColor(BG)
@@ -382,6 +407,22 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
             c.drawTrailingPanel(80f, panelTop, 500f, panelH, "Intraday", true, figures)
             c.drawTrailingPanel(620f, panelTop, 500f, panelH, "End of day", false, null)
             if (card.numbers.isNotEmpty() && !attach) c.drawFigureChips(card, 90f, CARD_H - 62f, 1020f)
+        } else if (screen != null) {
+            // Picture style test, "screen" arm: the post's short line on the left, a real Fillbook screen on the right.
+            val leftW = 450
+            val sizes = listOf(68f, 60f, 54f, 48f, 44f, 40f, 36f)
+            var headline = layoutOf(line, paint(sizes.last(), INK, bold = true), leftW)
+            for (sz in sizes) {
+                val l = layoutOf(line, paint(sz, INK, bold = true), leftW, 6)
+                headline = l
+                if (l.height <= 380f) break
+            }
+            val areaTop = 140f; val areaH = 450f
+            c.drawScreenPanel(screen, 590f, areaTop, 550f, areaH)
+            val blockH = headline.height + 34f
+            val top = maxOf(150f, areaTop + (areaH - blockH) / 2f)
+            c.drawLayout(headline, 80f, top)
+            c.drawRoundRect(RectF(82f, top + headline.height + 26f, 82f + 96f, top + headline.height + 34f), 4f, 4f, fill(CYAN))
         } else {
             // One big topic illustration on the right, the verbatim line and the labelled figures on the left.
             // A short line is drawn large and centred beside the illustration, with a cyan rule under it, so it does not sit small at the
@@ -408,7 +449,8 @@ fun renderXPostImageCard(card: XPostImageCard): Bitmap {
 
 
     // Illustrative figures always carry the label (owner rule).
-    if (card.sampleData) {
+    // A real Fillbook screen always shows made-up figures, so it is labelled even if an older backend left the flag off.
+    if (card.sampleData || screen != null) {
         val sp = paint(26f, AMBER, bold = true, spacing = 0.12f)
         c.drawText("SAMPLE DATA", CARD_W - 80f - sp.measureText("SAMPLE DATA"), 98f, sp)
     }
@@ -490,7 +532,7 @@ internal fun XPostImageCardSection(card: XPostImageCard, assetKey: String?, post
         TextButton(onClick = { discarded = false }) { Text("Show image again") }
         return
     }
-    val bitmap = remember(card) { renderXPostImageCard(card) }
+    val bitmap = remember(card) { renderXPostImageCard(card, loadXScreen(context, card)) }
     Spacer(Modifier.height(10.dp))
     Image(
         bitmap = bitmap.asImageBitmap(),

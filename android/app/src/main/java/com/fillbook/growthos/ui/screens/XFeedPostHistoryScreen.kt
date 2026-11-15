@@ -141,6 +141,16 @@ private fun HistoryCard(entry: XFeedPostHistoryEntry) {
             Spacer(Modifier.height(4.dp))
             Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary)
         }
+        // Picture style test (real Fillbook screen vs drawn card): which picture this post was meant to carry.
+        val arm = when (entry.pictureArm) {
+            "screen" -> "Picture: real Fillbook screen"
+            "drawn" -> "Picture: drawn card"
+            else -> null
+        }
+        if (entry.state == XFeedPostHistoryState.POSTED && arm != null) {
+            Spacer(Modifier.height(2.dp))
+            Text(arm, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+        }
         Spacer(Modifier.height(8.dp))
         when (entry.state) {
             XFeedPostHistoryState.FAILED -> {

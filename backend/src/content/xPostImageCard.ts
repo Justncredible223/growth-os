@@ -37,6 +37,9 @@ export function isTrailingComparison(text: string): boolean {
   return /\bintraday\b/i.test(text) && /\b(?:end[- ]of[- ]day|eod)\b/i.test(text);
 }
 
+/** Sentences that are disclaimers, not ideas: kept in the post, never used as the picture's line. */
+const DISCLAIMER = /\b(?:not (?:financial|investment|trading) advice|educational purposes|past (?:performance|results)|no guarantee|nfa)\b/i;
+
 export const HOOK_MIN = 12;
 export const HOOK_MAX = 48;
 
@@ -51,7 +54,8 @@ export function shortHook(text: string): string | null {
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .slice(0, 5);
-  const fits = sentences.filter((s) => s.length >= HOOK_MIN && s.length <= HOOK_MAX);
+  // A disclaimer is never the picture's line (seen on the Fold 2026-11-15: "Not financial advice." beside a real screen).
+  const fits = sentences.filter((s) => s.length >= HOOK_MIN && s.length <= HOOK_MAX && !DISCLAIMER.test(s));
   if (fits.length === 0) return null;
   return fits.reduce((a, b) => (b.length < a.length ? b : a));
 }
@@ -81,6 +85,55 @@ export function motifForPost(text: string): CardMotif {
   return hit ? hit[0] : "target";
 }
 
+/**
+ * Picture style test (ChatGPT + App, 2026-11-15, owner said "do all that"): real Fillbook screens may sell better than a drawn shape, but that
+ * is a hypothesis, so the two styles ALTERNATE and are compared on attributed trials per 1,000 X impressions before either becomes the default.
+ *  - "screen" shows a real Fillbook card captured from the public /sample page (made-up trades only; never a customer's or the owner's data),
+ *    bundled in the phone app (android/app/src/main/assets/xscreens, retaken with backend/scripts/x-screens/capture.mjs when the UI changes).
+ *  - A screen carries its own made-up figures, so it is used only when the post has NO figure of its own: the picture can never contradict the post.
+ *  - Which style a post gets is a pure function of the post text (a hash), so the test can be re-scored later from the posted text alone.
+ *  - Kill switch X_POST_SCREEN_CARDS=off puts every post back on the drawn card.
+ */
+export type CardStyle = "drawn" | "screen";
+/** One idea per screen so its text stays readable at X feed size (ChatGPT 2026-11-15): a single dashboard tile or the top of one card. */
+export type ScreenKey = "buffer" | "lossroom" | "maxsize" | "edge" | "leaks" | "health";
+export const SCREEN_FOR_MOTIF: Partial<Record<CardMotif, ScreenKey>> = {
+  drawdown: "buffer",
+  loss_limit: "lossroom",
+  sizing: "maxsize",
+  edge_score: "edge",
+  journal: "leaks",
+  target: "health",
+};
+
+/** The test arm a post falls in: FNV-1a hash of the lower-cased, space-collapsed text, even = screen, odd = drawn. */
+export function styleArmForText(text: string): CardStyle {
+  const norm = text.toLowerCase().replace(/\s+/g, " ").trim();
+  let h = 0x811c9dc5;
+  for (let i = 0; i < norm.length; i++) {
+    h ^= norm.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h % 2 === 0 ? "screen" : "drawn";
+}
+
+export function screenCardsEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.X_POST_SCREEN_CARDS !== "off";
+}
+
+/** The style a post card is drawn in, and the screen when it is "screen". Drawn whenever a screen is not safe or not available. */
+export function cardStyleFor(
+  text: string,
+  motif: CardMotif,
+  postHasFigures: boolean,
+  compare: boolean,
+  env: Record<string, string | undefined> = process.env,
+): { style: CardStyle; screen?: ScreenKey } {
+  const screen = SCREEN_FOR_MOTIF[motif];
+  if (!screenCardsEnabled(env) || postHasFigures || compare || !screen) return { style: "drawn" };
+  return styleArmForText(text) === "screen" ? { style: "screen", screen } : { style: "drawn" };
+}
+
 export interface XPostImageCard {
   version: 1;
   /** "post" = a headline card built from the day's draft; "reference" = a fixed card for a Wednesday reference post. */
@@ -101,6 +154,10 @@ export interface XPostImageCard {
   hook?: string;
   /** For each figure in `numbers`, the up to two words that come right before it in the post (verbatim), so a figure is never shown bare. */
   figureNotes?: string[];
+  /** Picture style test arm (see CardStyle). Absent on older cards = drawn. */
+  style?: CardStyle;
+  /** Which bundled real Fillbook screen the phone draws when style is "screen". */
+  screen?: ScreenKey;
 }
 
 /** Off switch. Anything other than the exact value "off" leaves the card on. */
@@ -192,17 +249,65 @@ export function buildXPostImageCard(
   const numbers = numbersInPost(text).slice(0, 3);
   const motif = motifForPost(text);
   const hook = shortHook(text);
+  const compare = motif === "drawdown" && isTrailingComparison(text);
+  const look = cardStyleFor(text, motif, numbers.length > 0, compare, env);
   const card: XPostImageCard = {
     version: 1,
     kind: "post",
     title: headline,
     rows: [],
     numbers,
-    sampleData: numbers.length > 0,
+    // A real screen shows made-up figures, so it is always labelled sample data.
+    sampleData: numbers.length > 0 || look.style === "screen",
     motif,
-    ...(motif === "drawdown" && isTrailingComparison(text) ? { compare: true } : {}),
+    ...(compare ? { compare: true } : {}),
     ...(hook ? { hook } : {}),
     ...(numbers.length > 0 ? { figureNotes: figureNotesFor(text, numbers) } : {}),
+    style: look.style,
+    ...(look.screen ? { screen: look.screen } : {}),
   };
   return cardNumbersTraceToPost(card, text) ? card : null;
+}
+
+/** First operating date of the picture style test; posts before it were all drawn and are left out of the tally. */
+export const PICTURE_TEST_START = "2026-11-16";
+
+export type PictureArm = CardStyle | "not_eligible";
+
+/** The arm a post was in, from its text alone: "not_eligible" when it could only ever get the drawn card (figures, comparison, no screen). */
+export function pictureArmForPost(text: string): PictureArm {
+  const t = text.trim();
+  if (!t) return "not_eligible";
+  const motif = motifForPost(t);
+  const compare = motif === "drawdown" && isTrailingComparison(t);
+  if (numbersInPost(t).length > 0 || compare || !SCREEN_FOR_MOTIF[motif]) return "not_eligible";
+  return styleArmForText(t);
+}
+
+export interface PictureTestRow {
+  motif: CardMotif;
+  screen: number;
+  drawn: number;
+  notEligible: number;
+}
+
+/**
+ * Posts per topic and arm (ChatGPT 2026-11-15: a hash split is reproducible but not guaranteed balanced, so check the real split per topic
+ * before reading any result). Only eligible posts count toward the comparison; a topic whose two arms differ by more than half of the smaller
+ * one plus two is flagged unbalanced.
+ */
+export function pictureTestTally(postedTexts: string[]): { rows: PictureTestRow[]; screen: number; drawn: number; unbalancedTopics: CardMotif[] } {
+  const rows = new Map<CardMotif, PictureTestRow>();
+  for (const text of postedTexts) {
+    const motif = motifForPost(text);
+    const row = rows.get(motif) ?? { motif, screen: 0, drawn: 0, notEligible: 0 };
+    const arm = pictureArmForPost(text);
+    if (arm === "screen") row.screen++;
+    else if (arm === "drawn") row.drawn++;
+    else row.notEligible++;
+    rows.set(motif, row);
+  }
+  const list = CARD_MOTIFS.map((m) => rows.get(m)).filter((r): r is PictureTestRow => r !== undefined);
+  const unbalancedTopics = list.filter((r) => Math.abs(r.screen - r.drawn) > Math.min(r.screen, r.drawn) / 2 + 2).map((r) => r.motif);
+  return { rows: list, screen: list.reduce((n, r) => n + r.screen, 0), drawn: list.reduce((n, r) => n + r.drawn, 0), unbalancedTopics };
 }

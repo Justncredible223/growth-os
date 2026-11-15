@@ -221,6 +221,8 @@ class NetworkGrowthOsRepository(
             compare = optBoolean("compare", false),
             hook = optStringOrNull("hook"),
             figureNotes = optJSONArray("figureNotes")?.mapStrings() ?: emptyList(),
+            style = optStringOrNull("style"),
+            screen = optStringOrNull("screen"),
         )
     }
 
@@ -457,6 +459,7 @@ class NetworkGrowthOsRepository(
                 previewText = item.optStringOrNull("previewText"),
                 reason = item.optStringOrNull("reason"),
                 campaignAssetId = item.optStringOrNull("campaignAssetId"),
+                pictureArm = item.optStringOrNull("pictureArm"),
             )
         }
     }
