@@ -37,6 +37,9 @@ export function isTrailingComparison(text: string): boolean {
   return /\bintraday\b/i.test(text) && /\b(?:end[- ]of[- ]day|eod)\b/i.test(text);
 }
 
+/** Sentences that are disclaimers, not ideas: kept in the post, never used as the picture's line. */
+const DISCLAIMER = /\b(?:not (?:financial|investment|trading) advice|educational purposes|past (?:performance|results)|no guarantee|nfa)\b/i;
+
 export const HOOK_MIN = 12;
 export const HOOK_MAX = 48;
 
@@ -51,7 +54,8 @@ export function shortHook(text: string): string | null {
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .slice(0, 5);
-  const fits = sentences.filter((s) => s.length >= HOOK_MIN && s.length <= HOOK_MAX);
+  // A disclaimer is never the picture's line (seen on the Fold 2026-11-15: "Not financial advice." beside a real screen).
+  const fits = sentences.filter((s) => s.length >= HOOK_MIN && s.length <= HOOK_MAX && !DISCLAIMER.test(s));
   if (fits.length === 0) return null;
   return fits.reduce((a, b) => (b.length < a.length ? b : a));
 }

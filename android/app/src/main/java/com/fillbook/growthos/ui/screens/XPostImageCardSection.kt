@@ -449,7 +449,8 @@ fun renderXPostImageCard(card: XPostImageCard, screen: Bitmap? = null): Bitmap {
 
 
     // Illustrative figures always carry the label (owner rule).
-    if (card.sampleData) {
+    // A real Fillbook screen always shows made-up figures, so it is labelled even if an older backend left the flag off.
+    if (card.sampleData || screen != null) {
         val sp = paint(26f, AMBER, bold = true, spacing = 0.12f)
         c.drawText("SAMPLE DATA", CARD_W - 80f - sp.measureText("SAMPLE DATA"), 98f, sp)
     }

@@ -194,3 +194,12 @@ describe("picture style test report (ChatGPT 2026-11-15: check the split per top
     expect(lopsided.unbalancedTopics).toEqual(["drawdown"]);
   });
 });
+
+describe("short line never a disclaimer (Fold check 2026-11-15)", () => {
+  it("skips 'Not financial advice.' and similar when choosing the picture's line", async () => {
+    const { shortHook } = await import("../src/content/xPostImageCard");
+    expect(shortHook("Seeing your rule lines is easier when trades sit in one journal. Not financial advice.")).toBeNull();
+    expect(shortHook("Not financial advice. Log every trade the same day.")).toBe("Log every trade the same day.");
+    expect(shortHook("Past results do not guarantee anything. Size from your plan.")).toBe("Size from your plan.");
+  });
+});
