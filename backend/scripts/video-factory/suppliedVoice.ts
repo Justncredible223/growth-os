@@ -28,7 +28,7 @@ export const MIN_SPEECH_SECONDS = 0.25;
 export type SuppliedVoice = { kind: "single"; path: string } | { kind: "parts"; paths: string[] };
 
 /** The owner's recording for this concept, or null when there is none (the built-in voice is used). */
-export function findSuppliedVoice(planId: string, sceneCount: number, dir: string = VOICE_DIR): SuppliedVoice | null {
+export function findSuppliedVoice(planId: string, sceneCount: number, dir: string = VOICE_DIR, voiceParts?: readonly string[]): SuppliedVoice | null {
   const find = (stem: string): string | null => {
     for (const ext of VOICE_EXTENSIONS) {
       const path = join(dir, `${stem}.${ext}`);
@@ -36,6 +36,12 @@ export function findSuppliedVoice(planId: string, sceneCount: number, dir: strin
     }
     return null;
   };
+  // A plan that reuses another plan's recorded parts names each scene's file stem; it has parts or nothing (no single file).
+  if (voiceParts) {
+    if (voiceParts.length !== sceneCount) return null;
+    const named = voiceParts.map((stem) => find(stem));
+    return named.every((p): p is string => p !== null) ? { kind: "parts", paths: named } : null;
+  }
   const parts = Array.from({ length: sceneCount }, (_, i) => find(`${planId}-${i + 1}`));
   if (parts.every((p): p is string => p !== null)) return { kind: "parts", paths: parts };
   const single = find(planId);

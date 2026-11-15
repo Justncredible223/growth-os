@@ -12,7 +12,8 @@ import { FRESH_PILOTS } from "./freshConcepts.js";
 import { FRESH2_PILOTS } from "./freshConcepts2.js";
 import { RECORDING_PILOTS } from "./freshRecordingConcepts.js";
 import { EXPLAINERS_OFFERED, EXPLAINER_PILOTS, isExplainerPlan } from "./explainers.js";
-import { CHART_MOMENT_ORDER, CHART_MOMENT_PILOTS, STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
+import { CHART_MOMENT_PILOTS, STRATEGY_DAY_ORDER, STRATEGY_PILOTS } from "./strategyVideos.js";
+import { AFTER_THE_TRADE_ORDER, AFTER_THE_TRADE_PILOTS } from "./afterTheTrade.js";
 
 /**
  * Every verified ScenePlan a motion concept can be requested for: the original pilots plus the payoff redesign
@@ -20,7 +21,7 @@ import { CHART_MOMENT_ORDER, CHART_MOMENT_PILOTS, STRATEGY_DAY_ORDER, STRATEGY_P
  * "Create Fillbook Video" list and the render worker use) and the campaign pipeline (which drafts the script)
  * resolve a concept id against, so they can never disagree about what exists.
  */
-export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS, ...EXPLAINER_PILOTS, ...STRATEGY_PILOTS, ...CHART_MOMENT_PILOTS];
+export const MOTION_SCENE_PLANS: ScenePlan[] = [...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...MOCK_CARD_PILOTS, ...BARS_PILOTS, ...OUTCOMES_PILOTS, ...DAILY_PILOTS, ...FRESH_PILOTS, ...FRESH2_PILOTS, ...RECORDING_PILOTS, ...EXPLAINER_PILOTS, ...STRATEGY_PILOTS, ...CHART_MOMENT_PILOTS, ...AFTER_THE_TRADE_PILOTS];
 
 /**
  * True when this plan is a chart card (the "chart" layout). Since 2026-10-01 these are the only concepts the app offers
@@ -53,10 +54,17 @@ export function isMockPlan(plan: ScenePlan): boolean {
  * ONE ordered array on purpose: the screen-recording alternatives (freshRecordingConcepts.ts) stand in place of fresh-02-plan-said-3 (day 2), fresh-04-setup-lost-422 (day 21) and
  * fresh-06-five-revenge (day 1) as fresh-02b, fresh-04b and fresh-06b, so the pool is 30 distinct days; the three card versions follow the 30 as hidden fallbacks (a recording alternative and its card version are near-copies, so only one is ever offered).
  */
-export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = Array.from({ length: 30 }, (_, i) =>
-  // Every third day is a strategy video (strategyVideos.ts); the other days are the explainers, in their order.
+export const RETIRED_EXPLAINER_STRATEGY_ORDER: readonly string[] = Array.from({ length: 30 }, (_, i) =>
+  // 2026-10-17 to 2026-11-14: every third day was a strategy video (strategyVideos.ts); the other days were the explainers.
   (i + 1) % 3 === 0 ? STRATEGY_DAY_ORDER[(i + 1) / 3 - 1]! : EXPLAINERS_OFFERED[i - Math.floor((i + 1) / 3)]!,
 );
+
+/**
+ * Since 2026-11-14 (team decision, owner's yes): the "After the trade" cuts (afterTheTrade.ts) replace the explainers and the
+ * standalone strategy videos in the order. The explainers, strategy videos and chart moments stay resolvable (above), so a
+ * script already drafted or approved from one still renders, but none is offered again.
+ */
+export const OFFERED_DAILY_CONCEPT_IDS: readonly string[] = AFTER_THE_TRADE_ORDER;
 
 /** The fresh clips' 30-day order (2026-10-07 to 2026-10-16), retired by the explainers. Kept so the clip pool's own checks still run. */
 export const RETIRED_FRESH_DAILY_ORDER: readonly string[] = [
@@ -102,7 +110,8 @@ export const RETIRED_FRESH_DAILY_ORDER: readonly string[] = [
  * cleared with the rest; "chart-bars-conviction" still resolves). An id added here must still be a product mock that clears the
  * render bar and is not a near-copy of another offered concept; the narration rules in test/narratedMocks.test.ts apply to it too.
  */
-export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = CHART_MOMENT_ORDER;
+// 2026-11-08 to 2026-11-14 this held the chart-moment series; emptied with the strategy videos (2026-11-14).
+export const EXTRA_OFFERED_CONCEPT_IDS: readonly string[] = [];
 
 /**
  * True when the app offers this plan for a new video: one of OFFERED_DAILY_CONCEPT_IDS or EXTRA_OFFERED_CONCEPT_IDS. Every older

@@ -36,7 +36,7 @@ describe("the 21 more fresh hook-first concepts (freshConcepts2.ts) and the 30-d
     expect(new Set(pool).size).toBe(30);
     expect(pool.map(ideaOf).sort()).toEqual(own.map(ideaOf).sort());
     expect(new Set(pool.map(ideaOf)).size).toBe(30);
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(CHART_MOMENT_ORDER); // the chart-moment series (2026-11-08)
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]); // the chart moments left the offer with the strategy videos (2026-11-14)
     // Since 2026-10-17 none of them is offered: the explainers replaced the pool, and the clips stay resolvable.
     expect(MOTION_SCENE_PLANS.filter(isOfferedPlan).some((p) => offeredAll.includes(p.planId))).toBe(false);
     offeredAll.forEach((id) => expect(dailyPosition(id)).toBe(-1));

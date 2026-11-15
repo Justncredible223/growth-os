@@ -117,7 +117,7 @@ describe("the app's request handler", () => {
 });
 
 describe("the bar still applies to an offered chart concept", () => {
-  const WEAKENED = "explain-01-copy-trading-risk";
+  const WEAKENED = "after-01-copy-trading-risk";
   let handler: typeof import("../api/run-campaign").default;
   let state: ReturnType<typeof createFakeClient>;
 

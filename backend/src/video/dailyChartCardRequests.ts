@@ -52,8 +52,11 @@ export const STRATEGY_PER_EXPLAINER = 3;
 
 const isStrategyConcept = (id: string): boolean => id.startsWith("strategy-") || id.startsWith("chartmoment-");
 
-/** `unused` (already in day order) reordered for requesting: strategy first, an explainer when one is due or no strategy concept is left. */
-export function requestOrder<T extends { id: string }>(unused: readonly T[], usedIds: readonly string[]): T[] {
+/**
+ * RETIRED 2026-11-14 (team decision, owner's yes to rework the pipeline): strategy videos drew views but no evidence of
+ * sign-ups, so requests now follow the "After the trade" day order (afterTheTrade.ts) unchanged. Kept for the record.
+ */
+export function strategyFirstOrder<T extends { id: string }>(unused: readonly T[], usedIds: readonly string[]): T[] {
   const strategyUsed = usedIds.filter(isStrategyConcept).length;
   const explainerUsed = usedIds.length - strategyUsed;
   const strategySince = Math.max(0, strategyUsed - STRATEGY_FIRST_BASELINE.strategy);
@@ -62,6 +65,11 @@ export function requestOrder<T extends { id: string }>(unused: readonly T[], use
   const strategy = unused.filter((c) => isStrategyConcept(c.id));
   const others = unused.filter((c) => !isStrategyConcept(c.id));
   return explainerDue || strategy.length === 0 ? [...others, ...strategy] : [...strategy, ...others];
+}
+
+/** `unused`, already in day order, is requested in that order (since 2026-11-14; see strategyFirstOrder for the retired rule). */
+export function requestOrder<T extends { id: string }>(unused: readonly T[], _usedIds: readonly string[]): T[] {
+  return [...unused];
 }
 
 export type ConceptState = "made" | "waiting" | "rejected";
@@ -108,7 +116,8 @@ export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promi
   // Never request a concept that is a near-copy of one already made or waiting, or of another one in this batch: the
   // owner would be approving the same video twice. (A rejected concept does not count as made.)
   const planOf = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
-  const used = concepts.filter((c) => stateOf(c) === "made" || stateOf(c) === "waiting").map((c) => c.id);
+  // Every concept made or waiting counts, offered or not: a cut of an explainer that was already made is a near-copy of it.
+  const used = listMotionConcepts().filter((c) => stateOf(c) === "made" || stateOf(c) === "waiting").map((c) => c.id);
   const unused = distinctConcepts(concepts.filter((c) => stateOf(c) === undefined), used, planOf);
 
   const ordered = requestOrder(unused, used);

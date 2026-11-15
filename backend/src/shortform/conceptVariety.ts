@@ -12,9 +12,16 @@ export const MAX_CONCEPT_OVERLAP = 0.5;
 const engine = new OriginalityEngine();
 const spoken = (p: ScenePlan): string => p.scenes.map((s) => s.narration).join(" ");
 
+/** The supplied-voice file stem of each scene (suppliedVoice.ts): the plan's own `voiceParts`, else `<planId>-<n>`. */
+const voiceStems = (p: ScenePlan): string[] => p.voiceParts ?? p.scenes.map((_, i) => `${p.planId}-${i + 1}`);
+
 /** True when two concepts would read to a viewer, or to the owner picking between them, as the same video. */
 export function nearCopies(a: ScenePlan, b: ScenePlan): boolean {
   if (findRepeatedHook(a.hook, [b.hook]) !== null) return true;
+  // Two plans that play the same recorded parts for half or more of the shorter one are the same video to a viewer, whatever
+  // their text (an "After the trade" cut and its explainer, or a hook cut and the rule cut of the same explainer).
+  const shared = voiceStems(a).filter((s) => voiceStems(b).includes(s)).length;
+  if (shared > 0 && shared * 2 >= Math.min(a.scenes.length, b.scenes.length)) return true;
   return (engine.compareAgainstRecent(spoken(a), [spoken(b)])[0]?.similarity ?? 0) >= MAX_CONCEPT_OVERLAP;
 }
 

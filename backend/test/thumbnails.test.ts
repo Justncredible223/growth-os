@@ -25,7 +25,7 @@ describe("thumbnailSpecFor", () => {
   });
 
   it("every offered video has a short headline and a visual, and never internal campaign text", () => {
-    expect(offered).toHaveLength(30);
+    expect(offered).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length);
     for (const p of offered) {
       const spec = thumbnailSpecFor(p);
       expect(spec.headline.length, p.planId).toBeGreaterThan(8);
@@ -36,7 +36,7 @@ describe("thumbnailSpecFor", () => {
   });
 
   it("covers are distinct, so no two tiles on the grid look the same", () => {
-    expect(new Set(offered.map((p) => thumbnailSpecFor(p).headline)).size).toBe(30);
+    expect(new Set(offered.map((p) => thumbnailSpecFor(p).headline)).size).toBe(offered.length);
   });
 });
 

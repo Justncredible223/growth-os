@@ -11,6 +11,23 @@ import { DAILY_PILOTS } from "../src/shortform/dailyConcepts.js";
 import { MOTION_SCENE_PLANS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans.js";
 import { EXPLAINER_VOICE } from "../src/shortform/explainers.js";
 
+/**
+ * `--hooks` (2026-11-14): the seven strategy-hook opening lines of the "After the trade" cuts (afterTheTrade.ts), the only new
+ * recordings that series needs; every other beat reuses an explainer's recorded part. Recording them waits for the owner's yes.
+ *
+ *   npx tsx scripts/printVoiceScripts.ts --hooks
+ */
+if (process.argv.includes("--hooks")) {
+  const { HOOK_CUTS, STRATEGY_HOOKS } = await import("../src/shortform/afterTheTrade.js");
+  const out: string[] = ["# Voice scripts: the 7 strategy-hook opening lines (After the trade)", ""];
+  out.push(`Voice: ${EXPLAINER_VOICE}, Eleven v4, the same settings as the explainers. One line per file; no [pause] tag is needed.`, "");
+  out.push('Type "vee-wap" wherever VWAP appears, so it is said as one word.', "");
+  out.push("| File name | Line | Recorded |", "|---|---|---|");
+  STRATEGY_HOOKS.forEach((h, i) => out.push(`| \`${HOOK_CUTS[i]!.planId}-1.mp3\` | ${h.say.replace(/VWAP/g, "vee-wap")} | ${h.recorded ? "yes" : "no"} |`));
+  console.log(out.join("\n"));
+  process.exit(0);
+}
+
 /** Default: the offered pool in request order (the fresh hook-first concepts, motionPlans.ts). `--legacy` prints the 30 older daily concepts, which are no longer offered. */
 const LEGACY = process.argv.includes("--legacy");
 const PILOTS = LEGACY ? DAILY_PILOTS : OFFERED_DAILY_CONCEPT_IDS.map((id) => MOTION_SCENE_PLANS.find((p) => p.planId === id)!);

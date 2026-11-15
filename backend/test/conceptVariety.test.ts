@@ -69,21 +69,19 @@ describe("distinctConcepts", () => {
   it("keeps a candidate it has no plan for, and leaves the input alone", () => {
     const input = [{ id: "unknown-concept" }];
     expect(distinctConcepts(input, [], planOf)).toEqual(input);
-    expect(offeredChartConcepts().length).toBeGreaterThanOrEqual(30); // 30 + the chart moments (2026-11-08)
+    expect(offeredChartConcepts().length).toBeGreaterThanOrEqual(20); // the 20 After the trade cuts (2026-11-14)
   });
 });
 
-describe("the explainers", () => {
-  // The nine clips already posted (Oct 8-16): an explainer must not read as a copy of any of them, or the app would hide it.
+describe("the After the trade cuts (2026-11-14)", () => {
+  // The nine clips already posted (Oct 8-16): a cut must not read as a copy of any of them, or the app would hide it.
   const posted = ["fresh-06b-five-revenge-recording", "fresh-02b-plan-said-3-recording", "fresh-07-take-it-again", "fresh-01-two-limits", "fresh-12-one-red-day", "fresh-19-biggest-leak", "fresh-10-eight-contracts", "fresh-14-won-then-lost", "fresh-08-nobody-fines"];
 
   it("are all offered: none is a near-copy of another, nor of a clip already posted", () => {
-    expect(offered.every((c) => /^(explain|strategy|chartmoment)-/.test(c.id))).toBe(true);
-    // The 30 explainers and strategy videos stay mutually different; a chart moment is a cut of a strategy chart, so the guard may hide it.
-    const core = offered.filter((c) => !c.id.startsWith("chartmoment-"));
-    expect(distinctConcepts(core, [], planOf)).toHaveLength(30);
-    expect(distinctConcepts(core, posted, planOf)).toHaveLength(30);
-    expect(distinctConcepts(offered, [], planOf).length).toBeGreaterThanOrEqual(30);
+    expect(offered.every((c) => /^after-/.test(c.id))).toBe(true);
+    expect(distinctConcepts(offered, [], planOf)).toHaveLength(offered.length);
+    expect(distinctConcepts(offered, posted, planOf)).toHaveLength(offered.length);
+    expect(offered.length).toBeGreaterThanOrEqual(20);
   });
 });
 
@@ -105,7 +103,7 @@ describe("the daily refill never queues two near-copies", () => {
     };
     let report = "";
     for (let day = 0; day < 80 && !report.startsWith("no unused"); day++) report = await runDailyChartCardRequests(deps);
-    expect(requested.length).toBeGreaterThanOrEqual(30);
+    expect(requested.length).toBeGreaterThanOrEqual(20);
     expect(new Set(requested).size).toBe(requested.length);
     expect(requested.filter(isOutcomes)).toHaveLength(0);
     for (let i = 0; i < requested.length; i++) for (let j = i + 1; j < requested.length; j++) expect(nearCopies(planOf(requested[i]!)!, planOf(requested[j]!)!)).toBe(false);

@@ -6,7 +6,7 @@ import { distinctConcepts } from "../src/shortform/conceptVariety";
 import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
 import { DAILY_CONCEPT_ORDER } from "../src/shortform/dailyConcepts";
 import { EXTRA_OFFERED_CONCEPT_IDS, OFFERED_DAILY_CONCEPT_IDS } from "../src/shortform/motionPlans";
-import { requestOrder } from "../src/video/dailyChartCardRequests";
+import { requestOrder, strategyFirstOrder } from "../src/video/dailyChartCardRequests";
 import { LOW_SUPPLY_AT, MAX_CHART_CARDS_WAITING, VIDEO_REQUEST_WEEKDAYS, isVideoRequestDay, offeredChartConcepts, runDailyChartCardRequests, type ConceptState, type DailyChartCardDeps } from "../src/video/dailyChartCardRequests";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
 
@@ -33,18 +33,18 @@ function deps(opts: { now?: Date; paused?: boolean; today?: string | null; state
 }
 
 describe("the concepts the daily refill draws from", () => {
-  it("are the explainers only: no extras, no clips, none of the 30 older daily concepts, none of the first twelve, none of the illustrative win-rate ones", () => {
-    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual(CHART_MOMENT_ORDER); // the chart-moment series (2026-11-08)
+  it("are the 'After the trade' cuts only: no strategy videos, no chart moments, no extras, no clips, none of the older concepts", () => {
+    expect(EXTRA_OFFERED_CONCEPT_IDS).toEqual([]); // the chart moments left the offer with the strategy videos (2026-11-14)
     expect(concepts).toHaveLength(OFFERED_DAILY_CONCEPT_IDS.length + EXTRA_OFFERED_CONCEPT_IDS.length);
-    expect(concepts.every((c) => /^(explain|strategy|chartmoment)-/.test(c.id))).toBe(true);
+    expect(concepts.every((c) => /^after-/.test(c.id))).toBe(true);
     expect(concepts.some((c) => DAILY_CONCEPT_ORDER.includes(c.id))).toBe(false);
     expect(concepts.some((c) => c.id.startsWith("chart-"))).toBe(false);
   });
 
-  it("are served in the explainers' fixed 30-day order, copy trading across accounts first", () => {
+  it("are served in the fixed order, copy trading across accounts first, with no strategy video in it", () => {
     expect(concepts.map((c) => c.id)).toEqual([...OFFERED_DAILY_CONCEPT_IDS, ...EXTRA_OFFERED_CONCEPT_IDS]);
-    expect(concepts[0]!.id).toBe("explain-01-copy-trading-risk");
-    expect(concepts.map((c) => c.id)).toContain("strategy-01-orb-range-trigger");
+    expect(concepts[0]!.id).toBe("after-01-copy-trading-risk");
+    expect(concepts.some((c) => /^(strategy|chartmoment)-/.test(c.id))).toBe(false);
   });
 });
 
@@ -87,12 +87,12 @@ describe("runDailyChartCardRequests", () => {
     expect(requested).toEqual([]);
   });
 
-  it("requests ONE concept a day, the first in the request order (strategy videos first)", async () => {
+  it("requests ONE concept a day, the first in day order (the strategy-first rule is retired, 2026-11-14)", async () => {
     expect(MAX_CHART_CARDS_WAITING).toBe(1);
     const { d, requested } = deps();
     const report = await runDailyChartCardRequests(d);
     expect(requested).toEqual([requestOrder(concepts, [])[0]!.id]);
-    expect(requested[0]).toMatch(/^strategy-/);
+    expect(requested[0]).toBe("after-01-copy-trading-risk");
     expect(report).toContain("requested 1");
   });
 
@@ -158,26 +158,33 @@ describe("the daily refill stays wired in and stays inside its limits", () => {
   });
 });
 
-describe("requestOrder: strategy videos first, one explainer in four (2026-10-25)", () => {
+describe("strategyFirstOrder (RETIRED 2026-11-14, kept for the record): strategy videos first, one explainer in four", () => {
   const c = (id: string) => ({ id });
   const unused = [c("explain-08"), c("strategy-02"), c("explain-09"), c("strategy-03"), c("strategy-05"), c("strategy-07")];
   const used = (strategy: number, explainer: number) => [...Array.from({ length: strategy }, (_, i) => `strategy-u${i}`), ...Array.from({ length: explainer }, (_, i) => `explain-u${i}`)];
 
   it("puts strategy concepts first, in day order, when no explainer is due", () => {
-    expect(requestOrder(unused, used(3, 6)).map((x) => x.id)).toEqual(["strategy-02", "strategy-03", "strategy-05", "strategy-07", "explain-08", "explain-09"]);
+    expect(strategyFirstOrder(unused, used(3, 6)).map((x) => x.id)).toEqual(["strategy-02", "strategy-03", "strategy-05", "strategy-07", "explain-08", "explain-09"]);
   });
 
   it("asks for an explainer after three strategy videos since the switch, then three more strategy videos", () => {
-    expect(requestOrder(unused, used(5, 6))[0]!.id).toBe("strategy-02");
-    expect(requestOrder(unused, used(6, 6))[0]!.id).toBe("explain-08");
-    expect(requestOrder(unused, used(6, 7))[0]!.id).toBe("strategy-02");
-    expect(requestOrder(unused, used(8, 7))[0]!.id).toBe("strategy-02");
-    expect(requestOrder(unused, used(9, 7))[0]!.id).toBe("explain-08");
+    expect(strategyFirstOrder(unused, used(5, 6))[0]!.id).toBe("strategy-02");
+    expect(strategyFirstOrder(unused, used(6, 6))[0]!.id).toBe("explain-08");
+    expect(strategyFirstOrder(unused, used(6, 7))[0]!.id).toBe("strategy-02");
+    expect(strategyFirstOrder(unused, used(8, 7))[0]!.id).toBe("strategy-02");
+    expect(strategyFirstOrder(unused, used(9, 7))[0]!.id).toBe("explain-08");
   });
 
   it("falls back to explainers when no strategy concept is left, and keeps every concept", () => {
     const onlyExplainers = [c("explain-08"), c("explain-09")];
-    expect(requestOrder(onlyExplainers, used(3, 6)).map((x) => x.id)).toEqual(["explain-08", "explain-09"]);
-    expect(requestOrder(unused, used(3, 6))).toHaveLength(unused.length);
+    expect(strategyFirstOrder(onlyExplainers, used(3, 6)).map((x) => x.id)).toEqual(["explain-08", "explain-09"]);
+    expect(strategyFirstOrder(unused, used(3, 6))).toHaveLength(unused.length);
+  });
+});
+
+describe("requestOrder (since 2026-11-14)", () => {
+  it("keeps day order unchanged, whatever was used before", () => {
+    const unused = [{ id: "after-03" }, { id: "after-hook-01" }, { id: "after-04" }];
+    expect(requestOrder(unused, ["strategy-u0", "strategy-u1", "explain-u0"]).map((x) => x.id)).toEqual(["after-03", "after-hook-01", "after-04"]);
   });
 });
