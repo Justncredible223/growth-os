@@ -135,6 +135,15 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
     }
   }
 
+  // P1 2026-11-15: where each video is posted (so any card can show and edit its links). Best effort.
+  const postsByAssetId = new Map<string, Array<{ platform: string; url: string; postedAt: string }>>();
+  if (assetIds.length > 0) {
+    const { data: postRows } = await client.from("video_posts").select("campaign_asset_id, platform, url, posted_at").in("campaign_asset_id", assetIds);
+    for (const p of (postRows ?? []) as Array<{ campaign_asset_id: string; platform: string; url: string; posted_at: string }>) {
+      postsByAssetId.set(p.campaign_asset_id, [...(postsByAssetId.get(p.campaign_asset_id) ?? []), { platform: p.platform, url: p.url, postedAt: p.posted_at }]);
+    }
+  }
+
   // The concept behind each video (best-effort, like the metadata above): the campaign's thesis is the request title.
   const thesisByAssetId = new Map<string, string>();
   if (assetIds.length > 0) {
@@ -187,6 +196,7 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         conceptDay: isConcept ? dayForTitle(thesis!) : null,
         publishedUrl: row.published_url,
         fileMissing,
+        posts: postsByAssetId.get(row.campaign_asset_id) ?? [],
         stuck: (row.status === "queued" || row.status === "rendering") && Date.now() - Date.parse(row.updated_at) > STUCK_RENDER_RETRY_MINUTES * 60 * 1000,
       };
     }),

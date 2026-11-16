@@ -75,13 +75,40 @@ async function lastYoutubePost(client: SupabaseClient, exceptAssetId?: string): 
   return ((data ?? []) as Array<{ posted_at: string }>)[0]?.posted_at ?? null;
 }
 
-/** Records (or corrects) where a video was posted on one platform. */
+/** The hosts a link may use for each platform (P1 2026-11-15: a TikTok link saved as YouTube silently broke the stats). */
+const PLATFORM_HOSTS: Record<PostingPlatform, RegExp> = {
+  tiktok: /(^|\.)tiktok\.com$/i,
+  youtube_shorts: /(^|\.)(youtube\.com|youtu\.be)$/i,
+  instagram: /(^|\.)instagram\.com$/i,
+};
+const PLATFORM_LABEL: Record<PostingPlatform, string> = { tiktok: "TikTok", youtube_shorts: "YouTube", instagram: "Instagram" };
+
+/** Null when [url] is a link on [platform]'s own site, otherwise why not. Pure, unit-tested. */
+export function postLinkProblem(platform: PostingPlatform, url: string): string | null {
+  let host: string;
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "The link must start with http:// or https://";
+    host = parsed.hostname;
+  } catch {
+    return "That doesn't look like a link.";
+  }
+  if (!PLATFORM_HOSTS[platform].test(host)) return `That is not a ${PLATFORM_LABEL[platform]} link (it points to ${host}).`;
+  return null;
+}
+
+/**
+ * Records where a video was posted on one platform, or corrects that link. A correction keeps the original posted time (P1 2026-11-15:
+ * it used to reset it, restarting the YouTube 48-hour rule and making an old video look "first posted today"). Returns whether it was a
+ * correction.
+ */
 export async function recordVideoPost(
   client: SupabaseClient,
   input: { campaignAssetId: string; videoRenderId?: string | null; platform: PostingPlatform; url: string },
   now: Date = new Date(),
-): Promise<void> {
-  if (!/^https?:\/\//i.test(input.url)) throw new PostingActionError("The link must start with http:// or https://");
+): Promise<{ corrected: boolean }> {
+  const linkProblem = postLinkProblem(input.platform, input.url);
+  if (linkProblem) throw new PostingActionError(linkProblem);
   const titles = await titlesForAssets(client, [input.campaignAssetId]);
   const title = titles.get(input.campaignAssetId);
   if (!title) throw new PostingActionError(`No video with asset id ${input.campaignAssetId}`);
@@ -90,6 +117,8 @@ export async function recordVideoPost(
     const next = youtubeNextAllowedAt(await lastYoutubePost(client, input.campaignAssetId), now);
     if (next) throw new PostingActionError(`One YouTube post per ${YOUTUBE_MIN_HOURS_BETWEEN_POSTS} hours: the next one can go up after ${phoenixLabel(next)} Arizona time. Post this video to TikTok and Instagram only.`);
   }
+  const { data: existing } = await client.from("video_posts").select("posted_at").eq("campaign_asset_id", input.campaignAssetId).eq("platform", input.platform).maybeSingle();
+  const originalPostedAt = (existing as { posted_at?: string } | null)?.posted_at ?? null;
   const { error } = await client.from("video_posts").upsert(
     {
       campaign_asset_id: input.campaignAssetId,
@@ -98,7 +127,7 @@ export async function recordVideoPost(
       platform: input.platform,
       url: input.url.trim(),
       external_id: input.platform === "youtube_shorts" ? extractYoutubeVideoId(input.url) : null,
-      posted_at: now.toISOString(),
+      posted_at: originalPostedAt ?? now.toISOString(),
       updated_at: now.toISOString(),
     },
     { onConflict: "campaign_asset_id,platform" },
@@ -120,6 +149,19 @@ export async function recordVideoPost(
     const { error: renderError } = await (input.videoRenderId ? update.eq("id", input.videoRenderId) : update.eq("campaign_asset_id", input.campaignAssetId));
     if (renderError) console.warn(`recordVideoPost: video_renders.published_url sync failed for ${input.campaignAssetId}`, renderError);
   }
+  return { corrected: originalPostedAt !== null };
+}
+
+/** Removes a wrong link (P1 2026-11-15): the post row, its content_publications mirror, and for YouTube the render's published_url. */
+export async function removeVideoPost(client: SupabaseClient, input: { campaignAssetId: string; platform: PostingPlatform }): Promise<{ removed: boolean }> {
+  const { data, error } = await client.from("video_posts").delete().eq("campaign_asset_id", input.campaignAssetId).eq("platform", input.platform).select("id");
+  if (error) throw new Error(`Removing the post failed: ${error.message}`);
+  const removed = (data ?? []).length > 0;
+  await client.from("content_publications").delete().eq("campaign_asset_id", input.campaignAssetId).eq("channel", PUBLICATION_CHANNEL[input.platform]);
+  if (input.platform === "youtube_shorts") {
+    await client.from("video_renders").update({ published_url: null, updated_at: new Date().toISOString() }).eq("campaign_asset_id", input.campaignAssetId);
+  }
+  return { removed };
 }
 
 /** content_publications.channel for each posting platform -- the same names setPublishedUrl's URL detection writes. */

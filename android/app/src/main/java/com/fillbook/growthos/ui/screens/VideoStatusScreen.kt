@@ -549,6 +549,14 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         onDismiss = { if (needsDismissConfirm(render)) dismissTarget = render else dismiss(render) },
                         onRetry = { retry(render) },
                         onCopyMetricool = { copyMetricoolPackage(render) },
+                        onLink = { platform ->
+                            linkTarget = com.fillbook.growthos.data.PlanVideo(
+                                campaignAssetId = render.campaignAssetId,
+                                videoRenderId = render.id,
+                                title = render.conceptTitle ?: "This video",
+                                posts = render.posts,
+                            ) to platform
+                        },
                     )
                 }
 
@@ -668,6 +676,20 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 }
             },
             onDismiss = { if (!savingLink) linkTarget = null },
+            onRemove = {
+                scope.launch {
+                    savingLink = true
+                    try {
+                        repo.removeVideoPost(video.campaignAssetId, platform)
+                        linkTarget = null
+                        refresh()
+                        snackbarHostState.showSnackbar("${platform.label} link removed.")
+                    } catch (e: Exception) {
+                        snackbarHostState.showSnackbar(videoServerReason(e) ?: "Couldn't remove the link. Check your connection and try again.")
+                    }
+                    savingLink = false
+                }
+            },
         )
     }
 
@@ -835,6 +857,7 @@ internal fun videoCardHeading(day: Int?, title: String): String = if (day != nul
 /** Only a finished video holds a file that dismissing deletes for good; a failed or queued card can go without asking. */
 internal fun needsDismissConfirm(render: VideoRenderStatus): Boolean = render.status == "ready"
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun VideoRenderCard(
     render: VideoRenderStatus,
@@ -846,6 +869,7 @@ private fun VideoRenderCard(
     onDismiss: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null,
     onCopyMetricool: (() -> Unit)? = null,
+    onLink: ((com.fillbook.growthos.data.PostingPlatform) -> Unit)? = null,
 ) {
     val tone = statusTone(render.status)
     GrowthCard(accentBar = statusToneColor(tone)) {
@@ -888,6 +912,17 @@ private fun VideoRenderCard(
         }
         if (render.status == "ready" && onCopyMetricool != null) {
             TextButton(onClick = onCopyMetricool) { Text("Copy Metricool package") }
+        }
+        // P1 2026-11-15: links on ANY ready video, not only today's plan slot. A posted platform shows a check and opens its link to correct
+        // or remove; the others add one.
+        if (render.status == "ready" && !render.fileMissing && onLink != null) {
+            Text(postedSummary(render.posts), style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                com.fillbook.growthos.data.PostingPlatform.entries.forEach { platform ->
+                    val posted = render.posts.any { it.platform == platform }
+                    TextButton(onClick = { onLink(platform) }) { Text(if (posted) "\u2713 ${platform.label}" else "+ ${platform.label}") }
+                }
+            }
         }
         // P0 2026-11-15: a stuck render or a missing file gets a way forward, not only Dismiss (which also stops it from ever coming back).
         if (render.fileMissing) {
@@ -1022,4 +1057,16 @@ internal fun renderCapReason(raw: String): String = when {
     raw.startsWith("monthly_render_cap_reached") -> "this month's renders are used up."
     raw.startsWith("storage") -> "video storage is full. Dismiss a posted video first."
     else -> raw
+}
+
+/** "Posted on TikTok · not yet on YouTube, Instagram" for a card. Pure, unit-tested. P1 2026-11-15. */
+internal fun postedSummary(posts: List<com.fillbook.growthos.data.PlanPost>): String {
+    val all = com.fillbook.growthos.data.PostingPlatform.entries
+    val done = all.filter { p -> posts.any { it.platform == p } }
+    val left = all - done.toSet()
+    return when {
+        done.isEmpty() -> "Not posted yet. Add each link after you post."
+        left.isEmpty() -> "Posted on ${done.joinToString(", ") { it.label }}."
+        else -> "Posted on ${done.joinToString(", ") { it.label }} · not yet on ${left.joinToString(", ") { it.label }}"
+    }
 }

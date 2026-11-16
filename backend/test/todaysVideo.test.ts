@@ -38,10 +38,16 @@ describe("the daily video's state for the Home card", () => {
     expect(v.headline).toBe("Waiting for your approval");
   });
 
-  it("is 'rendering' for an approved script whose render is queued, running, or not yet created", () => {
-    for (const render of [null, { status: "queued", error: null }, { status: "rendering", error: null }]) {
+  it("is 'rendering' for an approved script whose render is queued or running", () => {
+    for (const render of [{ status: "queued", error: null }, { status: "rendering", error: null }]) {
       expect(describeTodaysVideo(input({ render })).state).toBe("rendering");
     }
+  });
+
+  it("P1 2026-11-15: an approved script with no render row says so instead of 'Rendering' forever", () => {
+    const v = describeTodaysVideo(input({ render: null }));
+    expect(v.state).toBe("none");
+    expect(v.headline).toBe("No render yet");
   });
 
   it("is 'ready' for a finished render with no post links yet", () => {
@@ -50,15 +56,22 @@ describe("the daily video's state for the Home card", () => {
     expect(v.detail).toMatch(/Download it in Video Status/);
   });
 
-  it("is 'posted' with the platforms, as X of 3, once a link is saved", () => {
+  it("P1 2026-11-15: is 'Partly posted' (still to finish) until every platform has a link", () => {
     const v = describeTodaysVideo(input({ render: { status: "ready", error: null }, platformsPosted: ["tiktok", "youtube_shorts"] }));
-    expect(v.state).toBe("posted");
-    expect(v.detail).toBe("Posted on 2 of 3: TikTok, YouTube.");
+    expect(v.state).toBe("ready");
+    expect(v.headline).toBe("Partly posted");
+    expect(v.detail).toBe("Posted on TikTok, YouTube. Post it to the other 1 and paste the links in Video Status.");
     expect(v.platformsPosted).toEqual(["tiktok", "youtube_shorts"]);
   });
 
+  it("is 'posted' once all three platforms have a link", () => {
+    const v = describeTodaysVideo(input({ render: { status: "ready", error: null }, platformsPosted: ["tiktok", "youtube_shorts", "instagram"] }));
+    expect(v.state).toBe("posted");
+    expect(v.detail).toBe("Posted on 3 of 3: TikTok, YouTube, Instagram.");
+  });
+
   it("does not call an earlier day's fully posted video today's", () => {
-    const v = describeTodaysVideo(input({ latest: { thesis: THESIS, status: "approved", createdAt: "2026-10-03T13:00:00.000Z" }, render: { status: "ready", error: null }, platformsPosted: ["tiktok"] }));
+    const v = describeTodaysVideo(input({ latest: { thesis: THESIS, status: "approved", createdAt: "2026-10-03T13:00:00.000Z" }, render: { status: "ready", error: null }, platformsPosted: ["tiktok", "youtube_shorts", "instagram"] }));
     expect(v.state).toBe("none");
     expect(v.detail).toContain("Last video: After the trade: trailing drawdown explained: how the floor moves");
   });

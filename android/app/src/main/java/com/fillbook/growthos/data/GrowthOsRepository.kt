@@ -238,6 +238,9 @@ interface GrowthOsRepository {
     /** Records where a video was posted on one platform (re-recording the same platform replaces the link). */
     suspend fun recordVideoPost(campaignAssetId: String, videoRenderId: String?, platform: PostingPlatform, url: String)
 
+    /** Removes a wrong link for one platform (P1 2026-11-15). */
+    suspend fun removeVideoPost(campaignAssetId: String, platform: PostingPlatform) {}
+
     /** Records numbers typed in for a TikTok or Instagram post. */
     suspend fun recordPostStats(videoPostId: String, views: Int?, likes: Int?, comments: Int?, shares: Int?)
 

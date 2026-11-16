@@ -80,13 +80,20 @@ export function describeTodaysVideo(input: TodaysVideoInput): TodaysVideo {
   }
 
   const render = input.render;
-  if (!render || render.status === "queued" || render.status === "rendering") {
+  // P1 2026-11-15: an approved video with no render row (a render limit refused it, or it was dismissed) used to read "Rendering" forever.
+  if (!render) return base("none", latest.thesis, "No render yet", "The render was not queued (a render limit, or it was dismissed). Open Video Status to request it again.");
+  if (render.status === "queued" || render.status === "rendering") {
     return base("rendering", latest.thesis, "Rendering", render?.status === "rendering" ? "The video is rendering. You get a push when it is ready." : "The render is queued. You get a push when it is ready.");
   }
   if (render.status === "failed") {
     return base("failed", latest.thesis, "Render failed", `${render.error ? render.error.slice(0, 140) : "The render did not finish."} Open Video Status.`);
   }
   if (render.status === "ready") {
+    // P1 2026-11-15: "Posted" only once every platform has a link; one platform posted is still a video to finish.
+    if (input.platformsPosted.length > 0 && input.platformsPosted.length < POSTING_PLATFORM_COUNT) {
+      const names = input.platformsPosted.map((p) => PLATFORM_NAMES[p] ?? p).join(", ");
+      return base("ready", latest.thesis, "Partly posted", `Posted on ${names}. Post it to the other ${POSTING_PLATFORM_COUNT - input.platformsPosted.length} and paste the links in Video Status.`, input.platformsPosted);
+    }
     if (input.platformsPosted.length > 0) {
       // A fully posted video from an earlier day is not today's video.
       if (latest.createdAt < input.startOfToday) return base("none", null, "No video yet today", `Last video: ${stripPrefix(latest.thesis)}. Request today's in Video Status.`);

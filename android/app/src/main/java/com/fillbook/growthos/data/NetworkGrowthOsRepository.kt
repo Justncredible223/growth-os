@@ -1004,6 +1004,9 @@ class NetworkGrowthOsRepository(
         publishedUrl = optStringOrNull("publishedUrl"),
         fileMissing = optBoolean("fileMissing", false),
         stuck = optBoolean("stuck", false),
+        posts = optJSONArray("posts")?.map { p ->
+            PostingPlatform.fromApi(p.optString("platform"))?.let { PlanPost(it, p.optString("url"), p.optString("postedAt")) }
+        }?.filterNotNull() ?: emptyList(),
         conceptTitle = optStringOrNull("conceptTitle"),
         conceptDay = if (isNull("conceptDay")) null else optInt("conceptDay", 0).takeIf { it > 0 },
     )
@@ -1047,6 +1050,10 @@ class NetworkGrowthOsRepository(
         val body = JSONObject().put("action", "record-post").put("campaignAssetId", campaignAssetId).put("platform", platform.apiName).put("url", url)
         if (videoRenderId != null) body.put("videoRenderId", videoRenderId)
         post("/api/approvals?resource=posting", body)
+    }
+
+    override suspend fun removeVideoPost(campaignAssetId: String, platform: PostingPlatform) {
+        post("/api/approvals?resource=posting", JSONObject().put("action", "remove-post").put("campaignAssetId", campaignAssetId).put("platform", platform.apiName))
     }
 
     override suspend fun recordPostStats(videoPostId: String, views: Int?, likes: Int?, comments: Int?, shares: Int?) {
