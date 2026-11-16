@@ -35,6 +35,15 @@ The dated sections below are a change log. Where they disagree with this section
   - The daily search budget is $0.50 and 30 requests. The monthly Prospecting budget is $40, counting X reads and Prospecting model calls.
   - If a search cannot record its cost, the run stops and shows as a sync failure in Health, because the budget checks read those cost rows.
 
+
+### Stage P2 (2026-11-15)
+
+- **Watchlist accounts get no special pass.** Their posts need futures evidence and go through the AI checks like anyone else's. The drafter no longer gets the note telling it to treat a watchlist post as relevant.
+- **Empty searches pause.** A topic whose last 5 searches kept 0 posts, spread over at least 3 days, sits out for 7 days and is then tried again. The watchlist never pauses. This is `prospectingQueryYield.ts`, which reads the existing search cost events; there is no new table.
+- **Search results in the app.** "Search results, last 7 days" lists each topic and the watchlist with searches, posts read, posts kept and kept/read, plus any pause and its reason. A topic request covers up to 4 topics, so its counts are credited to each of them.
+- **Age-window test.** `PROSPECTING_AGE_WINDOW_HOURS=24` (Vercel env) widens the window to 24 hours, with a decay floor of 0.7, so a post scoring 50 stays above the 45 bar for about 11 hours instead of about 5.5. Run it for 7 days and compare kept posts per day, relevant posts per day, Justin's replies per day and the off-topic rate against the previous 7 days. Remove the variable to go back to 12 hours.
+- **Accepted limitation (ChatGPT, 2026-11-15).** Two different posts marked replied at the same instant can both pass the pacing check, because there is no database lock. With one person replying by hand this is accepted, but it means concurrency is not fully enforced.
+
 ## What this is NOT
 
 - Not auto-reply, auto-post, or auto-anything. `XSignalAdapter` has no

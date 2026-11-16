@@ -395,17 +395,13 @@ describe("draftProspectingCandidateReply -- hand-picked seed creators (2026-10-3
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
   const postText = "so what is the purpose of prop firm compare websites when it is pay to win for traders?";
 
-  it("skips the cheap relevance check for a seed creator, tells the drafter why, and does not turn the card away", async () => {
+  it("P2 2026-11-15: a seed creator gets the same checks as anyone else, and the drafter gets no 'treat as relevant' note", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "seed-1", platform: "x", status: "shown", draftReply: null, authorHandle: "StoicTA", postText }));
     const cheapRelevanceCheck = vi.fn(async () => false);
-    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: false, reply: "", mentionsFillbook: false, usesLink: false }));
-    const ok = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "The ones that rank by payout speed at least show the rules side by side.", mentionsFillbook: false, usesLink: false }));
-    const updated = await draftProspectingCandidateReply(fakeClient, "seed-1", { repo, drafter: ok, loadGrounding, cheapRelevanceCheck });
-    expect(cheapRelevanceCheck).not.toHaveBeenCalled();
-    expect(ok.mock.calls[0]![0].ownerOverrideNote).toMatch(/hand-picked futures creator/);
-    expect(updated.status).toBe("ready");
-    void drafter;
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "x", mentionsFillbook: false, usesLink: false }));
+    await expect(draftProspectingCandidateReply(fakeClient, "seed-1", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/Not eligible for drafting/);
+    expect(drafter).not.toHaveBeenCalled();
   });
 
   it("still turns the same post away when it comes from anyone else", async () => {

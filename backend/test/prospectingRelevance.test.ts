@@ -54,7 +54,9 @@ describe("isPlausiblyTradingRelated", () => {
   it("a trusted author's trading post needs no futures word, but forex, crypto and ads stay out; styled-letter fonts are read as plain text", () => {
     const chess = "Trading is a lot like chess. You do not lose because of your last move, you lose because of your process.";
     expect(isPlausiblyTradingRelated(chess)).toBe(false);
-    expect(isPlausiblyTradingRelated(chess, { trustedAuthor: true })).toBe(true);
+    // P2 2026-11-15: being on the watchlist no longer replaces futures evidence.
+    expect(isPlausiblyTradingRelated(chess, { trustedAuthor: true })).toBe(false);
+    expect(isPlausiblyTradingRelated("Anthropic is listing next week, ticker $ANT. Trading starts Monday.", { trustedAuthor: true })).toBe(false);
     expect(isPlausiblyTradingRelated("Best forex trading setup this week, EURUSD pips again", { trustedAuthor: true })).toBe(false);
     expect(isPlausiblyTradingRelated("Bitcoin trading setup for the week, how do you stop out?", { trustedAuthor: true })).toBe(false);
     expect(isPlausiblyTradingRelated("𝗧𝗿𝗮𝗱𝗶𝗻𝗴 𝗽𝘀𝘆𝗰𝗵𝗼𝗹𝗼𝗴𝘆 𝗼𝗻 𝗠𝗡𝗤 𝗳𝘂𝘁𝘂𝗿𝗲𝘀: how do you handle a losing streak?")).toBe(true);

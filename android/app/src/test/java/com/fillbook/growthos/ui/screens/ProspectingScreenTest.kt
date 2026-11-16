@@ -279,4 +279,13 @@ class ReplyPacingTest {
         org.junit.Assert.assertNull(serverRefusalReason(java.io.IOException("offline")))
         org.junit.Assert.assertNull(serverRefusalReason(com.fillbook.growthos.data.NetworkException("POST x failed: HTTP 409 -- not json", 409)))
     }
+
+    @Test
+    fun searchYieldLine_andPausedDate() {
+        val row = com.fillbook.growthos.data.ProspectingQueryYield("a", "Daily loss limit", 4, 26, 6, 23, null, null)
+        assertEquals("4 searches, read 26, kept 6 (23%)", searchYieldLine(row))
+        assertEquals("1 search, read 0, kept 0", searchYieldLine(row.copy(runs = 1, read = 0, kept = 0, keptPct = null)))
+        assertEquals("on Nov 22", pausedUntilLabel("2026-11-22T20:00:00.000Z"))
+        assertEquals("soon", pausedUntilLabel(null))
+    }
 }

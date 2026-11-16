@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createRecordedLlmClient } from "../cost/recordedLlmClient.js";
 import { getProspectingMonthSpendUsd, getRecentXSearchQueries, getTodayXSearchCount, getTodayXSearchSpendUsd } from "../cost/costTracking.js";
 import { checkRelevanceCheap } from "./prospectingReplyWriter.js";
+import { PAUSE_LOOKBACK_DAYS, loadYieldEvents, pausedTopics } from "./prospectingQueryYield.js";
 import { RECENT_QUERY_WINDOW_MS, type ProspectingRunDeps } from "./prospectingSearch.js";
 
 /**
@@ -9,7 +10,7 @@ import { RECENT_QUERY_WINDOW_MS, type ProspectingRunDeps } from "./prospectingSe
  * refill after a reply): the monthly spend gate, the pause switch, the daily search limit, and the cheap model relevance screen that
  * keeps posts that are not futures prop-firm or own-capital relevant from ever reaching the queue (2026-10-24).
  */
-export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRunDeps, "getMonthSpendUsd" | "isPaused" | "getTodaySearchCount" | "getTodaySearchSpendUsd" | "getRecentSearchQueries" | "screenRelevance" | "watchlistIncludeVetted" | "watchlistEnabled" | "watchlistSeedsOnly"> {
+export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRunDeps, "getMonthSpendUsd" | "isPaused" | "getTodaySearchCount" | "getTodaySearchSpendUsd" | "getRecentSearchQueries" | "getPausedTopics" | "screenRelevance" | "watchlistIncludeVetted" | "watchlistEnabled" | "watchlistSeedsOnly"> {
   let llm: ReturnType<typeof createRecordedLlmClient> | null = null;
   return {
     watchlistIncludeVetted: false,
@@ -23,6 +24,10 @@ export function prospectingRunExtras(client: SupabaseClient): Pick<ProspectingRu
     getTodaySearchCount: () => getTodayXSearchCount(client),
     getTodaySearchSpendUsd: () => getTodayXSearchSpendUsd(client),
     getRecentSearchQueries: () => getRecentXSearchQueries(client, new Date(Date.now() - RECENT_QUERY_WINDOW_MS)),
+    getPausedTopics: async () => {
+      const now = new Date();
+      return new Set(pausedTopics(await loadYieldEvents(client, now, PAUSE_LOOKBACK_DAYS), now).keys());
+    },
     screenRelevance: (post) => {
       // Created on first use so a run that screens nothing never builds a model client; a missing key throws here and the run treats that as "relevant".
       llm ??= createRecordedLlmClient(client, { step: "prospecting-relevance-check", tier: "owner", context: { screenedAtDiscovery: true }, eventType: "prospecting_llm_call" });

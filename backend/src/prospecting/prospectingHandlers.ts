@@ -352,7 +352,8 @@ async function draftCandidateCore(
   // drafting call below so a post that clears the free regex filter but
   // isn't actually relevant gets rejected without paying for a full draft.
   const trustedCreator = isSeedCreator(row.authorHandle);
-  if (!ownerOverride && !trustedCreator && !(await cheapRelevanceCheck(draftContext))) {
+  // P2 2026-11-15: a watchlist creator gets the same checks as everyone else (trustedCreator no longer skips them).
+  if (!ownerOverride && !(await cheapRelevanceCheck(draftContext))) {
     // Kept reachable from Maybe: an AI judgement the owner can overrule with Draft anyway.
     await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON });
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
@@ -370,7 +371,7 @@ async function draftCandidateCore(
   // Recovery mode: the draft must not name Fillbook at all while X is limiting the account's replies.
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, new Date());
   if (ownerOverride) draftContext.ownerOverrideNote = OWNER_OVERRIDE_DRAFT_NOTE;
-  else if (trustedCreator) draftContext.ownerOverrideNote = TRUSTED_CREATOR_DRAFT_NOTE;
+  // P2 2026-11-15: no "treat as relevant" note for watchlist creators any more; the drafter judges their posts like any other.
   if (recovery.active) draftContext.recoveryNote = RECOVERY_DRAFT_NOTE;
   // Mention budget: once recent posted replies name Fillbook too often, this one must leave it out (same effect as recovery mode).
   const mentionBudget = computeMentionBudget(await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
@@ -399,7 +400,7 @@ async function draftCandidateCore(
       // cheap Haiku check above (e.g. a post that uses real trading vocabulary
       // but in a fundamentally different, still-irrelevant context). Same
       // terminal status and no persisted draft as the earlier gates.
-      if (!ownerOverride && !trustedCreator && !candidate.isRelevant) {
+      if (!ownerOverride && !candidate.isRelevant) {
         throw new ProspectingIrrelevantSignal();
       }
       if (candidate.helpfulReply !== undefined) {

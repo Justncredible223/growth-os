@@ -68,6 +68,7 @@ import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
 import { handleEngagement } from "../src/engagement/engagementApi.js";
 import { handleHqHandoff } from "../src/hq/hqHandoff.js";
+import { PAUSE_LOOKBACK_DAYS, loadYieldEvents, queryYieldSummary } from "../src/prospecting/prospectingQueryYield.js";
 import { buildXPostImageCard } from "../src/content/xPostImageCard.js";
 
 /**
@@ -166,7 +167,10 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
         // "plenty of backlog, none of it clears today's quality bar" (see
         // prospectingHandlers.ts's ProspectingSelectionDiagnostics).
         const { candidates, diagnostics, pacing, recovery, maybe } = await listProspectingQueue(client);
-        res.status(200).json({ items: candidates.map(toProspectingJson), diagnostics, pacing, recovery, maybe });
+        // Search yield per topic, last 7 days, with any pauses (P2 2026-11-15). Read from the search cost events; a failed read just omits it.
+        const now = new Date();
+        const queryYield = await loadYieldEvents(client, now, PAUSE_LOOKBACK_DAYS).then((events) => queryYieldSummary(events, now)).catch(() => null);
+        res.status(200).json({ items: candidates.map(toProspectingJson), diagnostics, pacing, recovery, maybe, ...(queryYield ? { queryYield } : {}) });
       }
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });

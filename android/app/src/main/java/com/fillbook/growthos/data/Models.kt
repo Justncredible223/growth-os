@@ -364,6 +364,20 @@ data class ProspectingQueueResult(
     val pacing: ProspectingPacing? = null,
     /** Posts the AI relevance screen turned away this week (read-only "Maybe" list); empty when the API response predates the field. */
     val maybe: List<ProspectingMaybeItem> = emptyList(),
+    /** Search yield per topic over the last 7 days, with pauses (P2 2026-11-15); empty when the API response predates the field. */
+    val queryYield: List<ProspectingQueryYield> = emptyList(),
+)
+
+/** One topic's (or the creator watchlist's) last-7-days search yield. A paused topic carries when it comes back and why. */
+data class ProspectingQueryYield(
+    val key: String,
+    val label: String,
+    val runs: Int,
+    val read: Int,
+    val kept: Int,
+    val keptPct: Int?,
+    val pausedUntil: String?,
+    val pauseReason: String?,
 )
 
 /** A post the AI relevance screen turned away -- shown read-only so the owner can judge whether the screen is too strict. Open on X only; no draft. */

@@ -109,3 +109,21 @@ describe("isEligibleForDailySelection", () => {
     expect(isEligibleForDailySelection(null, NOW)).toBe(true);
   });
 });
+
+describe("P2 age-window test switch (2026-11-15)", () => {
+  it("defaults to 12 hours; PROSPECTING_AGE_WINDOW_HOURS=24 gives 24 hours and keeps a 50-point post above the 45 bar for about 11 hours", async () => {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    vi.stubEnv("PROSPECTING_AGE_WINDOW_HOURS", "24");
+    const f = await import("../src/prospecting/prospectingFreshness");
+    const now = new Date("2026-11-16T12:00:00Z");
+    const ago = (h: number) => new Date(now.getTime() - h * 3600_000).toISOString();
+    expect(f.MAX_AGE_FOR_DAILY_SELECTION_MS).toBe(24 * 3600_000);
+    expect(50 * f.recencyDecayMultiplier(ago(10.5), now)).toBeGreaterThanOrEqual(45);
+    expect(50 * f.recencyDecayMultiplier(ago(11.5), now)).toBeLessThan(45);
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    const base = await import("../src/prospecting/prospectingFreshness");
+    expect(base.MAX_AGE_FOR_DAILY_SELECTION_MS).toBe(12 * 3600_000);
+  });
+});
