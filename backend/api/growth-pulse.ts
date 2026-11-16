@@ -228,7 +228,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             cursorStore,
             userId,
           );
-          await recordSyncSuccess(client, "x_inbound", `${result.inserted} new, ${result.skippedExisting} already tracked`);
+          if (result.truncated) {
+            // P0 2026-11-15: never lose mentions silently; a sync that hit its page cap shows as a failure in Health.
+            await recordSyncFailure(client, "x_inbound", `more than 250 mentions arrived since the last sync; ${result.inserted} new were stored but the oldest were not read`);
+          } else {
+            await recordSyncSuccess(client, "x_inbound", `${result.inserted} new, ${result.skippedExisting} already tracked`);
+          }
           return `${result.inserted} new inbound (${result.fetched} fetched, ${result.skippedExisting} already tracked)`;
         } catch (err) {
           await recordSyncFailure(client, "x_inbound", errorMessage(err));
@@ -395,12 +400,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const repo = new SupabaseInboundRepository(client);
         let totalFetched = 0;
         let totalInserted = 0;
+        const truncatedVideos: string[] = [];
         for (const videoId of videoIds) {
           const result = await ingestInboundYoutubeComments({ adapter, repo }, cursorStore, videoId, now);
           totalFetched += result.fetched;
           totalInserted += result.inserted;
+          if (result.truncated) truncatedVideos.push(videoId);
         }
-        return `${totalInserted} new inbound across ${videoIds.length} video(s) (${totalFetched} fetched)`;
+        const summary = `${totalInserted} new inbound across ${videoIds.length} video(s) (${totalFetched} fetched)`;
+        // A video that got more than 250 comments since the last run: stored what was read, and the step fails so it shows in the log.
+        if (truncatedVideos.length > 0) throw new Error(`${summary}; stopped at the page cap with older comments unread on: ${truncatedVideos.join(", ")}`);
+        return summary;
       }),
     );
   }

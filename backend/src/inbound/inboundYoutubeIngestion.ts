@@ -13,7 +13,12 @@ export interface IngestInboundYoutubeDeps {
   repo: InboundRepository;
 }
 
+/** Pages of 50 comments one video's sync may read before it stops and warns. */
+export const YOUTUBE_MAX_PAGES = 5;
+
 export interface IngestInboundYoutubeResult {
+  /** True when the read stopped at YOUTUBE_MAX_PAGES without reaching the stored cursor (the caller raises a warning). */
+  truncated?: boolean;
   fetched: number;
   inserted: number;
   skippedExisting: number;
@@ -46,7 +51,24 @@ export async function ingestInboundYoutubeComments(
 ): Promise<IngestInboundYoutubeResult> {
   const cursorKey = youtubeCommentCursorKey(videoId);
   const sinceId = await cursorStore.load(cursorKey);
-  const comments = await deps.adapter.fetchTopLevelComments(videoId);
+  // P0 2026-11-15: follow the pages until the stored cursor shows up (one page used to be read, so a burst of more than 50 comments
+  // between runs lost the older ones). An adapter without paging (tests, older fakes) reads one page as before.
+  let comments: YoutubeComment[];
+  let truncated = false;
+  const paged = (deps.adapter as { fetchTopLevelCommentsPage?: (v: string, t?: string) => Promise<{ comments: YoutubeComment[]; nextPageToken?: string }> }).fetchTopLevelCommentsPage;
+  if (sinceId && paged) {
+    comments = [];
+    let token: string | undefined;
+    for (let page = 0; page < YOUTUBE_MAX_PAGES; page++) {
+      const r = await paged.call(deps.adapter, videoId, token);
+      comments.push(...r.comments);
+      token = r.nextPageToken;
+      if (!token || r.comments.some((c) => c.id === sinceId)) break;
+    }
+    truncated = Boolean(token) && !comments.some((c) => c.id === sinceId);
+  } else {
+    comments = await deps.adapter.fetchTopLevelComments(videoId);
+  }
 
   const newComments = sinceId ? takeUntilSeen(comments, sinceId) : comments;
 
@@ -63,7 +85,7 @@ export async function ingestInboundYoutubeComments(
     await cursorStore.save(cursorKey, comments[0]!.id);
   }
 
-  return { fetched: newComments.length, inserted, skippedExisting };
+  return { ...(truncated ? { truncated: true } : {}), fetched: newComments.length, inserted, skippedExisting };
 }
 
 /** Comments arrive newest-first; keeps everything before the previously-seen id, matching X ingestion's since_id semantics without an API-level since filter. Returns the whole list unseen (i.e. all of it is "new") if the cursor id isn't found in this page at all -- either it scrolled off a 50-item page between runs, or this is stale/reset; either way, the safer default is treating what's visible now as new rather than silently dropping it. */

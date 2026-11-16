@@ -22,6 +22,15 @@ import type { InboundEngagement, InboundRepository, InboundStatus } from "./type
 
 export class InboundActionError extends Error {}
 
+/** The row exists but is not in a state the action accepts (HTTP 409). P0 2026-11-15. */
+export class InboundConflictError extends InboundActionError {}
+
+/** The draft guardrail turned every attempt away (HTTP 422): the owner can try again. */
+export class InboundDraftRejectedError extends InboundActionError {}
+
+/** Statuses still waiting on the owner. Responded and closed are finished. */
+export const OPEN_INBOUND_STATUSES: readonly string[] = ["new", "needs_response", "draft_ready", "follow_up", "review_needed"];
+
 const ACTIVE_STATUSES: InboundStatus[] = ["new", "needs_response", "draft_ready", "follow_up", "review_needed"];
 const OVERDUE_HOURS = 48;
 
@@ -157,7 +166,11 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   // our own giveaway an impersonation before). Dismiss it with the audit note instead.
   if (isOwnAccountRow(row)) {
     if (row.status !== "closed" && row.status !== "responded") await repo.updateStatus(id, "closed", { respondedNote: OWN_ACCOUNT_NOTE });
-    throw new InboundActionError("This post is from Fillbook's own account, so it is not inbound engagement and was dismissed instead of drafted.");
+    throw new InboundConflictError("This post is from Fillbook's own account, so it is not inbound engagement and was dismissed instead of drafted.");
+  }
+  // P0 2026-11-15: a finished item is never drafted again (drafting used to flip a responded or closed item back to draft_ready).
+  if (!OPEN_INBOUND_STATUSES.includes(row.status)) {
+    throw new InboundConflictError(`This item is already ${row.status}, so it is not drafted again.`);
   }
 
   const { brandRulesSummary, verifiedKnowledgeSummary } = await loadGroundingContext(client);
@@ -193,7 +206,7 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     assess: (candidate) => assessInboundDraft(candidate, { messageText: row.body, authorIsOwnAccount: false }),
   });
   if (!accepted) {
-    throw new InboundActionError(`Draft rejected -- ${hardReason}. Try drafting again.`);
+    throw new InboundDraftRejectedError(`Draft rejected -- ${hardReason}. Try drafting again.`);
   }
   const draft = accepted;
 
@@ -225,6 +238,11 @@ export async function markResponded(client: SupabaseClient, id: string, note?: s
   const repo = new SupabaseInboundRepository(client);
   const row = await repo.getById(id);
   if (!row) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
+  // P0 2026-11-15: a retry after a timeout (or a second tap) changes nothing, so respondedAt and the "resolved today" count stay right.
+  if (row.status === "responded") return;
+  if (!OPEN_INBOUND_STATUSES.includes(row.status)) {
+    throw new InboundConflictError(`This item is already ${row.status}, so it can't be marked responded.`);
+  }
   // Stored only when the owner actually changed the draft -- same rule as Prospecting's final_reply -- so it is a clean "AI draft vs. what I posted" signal.
   const edited = finalResponse?.trim();
   await repo.updateStatus(id, "responded", {
@@ -236,7 +254,12 @@ export async function markResponded(client: SupabaseClient, id: string, note?: s
 
 export async function markFollowUp(client: SupabaseClient, id: string): Promise<void> {
   const repo = new SupabaseInboundRepository(client);
-  if (!(await repo.getById(id))) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
+  const row = await repo.getById(id);
+  if (!row) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
+  if (row.status === "follow_up") return;
+  if (!OPEN_INBOUND_STATUSES.includes(row.status)) {
+    throw new InboundConflictError(`This item is already ${row.status}, so it can't be flagged for follow-up.`);
+  }
   await repo.updateStatus(id, "follow_up");
 }
 
@@ -252,7 +275,11 @@ export async function markFollowUp(client: SupabaseClient, id: string): Promise<
  */
 export async function closeInbound(client: SupabaseClient, id: string, note?: string): Promise<void> {
   const repo = new SupabaseInboundRepository(client);
-  if (!(await repo.getById(id))) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
+  const row = await repo.getById(id);
+  if (!row) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
+  // Closing twice changes nothing; a responded item stays responded (closing it would hide that it was answered).
+  if (row.status === "closed") return;
+  if (row.status === "responded") throw new InboundConflictError("This item was already responded to, so it is not closed.");
   await repo.updateStatus(id, "closed", note?.trim() ? { respondedNote: note.trim() } : undefined);
 }
 

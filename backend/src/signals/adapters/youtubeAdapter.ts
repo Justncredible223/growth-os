@@ -12,7 +12,7 @@ export interface YoutubeComment {
 }
 
 const API_BASE = "https://www.googleapis.com/youtube/v3";
-/** Matches XSignalAdapter.fetchOwnMentions' own max_results=50 -- one bounded page per run, no further pagination. If more than 50 genuinely new comments land between two runs (a 3x/day cadence), the oldest of that burst wait for the next run rather than this call growing unbounded. */
+/** Comments per page. Ingestion follows the pages until it reaches the stored cursor, up to YOUTUBE_MAX_PAGES (inboundYoutubeIngestion.ts), and warns when it stops at that cap. */
 const MAX_RESULTS = 50;
 
 /**
@@ -40,6 +40,11 @@ export class YoutubeCommentAdapter {
    * condition, not a request parameter.
    */
   async fetchTopLevelComments(videoId: string): Promise<YoutubeComment[]> {
+    return (await this.fetchTopLevelCommentsPage(videoId)).comments;
+  }
+
+  /** One page of comment threads, newest first, with the token for the next (older) page if there is one. */
+  async fetchTopLevelCommentsPage(videoId: string, pageToken?: string): Promise<{ comments: YoutubeComment[]; nextPageToken?: string }> {
     const url = new URL(`${API_BASE}/commentThreads`);
     url.searchParams.set("part", "snippet");
     url.searchParams.set("videoId", videoId);
@@ -47,6 +52,7 @@ export class YoutubeCommentAdapter {
     url.searchParams.set("maxResults", String(MAX_RESULTS));
     url.searchParams.set("textFormat", "plainText");
     url.searchParams.set("key", this.apiKey);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
 
     const res = await this.fetchImpl(url.toString());
     if (!res.ok) {
@@ -57,11 +63,12 @@ export class YoutubeCommentAdapter {
       // caller polling several videos doesn't have one comments-disabled
       // video fail the whole run. Every other failure (bad key, quota
       // exceeded, video not found) is a real error.
-      if (res.status === 403 && body.includes("commentsDisabled")) return [];
+      if (res.status === 403 && body.includes("commentsDisabled")) return { comments: [] };
       throw new YoutubeApiError(`YouTube commentThreads.list failed for video ${videoId}: HTTP ${res.status} -- ${body}`);
     }
 
     const json = (await res.json()) as {
+      nextPageToken?: string;
       items?: Array<{
         id: string;
         snippet?: {
@@ -77,7 +84,7 @@ export class YoutubeCommentAdapter {
       }>;
     };
 
-    return (json.items ?? []).map((item) => {
+    const comments = (json.items ?? []).map((item) => {
       const snippet = item.snippet?.topLevelComment?.snippet;
       return {
         id: item.id,
@@ -87,6 +94,7 @@ export class YoutubeCommentAdapter {
         publishedAt: snippet?.publishedAt ? new Date(snippet.publishedAt) : null,
       };
     });
+    return { comments, nextPageToken: json.nextPageToken };
   }
 }
 

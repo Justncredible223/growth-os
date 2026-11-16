@@ -210,7 +210,10 @@ fun InboundScreen(repo: GrowthOsRepository) {
                 // into the generic failureMessage below.
                 actionError = e.shortReason
             } catch (e: Exception) {
-                actionError = failureMessage
+                // The server's own reason (already responded, closed, budget reached) instead of blaming the connection. P0 2026-11-15.
+                actionError = (e as? com.fillbook.growthos.data.NetworkException)
+                    ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(404, 409, 422, 500)) }
+                    ?: failureMessage
             } finally {
                 busyId = null
             }

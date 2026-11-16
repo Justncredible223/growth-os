@@ -182,3 +182,15 @@ describe("ingestInboundMentions", () => {
     expect(rows.find((r) => r.externalId === "2")!.conversationId).toBe("conv-1");
   });
 });
+
+describe("P0 2026-11-15: a mentions read that hit its page cap is reported, not hidden", () => {
+  it("passes the adapter's truncated flag through to the result", async () => {
+    const { InMemoryIngestionCursorStore } = await import("../src/signals/adapters/ingestionCursorStore");
+    const { InMemoryInboundRepository } = await import("../src/inbound/inMemoryInboundRepository");
+    const adapter = { fetchOwnMentions: async () => [], mentionsTruncated: () => true };
+    const result = await ingestInboundMentions({ adapter, repo: new InMemoryInboundRepository() } as any, new InMemoryIngestionCursorStore(), "me");
+    expect(result.truncated).toBe(true);
+    const quiet = await ingestInboundMentions({ adapter: { fetchOwnMentions: async () => [] }, repo: new InMemoryInboundRepository() } as any, new InMemoryIngestionCursorStore(), "me");
+    expect(quiet.truncated).toBeUndefined();
+  });
+});
