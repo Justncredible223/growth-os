@@ -264,4 +264,13 @@ class ReplyPacingTest {
         assertEquals("Draft anyway", maybeDraftLabel(false))
         assertEquals("Drafting...", maybeDraftLabel(true))
     }
+
+    @Test
+    fun serverRefusalReason_readsThe409Message_andIgnoresOtherFailures() {
+        val pacing = com.fillbook.growthos.data.NetworkException("POST /api/approvals?resource=prospecting failed: HTTP 409 -- {\"error\":\"Wait 20 minutes between replies.\",\"reason\":\"pacing\"}", 409)
+        org.junit.Assert.assertEquals("Wait 20 minutes between replies.", serverRefusalReason(pacing))
+        org.junit.Assert.assertNull(serverRefusalReason(com.fillbook.growthos.data.NetworkException("POST x failed: HTTP 500 -- {\"error\":\"boom\"}", 500)))
+        org.junit.Assert.assertNull(serverRefusalReason(java.io.IOException("offline")))
+        org.junit.Assert.assertNull(serverRefusalReason(com.fillbook.growthos.data.NetworkException("POST x failed: HTTP 409 -- not json", 409)))
+    }
 }

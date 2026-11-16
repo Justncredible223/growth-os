@@ -33,7 +33,8 @@ import {
   markProspectingAlreadyHandled,
   markProspectingNotRelevant,
   markProspectingOpened,
-  markProspectingReplied,
+  markProspectingRepliedOnce,
+  ProspectingPacingError,
   markProspectingSkipped,
   toProspectingJson,
 } from "../src/prospecting/prospectingHandlers.js";
@@ -201,11 +202,12 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
         res.status(200).json({ id, opened: true });
         return;
       case "mark-replied": {
-        const updated = await markProspectingReplied(client, id, body?.finalReply, body?.mentionsFillbook, body?.usedLink);
-        res.status(200).json(toProspectingJson(updated));
+        const { candidate, recorded } = await markProspectingRepliedOnce(client, id, body?.finalReply, body?.mentionsFillbook, body?.usedLink);
+        res.status(200).json({ ...toProspectingJson(candidate), alreadyRecorded: !recorded });
         // The 20-minute reply cooldown has just started: top the queue up in the background so a fresh, vetted post is waiting when it ends.
         // waitUntil keeps the function alive after the response is sent; the refill never throws, so it cannot undo the saved reply.
-        waitUntil(refillProspectingQueue(client));
+        // A repeated tap records nothing, so it starts no second refill.
+        if (recorded) waitUntil(refillProspectingQueue(client));
         return;
       }
       case "skip":
@@ -224,6 +226,10 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
         res.status(400).json({ error: "action must be one of: draft, draft-maybe, open, mark-replied, skip, not-relevant, already-handled" });
     }
   } catch (err) {
+    if (err instanceof ProspectingPacingError) {
+      res.status(409).json({ error: err.message, reason: "pacing", nextReplyAt: err.nextReplyAt });
+      return;
+    }
     if (err instanceof ProspectingConflictError) {
       res.status(409).json({ error: err.message });
       return;

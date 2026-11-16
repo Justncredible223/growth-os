@@ -177,8 +177,8 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
         ProspectingCandidate,
         "openedAt" | "draftReply" | "draftOptions" | "postedStyle" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
       >
-    > & { breakdownPatch?: Record<string, string> },
-  ): Promise<void> {
+    > & { breakdownPatch?: Record<string, string>; onlyFrom?: ProspectingStatus[] },
+  ): Promise<boolean> {
     const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
     if (fields?.openedAt !== undefined) update.opened_at = fields.openedAt;
     if (fields?.draftReply !== undefined) update.draft_reply = fields.draftReply;
@@ -197,8 +197,15 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
       if (fields.breakdownPatch !== undefined) Object.assign(merged, fields.breakdownPatch);
       update.score_breakdown = merged;
     }
+    if (fields?.onlyFrom) {
+      // Conditional: two taps (or a retry) racing on the same row can only move it once.
+      const { data, error } = await this.client.from("prospecting_candidates").update(update).eq("id", id).in("status", fields.onlyFrom).select("id");
+      if (error) throw new Error(`updateStatus failed: ${error.message}`);
+      return (data ?? []).length > 0;
+    }
     const { error } = await this.client.from("prospecting_candidates").update(update).eq("id", id);
     if (error) throw new Error(`updateStatus failed: ${error.message}`);
+    return true;
   }
 
   async hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean> {

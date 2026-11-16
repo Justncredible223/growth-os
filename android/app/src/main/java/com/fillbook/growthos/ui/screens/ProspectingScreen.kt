@@ -280,7 +280,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 actionError = null
                 afterSuccess()
             } catch (e: Exception) {
-                actionError = "Couldn't record that. Check your connection and try again."
+                // The server says why it refused (pacing, or a post that is no longer open); show that instead of blaming the connection.
+                actionError = serverRefusalReason(e) ?: "Couldn't record that. Check your connection and try again."
             }
             busyId = null
         }
@@ -597,8 +598,13 @@ private fun ProspectingCard(
         }
 
         Spacer(Modifier.height(8.dp))
+        // While replies are paused, viewing the post only opens it: copying the draft as well is the start of a reply (ChatGPT P0 2026-11-15).
+        val viewContext = LocalContext.current
         TextButton(
-            onClick = { onCopyAndOpen() },
+            onClick = {
+                if (replyHold == null) onCopyAndOpen()
+                else openExternalUrl(viewContext, ProspectingPostLink.buildOpenUrl(candidate.platform, candidate.postUrl, candidate.authorHandle))
+            },
             contentPadding = PaddingValues(0.dp),
         ) { Text("View original post", style = MaterialTheme.typography.labelMedium, color = Accent) }
 
@@ -711,7 +717,8 @@ private fun ProspectingCard(
                     Text("Open in browser", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            TextButton(onClick = onReplied, enabled = !busy) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            // The server refuses a reply inside the pacing hold too, so the button waits with it.
+            TextButton(onClick = onReplied, enabled = !busy && replyHold == null) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = onSkip, enabled = !busy) { Text("Skip", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = onNotRelevant, enabled = !busy) { Text("Not relevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = onAlreadyHandled, enabled = !busy) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -841,4 +848,15 @@ internal fun suggestedInteractionLine(breakdown: Map<String, String>): String? {
     val action = breakdown["suggestedAction"]?.takeIf { it.isNotBlank() } ?: return null
     val angle = breakdown["suggestedAngle"]?.takeIf { it.isNotBlank() } ?: return null
     return "Suggested: ${action.replaceFirstChar { it.uppercase() }}. $angle"
+}
+
+/**
+ * The reason the server gave for refusing an action (HTTP 409: reply pacing, or a post that is no longer open), or null for any other
+ * failure. The backend answers {"error": "..."}; NetworkException carries the body after " -- ".
+ */
+internal fun serverRefusalReason(e: Throwable): String? {
+    val ne = e as? com.fillbook.growthos.data.NetworkException ?: return null
+    if (ne.httpCode != 409) return null
+    val body = ne.message?.substringAfter(" -- ", "")?.takeIf { it.isNotBlank() } ?: return null
+    return runCatching { org.json.JSONObject(body).optString("error").takeIf { it.isNotBlank() } }.getOrNull()
 }

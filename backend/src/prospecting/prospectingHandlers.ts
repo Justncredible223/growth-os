@@ -18,7 +18,7 @@ import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SHOWCASE_IDS, SHOWCASE_NONE } from "../content/fillbookShowcase.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
-import { OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, SCREENED_OUT_REASON, type ProspectingCandidate, type ProspectingRepository } from "./types.js";
+import { OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, SCREENED_OUT_REASON, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
 
 /** Thrown from inside the draft-retry loop when the model says the post is irrelevant, so the loop stops without retrying. */
 class ProspectingIrrelevantSignal extends Error {}
@@ -511,6 +511,85 @@ export async function markProspectingOpened(client: SupabaseClient, id: string, 
  * hasExistingRelationship check recognizes them if they reply back later
  * (see inboundIngestion.ts, which looks up outreach by platform).
  */
+/** Statuses a post can be marked replied from. "expired" is included: a card can age out of the 12-hour window while the owner is posting. */
+export const REPLIABLE_STATUSES: ProspectingStatus[] = ["new", "shown", "drafting", "ready", "expired"];
+
+/** Thrown when the reply pacing says to wait (maps to HTTP 409 with reason "pacing"). */
+export class ProspectingPacingError extends ProspectingConflictError {
+  constructor(
+    message: string,
+    readonly nextReplyAt: string | null,
+  ) {
+    super(message);
+  }
+}
+
+export interface MarkRepliedResult {
+  candidate: ProspectingCandidate;
+  /** False when the post was already marked replied: nothing was counted again and no refill should start. */
+  recorded: boolean;
+}
+
+/**
+ * Records a reply once (ChatGPT P0 2026-11-15): a second tap or a retry returns the row unchanged instead of counting outreach again and
+ * starting another refill; skipped / not relevant / handled posts are refused; and the reply pacing (cooldown and daily cap) is enforced here,
+ * not only shown in the app.
+ */
+export async function markProspectingRepliedOnce(
+  client: SupabaseClient,
+  id: string,
+  finalReply: string | undefined,
+  mentionsFillbook: boolean | undefined,
+  usedLink: boolean | undefined,
+  deps: ProspectingHandlerDeps = {},
+  nowDate: Date = new Date(),
+): Promise<MarkRepliedResult> {
+  const repo = repoFor(client, deps);
+  const row = await repo.getById(id);
+  if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
+  if (row.status === "replied") return { candidate: row, recorded: false };
+  if (!REPLIABLE_STATUSES.includes(row.status)) {
+    throw new ProspectingConflictError(`This post is marked "${row.status}", so it can't be marked replied.`);
+  }
+  const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, nowDate);
+  const recent = await repo.listRepliedSince(new Date(nowDate.getTime() - 2 * 24 * 60 * 60 * 1000));
+  const pacing = computeReplyPacing(recent.map((c) => c.repliedAt), nowDate, recovery.dailyCap ?? undefined, recovery.active ? RECOVERY_REPLY_COOLDOWN_MS : undefined);
+  if (pacing.reason) {
+    throw new ProspectingPacingError(
+      pacing.reason === "daily_cap" ? `Today's ${pacing.dailyCap} replies are done.` : `Wait ${pacing.cooldownMinutes} minutes between replies.`,
+      pacing.nextReplyAt,
+    );
+  }
+
+  const now = nowDate.toISOString();
+  // Record which style was actually posted: no finalReply means the app posted the draft as it was (the first option).
+  const postedText = finalReply && finalReply.trim() ? finalReply : row.draftReply;
+  const moved = await repo.updateStatus(id, "replied", {
+    repliedAt: now,
+    postedStyle: matchPostedStyle(postedText, row.draftOptions, row.draftReply),
+    finalReply: finalReply && finalReply !== row.draftReply ? finalReply : undefined,
+    replyMentionsFillbook: mentionsFillbook ?? row.replyMentionsFillbook ?? undefined,
+    replyUsedLink: usedLink ?? row.replyUsedLink ?? undefined,
+    onlyFrom: REPLIABLE_STATUSES,
+  });
+  if (moved === false) {
+    // Another tap got there first (or the row changed): report what is stored, count nothing twice.
+    const current = await repo.getById(id);
+    if (!current) throw new ProspectingActionError(`Row "${id}" vanished after marking replied`);
+    if (current.status === "replied") return { candidate: current, recorded: false };
+    throw new ProspectingConflictError(`This post is marked "${current.status}", so it can't be marked replied.`);
+  }
+
+  if (row.authorExternalId) {
+    await repo.recordOutreach(row.platform, row.authorExternalId, row.authorHandle);
+  }
+
+  const updated = await repo.getById(id);
+  if (!updated) throw new ProspectingActionError(`Row "${id}" vanished after marking replied`);
+  return { candidate: updated, recorded: true };
+}
+
+/** Same as markProspectingRepliedOnce, returning only the row. */
 export async function markProspectingReplied(
   client: SupabaseClient,
   id: string,
@@ -519,28 +598,7 @@ export async function markProspectingReplied(
   usedLink: boolean | undefined,
   deps: ProspectingHandlerDeps = {},
 ): Promise<ProspectingCandidate> {
-  const repo = repoFor(client, deps);
-  const row = await repo.getById(id);
-  if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
-
-  const now = new Date().toISOString();
-  // Record which style was actually posted: no finalReply means the app posted the draft as it was (the first option).
-  const postedText = finalReply && finalReply.trim() ? finalReply : row.draftReply;
-  await repo.updateStatus(id, "replied", {
-    repliedAt: now,
-    postedStyle: matchPostedStyle(postedText, row.draftOptions, row.draftReply),
-    finalReply: finalReply && finalReply !== row.draftReply ? finalReply : undefined,
-    replyMentionsFillbook: mentionsFillbook ?? row.replyMentionsFillbook ?? undefined,
-    replyUsedLink: usedLink ?? row.replyUsedLink ?? undefined,
-  });
-
-  if (row.authorExternalId) {
-    await repo.recordOutreach(row.platform, row.authorExternalId, row.authorHandle);
-  }
-
-  const updated = await repo.getById(id);
-  if (!updated) throw new ProspectingActionError(`Row "${id}" vanished after marking replied`);
-  return updated;
+  return (await markProspectingRepliedOnce(client, id, finalReply, mentionsFillbook, usedLink, deps)).candidate;
 }
 
 export async function markProspectingSkipped(client: SupabaseClient, id: string, reason: string | undefined, deps: ProspectingHandlerDeps = {}): Promise<void> {
