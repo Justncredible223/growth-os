@@ -38,9 +38,10 @@ export function assessVideoLoop(input: VideoHealthInput): VideoHealthItem[] {
 
   const recent = input.renders.filter((r) => now.getTime() - new Date(r.createdAt).getTime() < 7 * DAY_MS);
   const failed = recent.filter((r) => r.status === "failed");
-  const stuck = input.renders.filter((r) => r.status === "queued" && now.getTime() - new Date(r.updatedAt).getTime() > STUCK_RENDER_MINUTES * 60 * 1000);
+  // P0 2026-11-15: a render stuck in "rendering" (a lost runner) counts too; it used to be flagged only while still queued.
+  const stuck = input.renders.filter((r) => (r.status === "queued" || r.status === "rendering") && now.getTime() - new Date(r.updatedAt).getTime() > STUCK_RENDER_MINUTES * 60 * 1000);
   if (stuck.length > 0) {
-    items.push({ label: "Video rendering", status: "DOWN", detail: `${stuck.length} render${stuck.length === 1 ? "" : "s"} queued for over ${STUCK_RENDER_MINUTES} minutes and not picked up.` });
+    items.push({ label: "Video rendering", status: "DOWN", detail: `${stuck.length} render${stuck.length === 1 ? "" : "s"} with no progress for over ${STUCK_RENDER_MINUTES} minutes. Retry it from Video Status.` });
   } else if (failed.length > 0) {
     items.push({ label: "Video rendering", status: "DEGRADED", detail: `${failed.length} of the last ${recent.length} renders this week failed. Retry from Video Status.` });
   } else {

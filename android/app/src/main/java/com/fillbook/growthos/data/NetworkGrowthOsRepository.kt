@@ -1002,6 +1002,8 @@ class NetworkGrowthOsRepository(
         updatedAt = getString("updatedAt"),
         videoMetadata = toVideoRenderMetadata(),
         publishedUrl = optStringOrNull("publishedUrl"),
+        fileMissing = optBoolean("fileMissing", false),
+        stuck = optBoolean("stuck", false),
         conceptTitle = optStringOrNull("conceptTitle"),
         conceptDay = if (isNull("conceptDay")) null else optInt("conceptDay", 0).takeIf { it > 0 },
     )

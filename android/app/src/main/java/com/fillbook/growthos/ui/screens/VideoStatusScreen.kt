@@ -50,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -369,13 +370,20 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
 
     var dismissTarget by remember { mutableStateOf<VideoRenderStatus?>(null) }
 
+    // One dismiss in flight per video (P0 2026-11-15: a double tap used to report a failure although the first tap worked).
+    val dismissing = remember { mutableStateListOf<String>() }
+
     fun dismiss(render: VideoRenderStatus) {
+        if (render.id in dismissing) return
+        dismissing.add(render.id)
         scope.launch {
             try {
                 repo.dismissVideoRender(render.id)
                 renders = renders.filter { it.id != render.id }
             } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Couldn't dismiss — try again.")
+                snackbarHostState.showSnackbar(videoServerReason(e) ?: "Couldn't dismiss. Check your connection and try again.")
+            } finally {
+                dismissing.remove(render.id)
             }
         }
     }
@@ -389,7 +397,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 copyToClipboard(context, "Metricool package", text)
                 snackbarHostState.showSnackbar("Metricool package copied. Paste it to the Marketing session, then approve it by its id.")
             } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Couldn't build the Metricool package — pull to refresh and try again.")
+                snackbarHostState.showSnackbar(videoServerReason(e) ?: "Couldn't build the Metricool package. Check your connection and try again.")
             }
         }
     }
@@ -402,10 +410,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                     snackbarHostState.showSnackbar("Render queued again. You get a push when it is ready.")
                     renders = repo.getVideoRenderStatuses()
                 } else {
-                    snackbarHostState.showSnackbar("Not retried: $refusal")
+                    snackbarHostState.showSnackbar("Not retried: ${renderCapReason(refusal)}")
                 }
             } catch (e: Exception) {
-                snackbarHostState.showSnackbar("Couldn't retry — try again.")
+                snackbarHostState.showSnackbar(videoServerReason(e) ?: "Couldn't retry. Check your connection and try again.")
             }
         }
     }
@@ -654,7 +662,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         refresh()
                         snackbarHostState.showSnackbar("${platform.label} link saved.")
                     } catch (e: Exception) {
-                        snackbarHostState.showSnackbar(e.message?.takeIf { it.isNotBlank() } ?: "Couldn't save the link. Try again.")
+                        snackbarHostState.showSnackbar(videoServerReason(e) ?: "Couldn't save the link. Check your connection and try again.")
                     }
                     savingLink = false
                 }
@@ -881,12 +889,19 @@ private fun VideoRenderCard(
         if (render.status == "ready" && onCopyMetricool != null) {
             TextButton(onClick = onCopyMetricool) { Text("Copy Metricool package") }
         }
-        if (render.status == "failed" && onRetry != null) {
-            TextButton(onClick = onRetry) { Text("Retry render") }
+        // P0 2026-11-15: a stuck render or a missing file gets a way forward, not only Dismiss (which also stops it from ever coming back).
+        if (render.fileMissing) {
+            Text("The video file is missing, so it can't be downloaded or posted. Re-render it to get a new file.", style = MaterialTheme.typography.bodySmall, color = Danger)
         }
-        if (render.status == "queued" || render.status == "rendering") {
+        if (render.stuck) {
+            Text("No progress for over 45 minutes; the render may have stopped. Retry it rather than dismissing it.", style = MaterialTheme.typography.bodySmall, color = Warning)
+        }
+        if ((render.status == "failed" || render.stuck || render.fileMissing) && onRetry != null) {
+            TextButton(onClick = onRetry) { Text(if (render.fileMissing) "Re-render" else "Retry render") }
+        }
+        if ((render.status == "queued" || render.status == "rendering") && !render.stuck) {
             Text(
-                "This can take a minute or two — pull to refresh, or wait for the notification.",
+                "A render usually takes 5 to 15 minutes. You get a notification when it is ready.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
             )
@@ -993,4 +1008,18 @@ private fun VideoMetadataSection(label: String, copyLabel: String, body: String)
         Spacer(Modifier.height(4.dp))
         Text(body, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
     }
+}
+
+/** The server's own reason for a refused video action (404/409/400/422/500), or null for a connection problem. P0 2026-11-15. */
+internal fun videoServerReason(e: Throwable): String? =
+    (e as? com.fillbook.growthos.data.NetworkException)?.let {
+        com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(400, 404, 409, 422, 500))
+    }
+
+/** "daily_render_cap_reached (3 renders today, cap is 3)" in plain words. Pure, unit-tested. */
+internal fun renderCapReason(raw: String): String = when {
+    raw.startsWith("daily_render_cap_reached") -> "today's 3 renders are used. It can render again tomorrow."
+    raw.startsWith("monthly_render_cap_reached") -> "this month's renders are used up."
+    raw.startsWith("storage") -> "video storage is full. Dismiss a posted video first."
+    else -> raw
 }
