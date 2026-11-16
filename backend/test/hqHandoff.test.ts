@@ -221,3 +221,42 @@ describe("hq handoff: the label check does not refuse ordinary sentences", () =>
     expect(validateHqHandoffBody(body({ text })).ok).toBe(true);
   });
 });
+
+describe("P0 2026-11-15: drafting notes are refused at intake, a half-finished handoff is recovered", () => {
+  it("refuses a draft that still carries the writer's notes, with the reason", async () => {
+    const { findDraftingNote } = await import("../src/content/draftingNotes");
+    const noted = "See how close you are to your prop firm's rule lines. (Character count: about 215, with the URL counted as 23.)";
+    const r = validateHqHandoffBody(body({ text: noted }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.status).toBe(422);
+      expect(r.error).toMatch(/character or word count note/);
+    }
+    expect(findDraftingNote("Here's a draft post about drawdown and your floor.")).toBe("an introduction to the draft");
+    expect(findDraftingNote("Log one line after every session: the plan versus what you did.")).toBeNull();
+  });
+
+  it("finishes a handoff that failed half way instead of answering duplicate", async () => {
+    const { storeHqDraft } = await import("../src/hq/hqHandoff");
+    const updates: Array<{ table: string; row: any }> = [];
+    const chain = (table: string): any => {
+      const q: any = {
+        select: () => q, filter: () => q, limit: () => q, gte: () => q,
+        eq: () => q,
+        update: (row: any) => { updates.push({ table, row }); return { eq: async () => ({ error: null }) }; },
+        maybeSingle: async () =>
+          table === "content_versions"
+            ? { data: { campaign_asset_id: "asset-1", body: "Log one line after every session: the plan versus what you did." }, error: null }
+            : { data: { id: "asset-1", stage: "draft", campaign_id: "camp-1", campaigns: { status: "retired", decided_at: null } }, error: null },
+      };
+      return q;
+    };
+    const client: any = { from: chain };
+    const draft = { hqDraftId: "hq-9", text: "Log one line after every session: the plan versus what you did.", verdict: "PASS", revisionCount: 0, deskReason: "ok", imageBrief: null };
+    const r = await storeHqDraft(client, draft);
+    expect(r.status).toBe(201);
+    expect(r.body.recovered).toBe(true);
+    expect(updates.some((u) => u.table === "campaigns" && u.row.status === "in_review")).toBe(true);
+    expect(updates.some((u) => u.table === "campaign_assets" && u.row.stage === "ready_for_owner")).toBe(true);
+  });
+});

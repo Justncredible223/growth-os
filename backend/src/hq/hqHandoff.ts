@@ -5,6 +5,8 @@ import { SupabaseCampaignRepository } from "../content/supabaseCampaignRepositor
 import { X_FEED_POST_ASSET_TYPE } from "../content/dailyXFeedPost.js";
 import { containsFalseGiveawayClaim, containsLink, containsUnverifiedClaim, dashProblem } from "../content/xReplyGuardrails.js";
 import { errorMessage } from "../lib/errorMessage.js";
+import { findDraftingNote } from "../content/draftingNotes.js";
+import { REPEAT_OVERLAP, wordOverlap } from "../content/xPostReceipt.js";
 
 /**
  * POST /api/hq-handoff (served from api/approvals.ts through a vercel.json rewrite, because the Hobby plan is capped at 12
@@ -90,6 +92,9 @@ export function validateHqHandoffBody(body: unknown): HqHandoffValidation {
   // multi-part drafts (HQ's Social agent writes those; HQ now sends only the chosen post body).
   if (MARKDOWN_LABEL.test(text)) return { ok: false, status: 422, error: "text must be one clean post body: remove markdown labels such as **Draft 1 (X)** and send a single post" };
   if (containsLink(text)) return { ok: false, status: 422, error: "text must not contain a link" };
+  // P0 2026-11-15 (ChatGPT): a writer's note left in the text is refused at intake so HQ sends a clean post; nothing is silently trimmed.
+  const note = findDraftingNote(text);
+  if (note) return { ok: false, status: 422, error: `text refused: it contains ${note}; send only the post itself` };
   const violation = containsUnverifiedClaim(text) ?? containsFalseGiveawayClaim(text) ?? dashProblem(text);
   if (violation) return { ok: false, status: 422, error: `text refused: ${violation.reason}` };
 
@@ -119,9 +124,31 @@ export async function storeHqDraft(client: SupabaseClient, draft: HqHandoffDraft
   if (existingError) throw new Error(`dedupe lookup failed: ${existingError.message}`);
   if (existing) {
     const row = existing as { campaign_asset_id: string; body: string };
-    if (row.body.trim() === draft.text) return { status: 200, body: { assetId: row.campaign_asset_id, id: row.campaign_asset_id, duplicate: true } };
-    return { status: 409, body: { error: "hqDraftId already stored with different text", assetId: row.campaign_asset_id } };
+    if (row.body.trim() !== draft.text) return { status: 409, body: { error: "hqDraftId already stored with different text", assetId: row.campaign_asset_id } };
+    // P0 2026-11-15: a handoff that failed half way retired its campaign without an owner decision (decided_at empty). HQ's retry used to
+    // hit this dedupe and get "duplicate", so the draft never reached Approvals. Finish that handoff instead.
+    let assetRow: unknown = null;
+    try {
+      assetRow = (await client.from("campaign_assets").select("id, stage, campaign_id, campaigns(status, decided_at)").eq("id", row.campaign_asset_id).maybeSingle()).data;
+    } catch {
+      assetRow = null; // a failed lookup answers as before: duplicate
+    }
+    const a = assetRow as { stage: string; campaign_id: string; campaigns: { status: string; decided_at: string | null } | { status: string; decided_at: string | null }[] | null } | null;
+    const campaign = Array.isArray(a?.campaigns) ? a?.campaigns[0] : a?.campaigns;
+    if (a && campaign && campaign.status === "retired" && !campaign.decided_at) {
+      const repo = new SupabaseCampaignRepository(client);
+      await repo.updateAssetStage(row.campaign_asset_id, "ready_for_owner");
+      const { error: reviveError } = await client.from("campaigns").update({ status: "in_review", updated_at: now.toISOString() }).eq("id", a.campaign_id);
+      if (reviveError) throw new Error(`campaign status update failed: ${reviveError.message}`);
+      return { status: 201, body: { assetId: row.campaign_asset_id, id: row.campaign_asset_id, recovered: true } };
+    }
+    return { status: 200, body: { assetId: row.campaign_asset_id, id: row.campaign_asset_id, duplicate: true } };
   }
+
+  // P0 2026-11-15 (ChatGPT): a draft too close to one already waiting in Approvals or to a recent post is refused, so the owner is not
+  // handed near-copies (three almost identical HQ drafts were waiting at once).
+  const closeTo = await findCloseDraft(client, draft.text, now);
+  if (closeTo) return { status: 422, body: { error: `text refused: too close to ${closeTo}; write a different post` } };
 
   const since = new Date(now.getTime() - HQ_HANDOFF_WINDOW_MS).toISOString();
   const { count, error: countError } = await client
@@ -175,6 +202,34 @@ export async function storeHqDraft(client: SupabaseClient, draft: HqHandoffDraft
     await client.from("campaigns").update({ status: "retired" }).eq("id", campaignId);
     throw err;
   }
+}
+
+/** Word overlap at or above this with a waiting draft or a recent post means "the same post again". Same bar as Today's X Post receipt. */
+export const HQ_REPEAT_OVERLAP = REPEAT_OVERLAP;
+
+/** "a draft waiting in Approvals" / "a post from the last 30 days", or null when the text is new enough. Best effort: a failed read admits. */
+export async function findCloseDraft(client: SupabaseClient, text: string, now: Date): Promise<string | null> {
+  try {
+    const { data: waiting } = await client
+      .from("campaign_assets")
+      .select("id, campaigns!inner(status), content_versions(body, version)")
+      .eq("stage", "ready_for_owner")
+      .eq("campaigns.status", "in_review")
+      .eq("asset_type", X_FEED_POST_ASSET_TYPE)
+      .limit(50);
+    for (const asset of (waiting ?? []) as Array<{ content_versions: Array<{ body: string; version: number }> | null }>) {
+      const latest = [...(asset.content_versions ?? [])].sort((x, y) => y.version - x.version)[0];
+      if (latest && wordOverlap(text, latest.body) >= HQ_REPEAT_OVERLAP) return "a draft already waiting in Approvals";
+    }
+    const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: posts } = await client.from("x_own_posts").select("text").gte("created_at", since).limit(300);
+    for (const p of (posts ?? []) as Array<{ text: string }>) {
+      if (wordOverlap(text, p.text) >= HQ_REPEAT_OVERLAP) return "a post from the last 30 days";
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 /** The route handler. Runs BEFORE the app-token check, with its own token. */

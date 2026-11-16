@@ -7,7 +7,8 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { buildUtmParams, utmQueryString } from "../src/attribution/utmBuilder.js";
-import { getOrCreateDestinationLink } from "../src/attribution/contentPublications.js";
+import { peekDestinationLink } from "../src/attribution/contentPublications.js";
+import { findDraftingNote } from "../src/content/draftingNotes.js";
 import {
   InboundActionError, InboundConflictError, InboundDraftRejectedError,
   closeInbound,
@@ -768,8 +769,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: "Body must include { campaignAssetId: string }" });
           return;
         }
-        const result = await handOffAsset(client, campaignAssetId);
-        res.status(200).json(result);
+        try {
+          const result = await handOffAsset(client, campaignAssetId);
+          res.status(200).json(result);
+        } catch (err) {
+          // Not at ready_for_owner (already decided or handed off): a state conflict, not a server failure.
+          res.status(409).json({ error: errorMessage(err) });
+        }
         return;
       }
 
@@ -782,12 +788,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from("campaign_assets")
         .select("campaign_id, asset_type, stage")
         .eq("id", campaignAssetId)
-        .single();
+        .maybeSingle();
       if (assetError) throw assetError;
+      if (!asset) {
+        res.status(404).json({ error: "This draft no longer exists." });
+        return;
+      }
 
       const newStatus = action === "approve" ? "approved" : "retired";
       const now = new Date().toISOString();
-      const { error: updateError } = await client
+      // P0 2026-11-15 (ChatGPT): one atomic move from in_review only. A stale card or a second tap can no longer reject an approved
+      // campaign (with a render already queued) or approve a rejected one, and a repeat does not overwrite decided_at.
+      const { data: moved, error: updateError } = await client
         .from("campaigns")
         .update({
           status: newStatus,
@@ -795,8 +807,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           decided_by: body?.decidedBy?.trim() || null,
           decided_at: now,
         })
-        .eq("id", asset.campaign_id);
+        .eq("id", asset.campaign_id)
+        .eq("status", "in_review")
+        .select("id");
       if (updateError) throw updateError;
+      if ((moved ?? []).length === 0) {
+        const { data: current } = await client.from("campaigns").select("status").eq("id", asset.campaign_id).maybeSingle();
+        const currentStatus = (current as { status?: string } | null)?.status ?? "unknown";
+        if (currentStatus === newStatus) {
+          res.status(200).json({ campaignId: asset.campaign_id, status: newStatus, alreadyDecided: true });
+          return;
+        }
+        res.status(409).json({ error: `This draft was already ${currentStatus === "approved" ? "approved" : currentStatus === "retired" ? "rejected" : currentStatus}, so it can't be ${action === "approve" ? "approved" : "rejected"} now.` });
+        return;
+      }
 
       // Why it was rejected (optional). Separate, best-effort update: before migration 0048 the column does not exist, and a
       // missing reason must never block the decision itself.
@@ -908,7 +932,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const utmParams = buildUtmParams(asset.id, asset.platform, campaignTitle);
         // Best-effort: a failure generating/reading the destination link
         // must never block the approvals list itself from loading.
-        const destinationLink = await getOrCreateDestinationLink(client, {
+        const destinationLink = await peekDestinationLink(client, {
           campaignAssetId: asset.id,
           channel: asset.platform,
           campaignThesis: campaignTitle,
@@ -923,6 +947,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           platform: asset.platform,
           assetType: asset.asset_type,
           previewText: latestVersion?.body ?? "",
+          // P0 2026-11-15: a writer's note left in the text (e.g. "(Character count: ...)"); the app warns and holds Approve and Copy.
+          draftingNote: findDraftingNote(latestVersion?.body ?? ""),
           stage: "READY_FOR_OWNER",
           isAutoDraft: Boolean(autoDraft),
           costUsd: autoDraft ? Number(autoDraft.cost_usd ?? 0) : null,
