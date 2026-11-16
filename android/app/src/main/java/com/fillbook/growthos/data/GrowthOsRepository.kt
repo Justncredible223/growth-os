@@ -39,6 +39,15 @@ interface GrowthOsRepository {
      */
     suspend fun getMotionConceptCatalog(): MotionConceptCatalog
     suspend fun getApprovals(): List<ApprovalAsset>
+
+    /** The waiting drafts plus the auto-draft backlog note, in one read. */
+    suspend fun getApprovalsOverview(): ApprovalsOverview = ApprovalsOverview(getApprovals(), null)
+
+    /** Approved text drafts the owner has not marked posted yet (last 30 days). */
+    suspend fun getApprovedUnposted(): List<ApprovedUnposted> = emptyList()
+
+    /** The owner's confirmation that an approved draft was posted, with the post link if they have it. */
+    suspend fun markApprovalPosted(campaignAssetId: String, url: String?) {}
     suspend fun getCampaigns(): List<Campaign>
     suspend fun getCostSummary(): CostSummary
     /**

@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -106,6 +107,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun ApprovalsScreen(repo: GrowthOsRepository) {
     var assets by remember { mutableStateOf<List<ApprovalAsset>>(emptyList()) }
+    var backlog by remember { mutableStateOf<com.fillbook.growthos.data.ApprovalsBacklog?>(null) }
+    var unposted by remember { mutableStateOf<List<com.fillbook.growthos.data.ApprovedUnposted>>(emptyList()) }
+    var unpostedOpen by rememberSaveable { mutableStateOf(false) }
+    var pendingPosted by remember { mutableStateOf<com.fillbook.growthos.data.ApprovedUnposted?>(null) }
+    var postedUrl by remember { mutableStateOf("") }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -131,7 +137,11 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
 
     suspend fun refresh() {
         try {
-            assets = repo.getApprovals()
+            val overview = repo.getApprovalsOverview()
+            assets = overview.assets
+            backlog = overview.backlog
+            // Best effort: the approved-not-posted list never blocks the drafts themselves from loading.
+            unposted = runCatching { repo.getApprovedUnposted() }.getOrDefault(unposted)
             errorMessage = null
             // A failed tap's message used to stay up through every refresh; a fresh list is a fresh start.
             actionError = null
@@ -230,9 +240,10 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                             PolishedEmptyState(
                                 icon = Icons.Filled.CheckCircle,
                                 headline = "Nothing waiting on you",
-                                subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
+                                subtitle = "Drafts land here after AI review: from HQ, the daily auto-draft, videos and the Campaign Factory.",
                             )
                         }
+                        unpostedSection(unposted, unpostedOpen, { unpostedOpen = !unpostedOpen }) { pendingPosted = it }
                     }
                 }
             } else {
@@ -275,6 +286,16 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                                 // results (2026-09-07 release audit finding) --
                                 // previously this silently rendered an empty list
                                 // with no indication the search itself was the reason.
+                                // P1 2026-11-15: say plainly when waiting drafts stop the daily auto-draft (the cap itself is unchanged).
+                                backlog?.takeIf { it.blocksAutoDraft }?.let { b ->
+                                    item(key = "backlog-note") {
+                                        Text(
+                                            backlogNote(b),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Warning,
+                                        )
+                                    }
+                                }
                                 if (filtered.isEmpty()) {
                                     item {
                                         PolishedEmptyState(
@@ -304,6 +325,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                                         cardFor(asset)
                                     }
                                 }
+                                unpostedSection(unposted, unpostedOpen, { unpostedOpen = !unpostedOpen }) { pendingPosted = it }
                             }
                         }
                     }
@@ -334,6 +356,46 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    pendingPosted?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingPosted = null; postedUrl = "" },
+            title = { Text("Did you post this?") },
+            text = {
+                Column {
+                    Text("\"${item.title}\" will be recorded as posted on ${platformDisplayName(item.platform)}. Only confirm if it is really live.")
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = postedUrl,
+                        onValueChange = { postedUrl = it },
+                        label = { Text("Post link (optional)") },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val url = postedUrl
+                    pendingPosted = null
+                    postedUrl = ""
+                    scope.launch {
+                        try {
+                            repo.markApprovalPosted(item.id, url)
+                            refresh()
+                            snackbarHostState.showSnackbar("Recorded as posted.")
+                        } catch (e: Exception) {
+                            actionError = (e as? com.fillbook.growthos.data.NetworkException)
+                                ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(404, 409, 422, 500)) }
+                                ?: "Couldn't record that. Check your connection and try again."
+                        }
+                    }
+                }) { Text("Yes, it's posted") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPosted = null; postedUrl = "" }) { Text("Not yet") }
+            },
+        )
     }
 
     pendingReject?.let { asset ->
@@ -414,10 +476,22 @@ private fun ApprovalCard(
                     IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
                     if (asset.isAutoDraft) Pill("AUTO-DRAFT", statusToneColor(StatusTone.NEW))
                 }
+                approvalSourceLine(asset)?.let { line ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(line, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                }
             }
         }
         Spacer(Modifier.height(12.dp))
         ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
+        if (asset.similarToOthers > 0) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Says nearly the same as ${asset.similarToOthers} other waiting draft${if (asset.similarToOthers == 1) "" else "s"}. Approve one at most.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Warning,
+            )
+        }
         asset.hqNote?.let { note ->
             Spacer(Modifier.height(8.dp))
             InsetRow {
@@ -517,6 +591,50 @@ internal val REJECT_REASONS = listOf("Wrong figure or claim", "Wrong tone", "Wea
 
 /** "Day 5 · 5 contracts against a plan of 3" for a motion concept draft; the campaign title for anything else. */
 internal fun approvalHeading(asset: ApprovalAsset): String {
-    val concept = asset.conceptTitle ?: return asset.campaignTitle
+    val concept = asset.conceptTitle ?: return asset.displayTitle ?: asset.campaignTitle
     return if (asset.conceptDay != null) "Day ${asset.conceptDay} · $concept" else concept
+}
+
+/** "From HQ · waiting 2d" -- where a draft came from and how long it has waited. P1 2026-11-15. Pure, unit-tested. */
+internal fun approvalSourceLine(asset: ApprovalAsset): String? {
+    val source = when (asset.source) {
+        "hq" -> "From HQ"
+        "auto" -> "Daily auto-draft"
+        "video" -> "Video script"
+        "manual" -> "Campaign Factory"
+        else -> null
+    }
+    val age = relativeTime(asset.waitingSince)?.let { "waiting since $it" }
+    return listOfNotNull(source, age).joinToString(" · ").ifBlank { null }
+}
+
+internal fun backlogNote(b: com.fillbook.growthos.data.ApprovalsBacklog): String =
+    "${b.waiting} drafts are waiting, so the daily auto-draft is paused until fewer than ${b.cap} are waiting. Approve or reject to let it run."
+
+/** "Approved, not posted": approved text drafts the owner has not confirmed posting. Collapsed by default. */
+private fun androidx.compose.foundation.lazy.LazyListScope.unpostedSection(
+    items: List<com.fillbook.growthos.data.ApprovedUnposted>,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onMarkPosted: (com.fillbook.growthos.data.ApprovedUnposted) -> Unit,
+) {
+    if (items.isEmpty()) return
+    item(key = "unposted-header") {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Approved, not posted (${items.size})", style = MaterialTheme.typography.titleMedium, color = TextSecondary, modifier = Modifier.weight(1f))
+            Text(if (open) "Hide" else "Show", style = MaterialTheme.typography.labelLarge, color = Accent)
+        }
+    }
+    if (open) {
+        items(items, key = { "unposted-${it.id}" }) { item ->
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Text(item.title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, maxLines = 2)
+                relativeTime(item.approvedAt)?.let { Text("Approved $it", style = MaterialTheme.typography.labelMedium, color = TextTertiary) }
+                TextButton(onClick = { onMarkPosted(item) }) { Text("Mark posted") }
+            }
+        }
+    }
 }

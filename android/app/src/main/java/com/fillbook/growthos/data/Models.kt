@@ -69,7 +69,23 @@ data class ApprovalAsset(
     val imageCard: XPostImageCard? = null,
     /** A writer's note left in the text (e.g. "a character or word count note"): Approve and Copy are held until it is fixed. P0 2026-11-15. */
     val draftingNote: String? = null,
+    /** Where the draft came from: "hq", "auto", "video" or "manual". P1 2026-11-15. */
+    val source: String? = null,
+    /** A readable title (an HQ draft's first line instead of "HQ X draft hq-140"). */
+    val displayTitle: String? = null,
+    /** When the draft started waiting (ISO). */
+    val waitingSince: String? = null,
+    /** How many other waiting drafts say nearly the same thing. */
+    val similarToOthers: Int = 0,
 )
+
+/** The daily auto-draft stops while [cap] drafts are waiting; [blocksAutoDraft] says it is stopped now. */
+data class ApprovalsBacklog(val waiting: Int, val cap: Int, val blocksAutoDraft: Boolean)
+
+data class ApprovalsOverview(val assets: List<ApprovalAsset>, val backlog: ApprovalsBacklog?)
+
+/** A text draft the owner approved but has not confirmed posting (approval never counts as publication). */
+data class ApprovedUnposted(val id: String, val platform: String, val title: String, val text: String, val approvedAt: String?)
 
 data class HqNote(
     val verdict: String,

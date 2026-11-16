@@ -294,8 +294,26 @@ class NetworkGrowthOsRepository(
 
     override suspend fun getMotionConceptCatalog(): MotionConceptCatalog = parseMotionConceptCatalog(get("/api/run-campaign"))
 
-    override suspend fun getApprovals(): List<ApprovalAsset> {
+    override suspend fun getApprovals(): List<ApprovalAsset> = parseApprovals(get("/api/approvals"))
+
+    override suspend fun getApprovalsOverview(): ApprovalsOverview {
         val json = get("/api/approvals")
+        val backlog = json.optJSONObject("backlog")?.let { ApprovalsBacklog(it.optInt("waiting"), it.optInt("cap"), it.optBoolean("blocksAutoDraft")) }
+        return ApprovalsOverview(parseApprovals(json), backlog)
+    }
+
+    override suspend fun getApprovedUnposted(): List<ApprovedUnposted> =
+        get("/api/approvals?view=approved-unposted").getJSONArray("items").map {
+            ApprovedUnposted(it.getString("id"), it.optString("platform"), it.optString("title"), it.optString("text"), it.optStringOrNull("approvedAt"))
+        }
+
+    override suspend fun markApprovalPosted(campaignAssetId: String, url: String?) {
+        val body = JSONObject().put("campaignAssetId", campaignAssetId).put("action", "mark-posted")
+        if (!url.isNullOrBlank()) body.put("url", url.trim())
+        post("/api/approvals", body)
+    }
+
+    private fun parseApprovals(json: JSONObject): List<ApprovalAsset> {
         return json.getJSONArray("approvals").map { item ->
             ApprovalAsset(
                 id = item.getString("id"),
@@ -323,6 +341,10 @@ class NetworkGrowthOsRepository(
                 },
                 imageCard = item.optJSONObject("imageCard")?.toXPostImageCard(),
                 draftingNote = item.optStringOrNull("draftingNote"),
+                source = item.optStringOrNull("source"),
+                displayTitle = item.optStringOrNull("displayTitle"),
+                waitingSince = item.optStringOrNull("waitingSince"),
+                similarToOthers = item.optInt("similarToOthers", 0),
             )
         }
     }
