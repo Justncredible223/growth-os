@@ -322,6 +322,7 @@ class NetworkGrowthOsRepository(
                     )
                 },
                 imageCard = item.optJSONObject("imageCard")?.toXPostImageCard(),
+                draftingNote = item.optStringOrNull("draftingNote"),
             )
         }
     }

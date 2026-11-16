@@ -67,6 +67,8 @@ data class ApprovalAsset(
     val hqNote: HqNote? = null,
     /** The picture card for an X post (same card Today's X Post shows); null when there is nothing safe to show. */
     val imageCard: XPostImageCard? = null,
+    /** A writer's note left in the text (e.g. "a character or word count note"): Approve and Copy are held until it is fixed. P0 2026-11-15. */
+    val draftingNote: String? = null,
 )
 
 data class HqNote(

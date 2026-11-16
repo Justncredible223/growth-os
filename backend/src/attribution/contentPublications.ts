@@ -116,6 +116,24 @@ export async function getOrCreateDestinationLink(
   return destinationLink;
 }
 
+/**
+ * Read-only twin of getOrCreateDestinationLink for list views (P0 2026-11-15, ChatGPT: reads must be side-effect-free). Returns the stored
+ * link if there is one, otherwise the same deterministic link it would store, and writes nothing.
+ */
+export async function peekDestinationLink(
+  client: SupabaseClient,
+  input: { campaignAssetId: string; channel: string; campaignThesis: string; path?: string },
+): Promise<string> {
+  const { data: existing } = await client
+    .from("content_publications")
+    .select("destination_link")
+    .eq("campaign_asset_id", input.campaignAssetId)
+    .eq("channel", input.channel)
+    .maybeSingle();
+  if (existing?.destination_link) return existing.destination_link as string;
+  return buildDestinationUrl(input.campaignAssetId, input.channel, input.campaignThesis, input.path ?? "/");
+}
+
 export async function listPublicationsForAssets(client: SupabaseClient, campaignAssetIds: string[]): Promise<ContentPublicationRow[]> {
   if (campaignAssetIds.length === 0) return [];
   const { data, error } = await client.from("content_publications").select("*").in("campaign_asset_id", campaignAssetIds);

@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -122,7 +123,8 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     // Notifications, Partnerships) already disables its action buttons this
     // same way; this screen had been the one exception, including for the
     // video-render-triggering approve path specifically.
-    var busyId by remember { mutableStateOf<String?>(null) }
+    // One entry per draft with a decision in flight (P0 2026-11-15: a single slot let a second decision re-enable the first card).
+    val busyIds = remember { mutableStateListOf<String>() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -131,6 +133,8 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         try {
             assets = repo.getApprovals()
             errorMessage = null
+            // A failed tap's message used to stay up through every refresh; a fresh list is a fresh start.
+            actionError = null
         } catch (e: Exception) {
             errorMessage = authErrorMessage(e) ?: "Couldn't load approvals. Check your connection and try again."
         }
@@ -145,9 +149,10 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     }
 
     fun decide(asset: ApprovalAsset, approve: Boolean, reason: String? = null) {
-        if (busyId == asset.id) return
+        // Marked busy before the coroutine starts, so two taps in one frame cannot both get through.
+        if (asset.id in busyIds) return
+        busyIds.add(asset.id)
         scope.launch {
-            busyId = asset.id
             try {
                 val renderOutcome = repo.decideApproval(asset.id, approve, reason)
                 actionError = null
@@ -158,9 +163,14 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                     duration = if (renderOutcome != null && !renderOutcome.queued) SnackbarDuration.Long else SnackbarDuration.Short,
                 )
             } catch (e: Exception) {
-                actionError = "Couldn't record that decision. Check your connection and try again."
+                // The server's own reason (already approved, already rejected, no longer exists) instead of blaming the connection.
+                actionError = (e as? com.fillbook.growthos.data.NetworkException)
+                    ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(404, 409, 500)) }
+                    ?: authErrorMessage(e)
+                    ?: "Couldn't record that decision. Check your connection and try again."
+                refresh()
             } finally {
-                busyId = null
+                busyIds.remove(asset.id)
             }
         }
     }
@@ -233,7 +243,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                 fun cardFor(asset: ApprovalAsset) {
                     ApprovalCard(
                         asset = asset,
-                        busy = busyId == asset.id,
+                        busy = asset.id in busyIds,
                         onApprove = {
                             // Approving a video_script asset triggers a REAL server-side
                             // render (see enqueue_video_render in approvals.ts) -- unlike
@@ -328,7 +338,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
 
     pendingReject?.let { asset ->
         AlertDialog(
-            onDismissRequest = { pendingReject = null },
+            onDismissRequest = { pendingReject = null; rejectReason = null },
             title = { Text("Reject this draft?") },
             text = {
                 Column {
@@ -347,7 +357,8 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                 TextButton(onClick = { decide(asset, approve = false, reason = rejectReason); pendingReject = null; rejectReason = null }) { Text("Reject") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingReject = null }) { Text("Cancel") }
+                // The chosen reason is cleared on cancel too, so it never carries into the next draft's dialog.
+                TextButton(onClick = { pendingReject = null; rejectReason = null }) { Text("Cancel") }
             },
         )
     }
@@ -459,13 +470,23 @@ private fun ApprovalCard(
                 }
             }
         }
+        // P0 2026-11-15: a writer's note in the text would be posted as-is, so Approve and Copy wait until the draft is fixed or rejected.
+        asset.draftingNote?.let { note ->
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Not ready to post: the text contains $note. Reject it, or fix it before posting.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Danger,
+            )
+        }
+        val held = asset.draftingNote != null
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryButton(text = "Approve", onClick = onApprove, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
+            PrimaryButton(text = "Approve", onClick = onApprove, enabled = !busy && !held, busy = busy, modifier = Modifier.weight(1f))
             SecondaryButton(text = "Reject", onClick = onReject, enabled = !busy, contentColor = Danger)
         }
         Spacer(Modifier.height(2.dp))
-        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, enabled = !busy, modifier = Modifier.fillMaxWidth())
+        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, enabled = !busy && !held, modifier = Modifier.fillMaxWidth())
     }
 }
 
