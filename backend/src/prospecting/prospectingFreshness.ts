@@ -47,7 +47,13 @@ export const RECENCY_DECAY_START_MS = 4 * HOUR_MS;
  * healthy account, and a stream of late replies looks automated. Exactly 12h is still eligible; anything
  * past it is not -- see isEligibleForDailySelection's own boundary test coverage.
  */
-export const MAX_AGE_FOR_DAILY_SELECTION_MS = 12 * HOUR_MS;
+/**
+ * Age-window test (P2, ChatGPT 2026-11-15): PROSPECTING_AGE_WINDOW_HOURS=24 widens the window to 24 hours with a gentler decay, for a 7-day
+ * comparison against the 12-hour baseline (kept posts per day, relevant posts per day, the owner's replies per day, off-topic rate). Unset or
+ * any other value keeps the 12-hour window, so ending the test is removing the variable. Read once per cold start.
+ */
+export const AGE_WINDOW_TEST_ACTIVE = process.env.PROSPECTING_AGE_WINDOW_HOURS === "24";
+export const MAX_AGE_FOR_DAILY_SELECTION_MS = (AGE_WINDOW_TEST_ACTIVE ? 24 : 12) * HOUR_MS;
 
 /**
  * Floor the decay multiplier can reach at exactly
@@ -61,7 +67,8 @@ export const MAX_AGE_FOR_DAILY_SELECTION_MS = 12 * HOUR_MS;
  * strong candidate, not merely a technicality that always loses to the
  * quality bar anyway.
  */
-const DECAY_FLOOR = 0.45;
+// In the 24-hour test the floor is 0.7, so a post scoring 50 stays above the 45 bar for about 11 hours instead of about 5.5.
+const DECAY_FLOOR = AGE_WINDOW_TEST_ACTIVE ? 0.7 : 0.45;
 
 /** Null when postCreatedAt is missing/unparseable -- callers must treat that as "no evidence," never as "infinitely old" or "infinitely fresh." */
 export function currentPostAgeMs(postCreatedAt: string | null, now: Date): number | null {

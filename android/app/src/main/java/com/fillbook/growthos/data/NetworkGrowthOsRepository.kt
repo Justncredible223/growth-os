@@ -576,6 +576,18 @@ class NetworkGrowthOsRepository(
             diagnostics = json.optJSONObject("diagnostics")?.toProspectingDiagnostics(),
             pacing = json.optJSONObject("pacing")?.toProspectingPacing(),
             maybe = json.optJSONArray("maybe")?.map { it.toProspectingMaybeItem() } ?: emptyList(),
+            queryYield = json.optJSONArray("queryYield")?.map {
+                ProspectingQueryYield(
+                    key = it.optString("key"),
+                    label = it.optString("label"),
+                    runs = it.optInt("runs"),
+                    read = it.optInt("read"),
+                    kept = it.optInt("kept"),
+                    keptPct = if (it.isNull("keptPct")) null else it.optInt("keptPct"),
+                    pausedUntil = it.optStringOrNull("pausedUntil"),
+                    pauseReason = it.optStringOrNull("pauseReason"),
+                )
+            } ?: emptyList(),
         )
     }
 

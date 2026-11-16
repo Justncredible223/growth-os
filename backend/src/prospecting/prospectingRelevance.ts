@@ -338,7 +338,10 @@ export function isPlausiblyTradingRelated(postText: string, opts: RelevanceOptio
   // Futures only: options and other-market posts need an explicit futures mention; everything needs a futures or prop signal.
   if (isOptionsPost(postText) && !explicitFutures(postText)) return false;
   if (OTHER_MARKET_PATTERNS.some((p) => p.test(postText)) && !explicitFutures(postText)) return false;
-  if (!opts.trustedAuthor && !FUTURES_OR_PROP_SIGNAL_PATTERNS.some((p) => p.test(postText))) return false;
+  // P2 (ChatGPT 2026-11-15): a watchlist author needs futures evidence like anyone else; being on the list is not enough (seed posts
+  // about stock listings and lawsuits were reaching Maybe). opts.trustedAuthor no longer relaxes this.
+  void opts;
+  if (!FUTURES_OR_PROP_SIGNAL_PATTERNS.some((p) => p.test(postText))) return false;
   return true;
 }
 

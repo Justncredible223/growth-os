@@ -116,6 +116,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     var pacing by remember { mutableStateOf<ProspectingPacing?>(null) }
     var maybe by remember { mutableStateOf<List<ProspectingMaybeItem>>(emptyList()) }
     var maybeOpen by rememberSaveable { mutableStateOf(false) }
+    var queryYield by remember { mutableStateOf<List<com.fillbook.growthos.data.ProspectingQueryYield>>(emptyList()) }
+    var yieldOpen by rememberSaveable { mutableStateOf(false) }
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -150,6 +152,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             diagnostics = result.diagnostics
             pacing = result.pacing
             maybe = result.maybe
+            queryYield = result.queryYield
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = authErrorMessage(e) ?: "Couldn't load Prospecting. Check your connection and try again."
@@ -403,6 +406,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                             ) { item ->
                                 openExternalUrl(context, ProspectingPostLink.buildOpenUrl("x", item.postUrl, item.authorHandle))
                             }
+                            searchYieldSection(queryYield, yieldOpen) { yieldOpen = !yieldOpen }
                         }
                     } else {
                         LazyColumn(
@@ -433,6 +437,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                             ) { item ->
                                 openExternalUrl(context, ProspectingPostLink.buildOpenUrl("x", item.postUrl, item.authorHandle))
                             }
+                            searchYieldSection(queryYield, yieldOpen) { yieldOpen = !yieldOpen }
                         }
                     }
                 }
@@ -868,3 +873,41 @@ internal fun serverRefusalReason(e: Throwable): String? {
     val body = ne.message?.substringAfter(" -- ", "")?.takeIf { it.isNotBlank() } ?: return null
     return runCatching { org.json.JSONObject(body).optString("error").takeIf { it.isNotBlank() } }.getOrNull()
 }
+
+/** "Search results, last 7 days" (P2 2026-11-15): runs, posts read, posts kept and kept/read per topic, and any paused topic with its reason. */
+private fun LazyListScope.searchYieldSection(rows: List<com.fillbook.growthos.data.ProspectingQueryYield>, open: Boolean, onToggle: () -> Unit) {
+    if (rows.isEmpty()) return
+    item(key = "yield-header") {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Search results, last 7 days", style = MaterialTheme.typography.titleMedium, color = TextSecondary, modifier = Modifier.weight(1f))
+            Text(if (open) "Hide" else "Show", style = MaterialTheme.typography.labelLarge, color = Accent)
+        }
+    }
+    if (open) {
+        items(rows, key = { "yield-${it.key}" }) { row ->
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text(row.label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                Text(searchYieldLine(row), style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                row.pauseReason?.let { reason ->
+                    Text("Paused: $reason. Back ${pausedUntilLabel(row.pausedUntil)}.", style = MaterialTheme.typography.bodySmall, color = Warning)
+                }
+            }
+        }
+    }
+}
+
+/** One yield row in words, e.g. "4 searches, read 26, kept 6 (23%)". Pure, unit-tested. */
+internal fun searchYieldLine(row: com.fillbook.growthos.data.ProspectingQueryYield): String {
+    val searches = if (row.runs == 1) "1 search" else "${row.runs} searches"
+    val pct = row.keptPct?.let { " ($it%)" } ?: ""
+    return "$searches, read ${row.read}, kept ${row.kept}$pct"
+}
+
+/** The date a paused topic comes back, as "on Nov 22"; "soon" when the date cannot be read. */
+internal fun pausedUntilLabel(iso: String?): String = runCatching {
+    val date = java.time.Instant.parse(iso).atZone(java.time.ZoneId.of("America/Phoenix")).toLocalDate()
+    "on " + date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d", java.util.Locale.US))
+}.getOrDefault("soon")

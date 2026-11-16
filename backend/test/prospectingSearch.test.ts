@@ -356,6 +356,18 @@ describe("runProspectingSearch", () => {
       expect(result.selectableAfter).toBeGreaterThanOrEqual(2);
     });
 
+    it("P2: paused topics are left out of the run; when every topic is paused it makes no topic request", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const all = new Set(PROSPECTING_TOPICS.map((t) => t.key));
+      await run(new FakeProspectingRepo(), adapter, { getPausedTopics: async () => all });
+      expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+      const some = new Set(PROSPECTING_TOPICS.slice(0, 6).map((t) => t.key));
+      const queries: string[] = [];
+      await run(new FakeProspectingRepo(), { searchRecentPosts: vi.fn(async (q: string) => (queries.push(q), [])) }, { getPausedTopics: async () => some });
+      expect(queries.length).toBeGreaterThan(0);
+      for (const t of PROSPECTING_TOPICS.slice(0, 6)) expect(queries.some((q) => q.includes(t.query))).toBe(false);
+    });
+
     it("stops after the first request when its cost cannot be recorded (budget checks would be blind: fail closed)", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
       const failing = { from: () => ({ insert: async () => ({ error: { message: "insert failed" } }) }) } as any;
@@ -685,16 +697,14 @@ describe("the creator watchlist in the search loop (2026-10-25)", () => {
     expect(result.excludedAsIrrelevant).toBeGreaterThanOrEqual(1);
   });
 
-  it("a hand-picked seed creator's trading post needs no futures word and skips the model screen; the same text from anyone else is dropped (2026-10-30)", async () => {
+  it("P2 2026-11-15: a watchlist creator's post needs futures evidence like anyone else's (was exempt since 2026-10-30)", async () => {
     const text = "Trading is a lot like chess. You do not lose because of your last move, you lose because of your process. How do you review your trades?";
     const fromSeed = { ...post("s1", text), authorHandle: "RC_FUTURES" };
     const fromOther = { ...post("o1", text + " "), authorHandle: "somebody_else" };
     const adapter = { searchRecentPosts: vi.fn(async (q: string) => (q.startsWith("(from:") ? [fromSeed, fromOther] : [])) };
     const repo = new FakeProspectingRepo();
-    const screenRelevance = vi.fn(async () => false);
-    await run(repo, adapter, { watchlistSeeds: ["RC_FUTURES", "ES_Ed", "NQ_Nate", "MNQ_Mia"], screenRelevance });
-    expect([...repo.rows.values()].map((r) => r.externalId)).toEqual(["s1"]);
-    expect(screenRelevance).not.toHaveBeenCalled();
+    await run(repo, adapter, { watchlistSeeds: ["RC_FUTURES", "ES_Ed", "NQ_Nate", "MNQ_Mia"], screenRelevance: vi.fn(async () => true) });
+    expect([...repo.rows.values()].map((r) => r.externalId)).toEqual([]);
   });
 
   it("the same creator request is not made again within the repeat window (2026-10-31)", async () => {

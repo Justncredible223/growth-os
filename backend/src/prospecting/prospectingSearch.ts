@@ -94,6 +94,8 @@ export interface ProspectingRunDeps {
   getTodaySearchSpendUsd?: () => Promise<number>;
   /** The query strings of the X searches made in the last RECENT_QUERY_WINDOW_MS. A topic search whose query is among them is not repeated (2026-10-28). */
   getRecentSearchQueries?: () => Promise<Set<string>>;
+  /** Topic keys paused for keeping nothing (prospectingQueryYield.ts); they are left out of this run's topic groups. */
+  getPausedTopics?: () => Promise<Set<string>>;
   /**
    * Overrides which run-index's topic slice gets searched, bypassing the
    * normal day/schedule-slot rotation. Used by the owner-triggered manual
@@ -249,11 +251,18 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   } catch {
     recentQueries = new Set();
   }
+  // P2 2026-11-15: topics that kept nothing in their last 5 searches over 3+ days sit out for 7 days. A failed read pauses nothing.
+  let pausedTopicKeys = new Set<string>();
+  try {
+    pausedTopicKeys = deps.getPausedTopics ? await deps.getPausedTopics() : pausedTopicKeys;
+  } catch {
+    pausedTopicKeys = new Set();
+  }
   // The next slices of the same rotation (run index + 1, + 2, ...) are the next topics in line, so the first slice is exactly what this run searched before.
   const candidateTopics: ProspectingTopic[] = [];
   for (let ahead = 0; ahead < 4; ahead++) {
     for (const topic of selectPrioritizedTopicsForRun(topicsInSearchOrder(), runIndex + ahead, topicSlots * TOPICS_PER_QUERY)) {
-      if (!candidateTopics.some((t) => t.key === topic.key)) candidateTopics.push(topic);
+      if (!candidateTopics.some((t) => t.key === topic.key) && !pausedTopicKeys.has(topic.key)) candidateTopics.push(topic);
     }
   }
   // Groups never mix topics that need the futures anchor with topics that do not (their X requests are built differently); the two kinds
@@ -438,8 +447,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       if (deps.screenRelevance) {
         const candidates = created.filter((c) => c.score >= MIN_DAILY_SET_SCORE).sort((a, b) => b.score - a.score);
         for (const c of candidates) {
-          // A hand-picked creator's post needs no model check: the author is the evidence.
-          if (isSeedCreator(c.authorHandle)) continue;
+          // P2 2026-11-15: watchlist creators get the same model check as everyone else.
           if (screenedChecked >= VET_MAX_PER_RUN) break;
           screenedChecked++;
           funnel.screened++;
