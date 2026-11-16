@@ -9,6 +9,9 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { buildUtmParams, utmQueryString } from "../src/attribution/utmBuilder.js";
 import { peekDestinationLink } from "../src/attribution/contentPublications.js";
 import { findDraftingNote } from "../src/content/draftingNotes.js";
+import { approvalSource, readableTitle, similarCounts } from "../src/content/approvalQueue.js";
+import { recordOwnerPublication } from "../src/attribution/contentPublications.js";
+import { BACKLOG_CAP } from "../src/opportunities/autoDraftEligibility.js";
 import {
   InboundActionError, InboundConflictError, InboundDraftRejectedError,
   closeInbound,
@@ -779,6 +782,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      // P1 2026-11-15 (ChatGPT): the owner's own confirmation that an approved draft went out. Approval never counts as publication.
+      if (action === "mark-posted") {
+        if (!campaignAssetId) {
+          res.status(400).json({ error: "Body must include { campaignAssetId: string }" });
+          return;
+        }
+        const { data: postedAsset } = await client.from("campaign_assets").select("id, platform, stage, campaigns(status)").eq("id", campaignAssetId).maybeSingle();
+        const pa = postedAsset as { platform: string; stage: string; campaigns: { status: string } | { status: string }[] | null } | null;
+        if (!pa) {
+          res.status(404).json({ error: "This draft no longer exists." });
+          return;
+        }
+        const pStatus = Array.isArray(pa.campaigns) ? pa.campaigns[0]?.status : pa.campaigns?.status;
+        if (pStatus !== "approved") {
+          res.status(409).json({ error: "Only an approved draft can be marked posted." });
+          return;
+        }
+        const url = typeof (body as { url?: unknown })?.url === "string" ? ((body as { url?: string }).url ?? "").trim() : "";
+        try {
+          const row = await recordOwnerPublication(client, { campaignAssetId, channel: pa.platform, actualUrl: url || null });
+          res.status(200).json({ campaignAssetId, posted: true, publishedAt: row.ownerReportedPublishedAt });
+        } catch (err) {
+          res.status(422).json({ error: errorMessage(err) });
+        }
+        return;
+      }
+
       if (!campaignAssetId || (action !== "approve" && action !== "reject")) {
         res.status(400).json({ error: "Body must be { campaignAssetId: string, action: 'approve' | 'reject' | 'hand-off' }" });
         return;
@@ -883,10 +913,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  if (req.query.view === "approved-unposted") {
+    // P1 2026-11-15: text drafts approved in the last 30 days that the owner has not confirmed posting. Videos have their own posting flow.
+    try {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: rows, error } = await client
+        .from("campaign_assets")
+        .select("id, platform, asset_type, created_at, campaigns!inner(thesis, status, decided_at)")
+        .eq("campaigns.status", "approved")
+        .gte("campaigns.decided_at", since)
+        .neq("asset_type", "video_script")
+        .limit(100);
+      if (error) throw error;
+      const ids = ((rows ?? []) as Array<{ id: string }>).map((r) => r.id);
+      const posted = new Set<string>();
+      if (ids.length > 0) {
+        const { data: pubs } = await client.from("content_publications").select("campaign_asset_id, owner_reported_published_at").in("campaign_asset_id", ids);
+        for (const p of (pubs ?? []) as Array<{ campaign_asset_id: string; owner_reported_published_at: string | null }>) {
+          if (p.owner_reported_published_at) posted.add(p.campaign_asset_id);
+        }
+      }
+      const items = await Promise.all(
+        ((rows ?? []) as Array<any>)
+          .filter((r) => !posted.has(r.id))
+          .map(async (r) => {
+            const { data: v } = await client.from("content_versions").select("body").eq("campaign_asset_id", r.id).order("version", { ascending: false }).limit(1).maybeSingle();
+            const campaign = Array.isArray(r.campaigns) ? r.campaigns[0] : r.campaigns;
+            const text = (v as { body?: string } | null)?.body ?? "";
+            return { id: r.id, platform: r.platform, title: readableTitle(text, campaign?.thesis ?? "Approved draft"), text, approvedAt: campaign?.decided_at ?? null };
+          }),
+      );
+      items.sort((a, b) => String(a.approvedAt).localeCompare(String(b.approvedAt)));
+      res.status(200).json({ items });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
   try {
     const { data: assets, error: assetsError } = await client
       .from("campaign_assets")
-      .select("id, platform, asset_type, campaign_id, campaigns(thesis, status)")
+      .select("id, platform, asset_type, campaign_id, created_at, campaigns(thesis, status)")
       .eq("stage", "ready_for_owner");
     if (assetsError) throw assetsError;
 
@@ -938,9 +1006,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           campaignThesis: campaignTitle,
         }).catch(() => null);
 
+        const body = latestVersion?.body ?? "";
+        const source = approvalSource({ assetType: asset.asset_type, isAutoDraft: Boolean(autoDraft), metadataSource: (latestVersion?.metadata as { source?: unknown } | null)?.source });
         return {
           id: asset.id,
           campaignTitle,
+          // P1 2026-11-15: where it came from, a readable title (the post's first line for HQ drafts), and how long it has waited.
+          source,
+          displayTitle: source === "hq" ? readableTitle(body, campaignTitle) : campaignTitle,
+          waitingSince: (asset.created_at as string | null) ?? null,
           // The daily concept behind a motion video draft and its day (1-30); null for any other draft.
           conceptTitle: campaignTitle.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX) ? campaignTitle.slice(MANUAL_MOTION_CONCEPT_TITLE_PREFIX.length) : null,
           conceptDay: dayForTitle(campaignTitle),
@@ -970,7 +1044,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     );
 
-    res.status(200).json({ approvals });
+    // P1 2026-11-15: oldest first, each with how many other waiting drafts say nearly the same thing.
+    approvals.sort((a, b) => String(a.waitingSince ?? "").localeCompare(String(b.waitingSince ?? "")));
+    const similar = similarCounts(approvals.map((a) => (a.assetType === "x_feed_post" ? a.previewText : "")));
+    const withSimilar = approvals.map((a, i) => ({ ...a, similarToOthers: similar[i] ?? 0 }));
+    // The daily auto-draft stops while BACKLOG_CAP drafts are waiting; say so instead of leaving it silent. The cap itself is unchanged.
+    res.status(200).json({ approvals: withSimilar, backlog: { waiting: approvals.length, cap: BACKLOG_CAP, blocksAutoDraft: approvals.length >= BACKLOG_CAP } });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }
