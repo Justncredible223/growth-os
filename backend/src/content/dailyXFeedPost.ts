@@ -1196,7 +1196,8 @@ export function deriveTodayXPostView(
   now?: Date,
 ): TodayXPostView {
   if (run === null) {
-    return { state: "empty", canRegenerate: false };
+    // Home P1 2026-11-15: say why the card is empty instead of showing a bare "nothing queued".
+    return { state: "empty", reason: "Today's post hasn't been written yet. The daily run writes it each morning (Arizona time).", canRegenerate: false };
   }
 
   // Genuinely (or apparently) in flight -- distinct from "empty" so the

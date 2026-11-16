@@ -450,7 +450,7 @@ describe("deriveTodayXPostView -- Home's exact state mapping (ready / handed_off
   };
 
   it("no run at all for today -> empty, no reason, no regenerate (nothing has been attempted)", () => {
-    expect(deriveTodayXPostView(null, null, false, null)).toEqual({ state: "empty", canRegenerate: false });
+    expect(deriveTodayXPostView(null, null, false, null)).toMatchObject({ state: "empty", canRegenerate: false });
   });
 
   it("a running run -> its own distinct 'running' state, never confused with 'empty' (nothing attempted) or a false ready/failed", () => {

@@ -1,3 +1,4 @@
+import { recordStepFailures } from "../src/jobs/stepFailures.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
@@ -384,6 +385,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
   results.push(notificationsResult);
 
+  await recordStepFailures(client, "daily-pipeline", results);
   const allOk = results.every((r) => r.ok);
   res.status(allOk ? 200 : 207).json({ results, ranGroups: groups });
 }

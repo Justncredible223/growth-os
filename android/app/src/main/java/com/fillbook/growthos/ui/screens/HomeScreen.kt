@@ -1,6 +1,7 @@
 package com.fillbook.growthos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -137,6 +139,20 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     }
 
     LaunchedEffect(Unit) { refresh() }
+
+    // P1 2026-11-15: coming back to the app (or past midnight) reloads Home, at most once a minute, so it never shows yesterday's day.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var lastLoadedAt by remember { mutableStateOf(System.currentTimeMillis()) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && System.currentTimeMillis() - lastLoadedAt > 60_000) {
+                lastLoadedAt = System.currentTimeMillis()
+                scope.launch { refresh() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun handOffXPost(assetId: String, previewText: String) {
         scope.launch {
@@ -249,28 +265,28 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                     }
                 }
                 val opportunityTile: @Composable (Modifier) -> Unit = { m ->
-                    MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, m)
+                    MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, m.clickable { onNavigate("analytics") })
                 }
                 val waitingTile: @Composable (Modifier) -> Unit = { m ->
                     MetricTile(
                         "Waiting on you",
                         s.pendingReview.toString(),
                         Icons.Filled.CheckCircle,
-                        m,
+                        m.clickable { onNavigate("approvals") },
                         valueColor = if (s.pendingReview > 0) Warning else TextPrimary,
                         highlighted = s.pendingReview > 0,
                         highlightColor = Warning,
                     )
                 }
                 val spendTile: @Composable (Modifier) -> Unit = { m ->
-                    MetricTile("Today's spend", "$%.4f".format(s.analytics.todaySpendUsd), Icons.Filled.Bolt, m)
+                    MetricTile("Today's spend", "$%.4f".format(s.analytics.todaySpendUsd), Icons.Filled.Bolt, m.clickable { onNavigate("analytics") })
                 }
                 val healthTile: @Composable (Modifier) -> Unit = { m ->
                     MetricTile(
                         "System health",
                         if (issueCount == 0) "All clear" else "$issueCount issue${if (issueCount == 1) "" else "s"}",
                         Icons.Filled.PauseCircle,
-                        m,
+                        m.clickable { onNavigate("system") },
                         valueColor = if (issueCount == 0) Success else Warning,
                         highlighted = issueCount > 0,
                         highlightColor = Warning,
@@ -508,7 +524,7 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, h
             Icons.Filled.CheckCircle,
         )
         // P0 2026-11-15: a video to finish or fix, an X draft to post, or a failing system part now count as "needs you".
-        summary.video?.state == TodaysVideoState.FAILED -> NextAction("Next best action", "Today's video failed to render", summary.video.detail, "Open Video Status", "video_status", Icons.Filled.CheckCircle)
+        summary.video?.state == TodaysVideoState.FAILED -> NextAction("Next best action", summary.video.headline, summary.video.detail, "Open Video Status", "video_status", Icons.Filled.CheckCircle)
         summary.video?.state == TodaysVideoState.READY -> NextAction("Next best action", "Video: ${summary.video.headline.lowercase()}", summary.video.detail, "Open Video Status", "video_status", Icons.Filled.CheckCircle)
         summary.todayXPost.state == TodayXPostState.READY || summary.todayXPost.state == TodayXPostState.HANDED_OFF -> NextAction(
             "Next best action",
@@ -654,7 +670,7 @@ private fun TodayXPostCard(
             }
             TodayXPostState.EMPTY -> {
                 Spacer(Modifier.height(4.dp))
-                Text("Nothing queued for X today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                Text(post.reason ?: "Nothing queued for X today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
                 if (post.canRegenerate) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = onRegenerate, enabled = !busy) { Text(if (busy) "Regenerating..." else "Regenerate") }

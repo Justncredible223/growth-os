@@ -58,3 +58,28 @@ describe("Regenerate after a dismissed draft (P0 2026-11-15)", () => {
     expect(used.reason).toBeTruthy();
   });
 });
+
+import { summarizeStepFailures } from "../src/jobs/stepFailures";
+import { describeTodaysVideo } from "../src/video/todaysVideo";
+
+describe("Home P1 (2026-11-15)", () => {
+  it("groups failed scheduled steps by step, newest first", () => {
+    const rows = [
+      { created_at: "2026-11-15T10:00:00Z", reason: "old", context: { job: "growth-pulse", step: "x_inbound" } },
+      { created_at: "2026-11-15T16:00:00Z", reason: "newest", context: { job: "growth-pulse", step: "x_inbound" } },
+      { created_at: "2026-11-15T12:00:00Z", reason: "other", context: { job: "daily-pipeline", step: "auto_draft" } },
+      { created_at: "2026-11-15T13:00:00Z", reason: "no step", context: {} },
+    ];
+    const out = summarizeStepFailures(rows);
+    expect(out.map((f) => f.step)).toEqual(["x_inbound", "auto_draft"]);
+    expect(out[0]).toMatchObject({ count: 2, lastDetail: "newest" });
+  });
+
+  it("shows a failed draft on the video card unless a newer script exists", () => {
+    const base = { pendingTitles: [], render: null, platformsPosted: [], startOfToday: "2026-11-15T07:00:00Z" };
+    const failedDraft = { title: "Break and retest", error: "reviewer timed out", at: "2026-11-15T18:00:00Z" };
+    expect(describeTodaysVideo({ ...base, latest: null, failedDraft })).toMatchObject({ state: "failed", headline: "Draft failed" });
+    const newer = { thesis: "x", status: "in_review", createdAt: "2026-11-15T19:00:00Z" };
+    expect(describeTodaysVideo({ ...base, latest: newer, failedDraft }).state).toBe("needs_approval");
+  });
+});
