@@ -4,6 +4,7 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { llmKeySource } from "../src/content/llmKey.js";
+import { loadStepFailures } from "../src/jobs/stepFailures.js";
 import { loadVideoHealth } from "../src/video/videoHealth.js";
 import { retiredStepSkip } from "../src/retiredSteps.js";
 import { INBOUND_CURSOR_SOURCE } from "../src/inbound/inboundIngestion.js";
@@ -263,6 +264,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     health.push(...(await loadVideoHealth(client)));
   } catch (err) {
     health.push({ label: "Video loop", status: "DEGRADED", detail: errorMessage(err) });
+  }
+
+  try {
+    // Home P1 2026-11-15: failed pulse and pipeline steps in the last 24 hours (they were only visible in the cron response before).
+    const failures = await loadStepFailures(client);
+    if (failures.length > 0) {
+      health.push({
+        label: "Scheduled steps",
+        status: "DEGRADED",
+        detail: failures.slice(0, 4).map((f) => `${f.step} failed ${f.count}x (last ${f.lastAt.slice(0, 16).replace("T", " ")} UTC): ${f.lastDetail.slice(0, 80)}`).join("; ") + (failures.length > 4 ? `; and ${failures.length - 4} more` : ""),
+      });
+    } else {
+      health.push({ label: "Scheduled steps", status: "HEALTHY", detail: "No failed step in the last 24 hours" });
+    }
+  } catch (err) {
+    health.push({ label: "Scheduled steps", status: "DEGRADED", detail: errorMessage(err) });
   }
 
   res.status(200).json({ health });

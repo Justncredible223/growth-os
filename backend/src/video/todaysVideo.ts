@@ -43,6 +43,8 @@ export interface TodaysVideoInput {
   /** The latest render of that campaign's video asset, if any. */
   render: { status: string; error: string | null } | null;
   platformsPosted: string[];
+  /** The newest draft request that failed or was expired as stuck since the start of today (Home P1 2026-11-15), if any. */
+  failedDraft?: { title: string; error: string | null; at: string } | null;
   /** The start of today (Arizona, the one-a-day zone) as an ISO instant. */
   startOfToday: string;
 }
@@ -74,6 +76,11 @@ export function describeTodaysVideo(input: TodaysVideoInput): TodaysVideo {
   if (pending) return base("drafting", pending, "Drafting today's video", "The script is being written and reviewed. It lands in Approvals when it is done.");
 
   const latest = input.latest;
+  // A draft that failed or got stuck used to leave the card at "No video yet today"; say so, unless a newer script exists.
+  const failedDraft = input.failedDraft;
+  if (failedDraft && (!latest || latest.createdAt < failedDraft.at)) {
+    return base("failed", failedDraft.title, "Draft failed", `${failedDraft.error ? failedDraft.error.slice(0, 140) : "The script was not written."} Request it again in Video Status.`);
+  }
   if (!latest) return base("none", null, "No video yet today", "Request today's video in Video Status.");
 
   if (latest.status === "in_review") {
@@ -119,6 +126,23 @@ export async function loadTodaysVideo(client: Client, now: Date = new Date()): P
     pendingTitles = ((opps ?? []) as Array<{ title: string }>).map((o) => o.title).filter((t) => t.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX));
   }
 
+  // Newest failed or expired draft request today (campaign_run_requests.status "failed"; the sweep marks stuck ones this way).
+  let failedDraft: TodaysVideoInput["failedDraft"] = null;
+  const { data: failedRows } = await client
+    .from("campaign_run_requests")
+    .select("opportunity_id, error, updated_at")
+    .eq("status", "failed")
+    .gte("updated_at", startOfDay(now).toISOString())
+    .order("updated_at", { ascending: false })
+    .limit(5);
+  const failedList = (failedRows ?? []) as Array<{ opportunity_id: string; error: string | null; updated_at: string }>;
+  if (failedList.length > 0) {
+    const { data: failedOpps } = await client.from("opportunities").select("id, title").in("id", failedList.map((f) => f.opportunity_id));
+    const titleById = new Map(((failedOpps ?? []) as Array<{ id: string; title: string }>).map((o) => [o.id, o.title]));
+    const hit = failedList.find((f) => (titleById.get(f.opportunity_id) ?? "").startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX));
+    if (hit) failedDraft = { title: titleById.get(hit.opportunity_id)!, error: hit.error, at: hit.updated_at };
+  }
+
   const { data: campaigns, error: campaignError } = await client
     .from("campaigns")
     .select("id, thesis, status, created_at")
@@ -150,6 +174,7 @@ export async function loadTodaysVideo(client: Client, now: Date = new Date()): P
     latest: campaign ? { thesis: campaign.thesis, status: campaign.status, createdAt: campaign.created_at } : null,
     render,
     platformsPosted,
+    failedDraft,
     startOfToday: startOfDay(now).toISOString(),
   });
 }

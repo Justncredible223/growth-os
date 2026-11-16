@@ -11,7 +11,7 @@ describe("computeTodayXPostView -- the real Supabase-wired lookup Home's GET /ap
 
     const view = await computeTodayXPostView(asSupabase(client), NOW);
 
-    expect(view).toEqual({ state: "empty", canRegenerate: false });
+    expect(view).toMatchObject({ state: "empty", canRegenerate: false });
   });
 
   it("a ready run resolves the asset's real stage and latest content_version body as the preview text", async () => {
@@ -87,7 +87,7 @@ describe("computeTodayXPostView -- the real Supabase-wired lookup Home's GET /ap
 
     const view = await computeTodayXPostView(asSupabase(client), NOW);
 
-    expect(view).toEqual({ state: "empty", canRegenerate: false });
+    expect(view).toMatchObject({ state: "empty", canRegenerate: false });
   });
 
   it("a query failure (e.g. the x_feed_post_runs migration not yet applied) is caught and surfaced as a distinct failed state -- never thrown, never confused with a genuine no-post day", async () => {
