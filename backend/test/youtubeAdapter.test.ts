@@ -63,7 +63,14 @@ describe("YoutubeCommentAdapter.fetchTopLevelComments", () => {
     expect(comments).toEqual([]);
   });
 
-  it("throws YoutubeApiError for any other failure (bad key, quota exceeded, not found)", async () => {
+  it("returns an empty array when the video was deleted or made private (404 videoNotFound)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: { errors: [{ reason: "videoNotFound" }] } }, false, 404));
+    const adapter = new YoutubeCommentAdapter("test-key", fetchMock);
+
+    expect(await adapter.fetchTopLevelComments("video-gone")).toEqual([]);
+  });
+
+  it("throws YoutubeApiError for any other failure (bad key, quota exceeded)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ error: { message: "quota exceeded" } }, false, 403));
     const adapter = new YoutubeCommentAdapter("test-key", fetchMock);
 

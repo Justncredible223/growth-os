@@ -62,8 +62,10 @@ export class YoutubeCommentAdapter {
       // typed result via the empty-array return, not an error, so a
       // caller polling several videos doesn't have one comments-disabled
       // video fail the whole run. Every other failure (bad key, quota
-      // exceeded, video not found) is a real error.
+      // exceeded) is a real error.
       if (res.status === 403 && body.includes("commentsDisabled")) return { comments: [] };
+      // A video that was deleted or made private no longer has readable comments: skip it so one gone video cannot fail the whole sync (Nov 16 2026: the System screen showed YouTube comments DOWN for this).
+      if (res.status === 404 && body.includes("videoNotFound")) return { comments: [] };
       throw new YoutubeApiError(`YouTube commentThreads.list failed for video ${videoId}: HTTP ${res.status} -- ${body}`);
     }
 
