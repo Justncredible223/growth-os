@@ -69,7 +69,7 @@ import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, r
 import { getMetricoolPackage, metricoolPackageText, MetricoolPackageError } from "../src/video/metricoolPackage.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
-import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
+import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost, removeVideoPost } from "../src/posting/postingRepository.js";
 import { handleEngagement } from "../src/engagement/engagementApi.js";
 import { handleHqHandoff, xPostTextProblem } from "../src/hq/hqHandoff.js";
 import { PAUSE_LOOKBACK_DAYS, loadYieldEvents, queryYieldSummary } from "../src/prospecting/prospectingQueryYield.js";
@@ -627,13 +627,22 @@ async function handlePosting(req: VercelRequest, res: VercelResponse): Promise<v
         res.status(400).json({ error: "Body must be { action: 'record-post', campaignAssetId, platform: 'tiktok'|'youtube_shorts'|'instagram', url, videoRenderId? }" });
         return;
       }
-      await recordVideoPost(client, {
+      const result = await recordVideoPost(client, {
         campaignAssetId: body.campaignAssetId,
         videoRenderId: typeof body.videoRenderId === "string" ? body.videoRenderId : null,
         platform: body.platform,
         url: body.url,
       });
-      res.status(200).json({ saved: true });
+      res.status(200).json({ saved: true, corrected: result.corrected });
+      return;
+    }
+    // P1 2026-11-15: a wrong link can be removed.
+    if (body.action === "remove-post") {
+      if (typeof body.campaignAssetId !== "string" || !isPostingPlatform(body.platform)) {
+        res.status(400).json({ error: "Body must be { action: 'remove-post', campaignAssetId, platform }" });
+        return;
+      }
+      res.status(200).json(await removeVideoPost(client, { campaignAssetId: body.campaignAssetId, platform: body.platform }));
       return;
     }
     if (body.action === "record-stats") {

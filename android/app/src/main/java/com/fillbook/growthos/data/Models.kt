@@ -645,6 +645,8 @@ data class VideoRenderStatus(
     val fileMissing: Boolean = false,
     /** Queued or rendering with no progress for 45 minutes: shown as stuck with Retry render. */
     val stuck: Boolean = false,
+    /** Where this video is posted (P1 2026-11-15): every card can show, add, correct and remove its links. */
+    val posts: List<PlanPost> = emptyList(),
     /** The daily concept behind this video and its day (1-30), when it came from one. */
     val conceptTitle: String? = null,
     val conceptDay: Int? = null,

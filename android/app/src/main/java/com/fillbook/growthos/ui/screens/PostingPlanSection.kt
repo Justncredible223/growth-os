@@ -104,7 +104,7 @@ fun PostingPlanCard(plan: PostingPlan, onAddLink: (PlanVideo, PostingPlatform) -
 
 /** Asks for the link of a video just posted to [platform]; saving again replaces the link. */
 @Composable
-fun AddPostLinkDialog(video: PlanVideo, platform: PostingPlatform, saving: Boolean, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+fun AddPostLinkDialog(video: PlanVideo, platform: PostingPlatform, saving: Boolean, onSave: (String) -> Unit, onDismiss: () -> Unit, onRemove: (() -> Unit)? = null) {
     val existing = video.posts.firstOrNull { it.platform == platform }?.url.orEmpty()
     var url by remember(video.campaignAssetId, platform) { mutableStateOf(existing) }
     AlertDialog(
@@ -120,6 +120,12 @@ fun AddPostLinkDialog(video: PlanVideo, platform: PostingPlatform, saving: Boole
         confirmButton = {
             TextButton(onClick = { onSave(url.trim()) }, enabled = !saving && url.trim().startsWith("http")) { Text(if (saving) "Saving..." else "Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            androidx.compose.foundation.layout.Row {
+                // A wrong link can be removed (P1 2026-11-15); only shown when this platform already has one.
+                if (onRemove != null && existing.isNotBlank()) TextButton(onClick = onRemove, enabled = !saving) { Text("Remove link") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
     )
 }

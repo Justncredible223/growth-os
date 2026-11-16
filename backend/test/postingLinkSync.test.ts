@@ -36,7 +36,7 @@ describe("recordVideoPost keeps the old published-link consumers fed", () => {
   it("a failed publications sync never fails the post itself", async () => {
     const { fake, client } = setup();
     fake.failTable("content_publications", { message: "db down" });
-    await expect(recordVideoPost(client, { campaignAssetId: "asset-1", platform: "instagram", url: "https://instagram.com/reel/x" })).resolves.toBeUndefined();
+    await expect(recordVideoPost(client, { campaignAssetId: "asset-1", platform: "instagram", url: "https://instagram.com/reel/x" })).resolves.toHaveProperty("corrected");
     expect(fake.tables["video_posts"]).toHaveLength(1);
   });
 });
@@ -57,14 +57,27 @@ describe("recordVideoPost: one YouTube post per 48 hours", () => {
 
   it("allows it after 48 hours, and never limits TikTok", async () => {
     const { client } = withEarlierYoutube("2026-10-16T19:00:00Z");
-    await expect(recordVideoPost(client, { campaignAssetId: "asset-1", platform: "youtube_shorts", url: "https://youtube.com/shorts/abcdefghijk" }, NOW)).resolves.toBeUndefined();
+    await expect(recordVideoPost(client, { campaignAssetId: "asset-1", platform: "youtube_shorts", url: "https://youtube.com/shorts/abcdefghijk" }, NOW)).resolves.toHaveProperty("corrected");
     const recent = withEarlierYoutube("2026-10-18T19:00:00Z");
-    await expect(recordVideoPost(recent.client, { campaignAssetId: "asset-1", platform: "tiktok", url: "https://www.tiktok.com/@fillbookhq/video/1" }, NOW)).resolves.toBeUndefined();
+    await expect(recordVideoPost(recent.client, { campaignAssetId: "asset-1", platform: "tiktok", url: "https://www.tiktok.com/@fillbookhq/video/1" }, NOW)).resolves.toHaveProperty("corrected");
   });
 
   it("lets the same video's YouTube link be corrected at any time", async () => {
     const { fake, client } = setup();
     fake.tables["video_posts"] = [{ campaign_asset_id: "asset-1", platform: "youtube_shorts", url: "https://youtube.com/shorts/typo", posted_at: "2026-10-18T19:00:00Z" }];
-    await expect(recordVideoPost(client, { campaignAssetId: "asset-1", platform: "youtube_shorts", url: "https://youtube.com/shorts/abcdefghijk" }, NOW)).resolves.toBeUndefined();
+    await expect(recordVideoPost(client, { campaignAssetId: "asset-1", platform: "youtube_shorts", url: "https://youtube.com/shorts/abcdefghijk" }, NOW)).resolves.toHaveProperty("corrected");
+  });
+});
+
+describe("postLinkProblem (P1 2026-11-15): a link must be on the platform's own site", () => {
+  it("accepts each platform's hosts and refuses the others", async () => {
+    const { postLinkProblem } = await import("../src/posting/postingRepository");
+    expect(postLinkProblem("tiktok", "https://www.tiktok.com/@fillbookhq/video/1")).toBeNull();
+    expect(postLinkProblem("youtube_shorts", "https://youtu.be/abc")).toBeNull();
+    expect(postLinkProblem("youtube_shorts", "https://www.youtube.com/shorts/abcdefghijk")).toBeNull();
+    expect(postLinkProblem("instagram", "https://www.instagram.com/reel/x")).toBeNull();
+    expect(postLinkProblem("youtube_shorts", "https://www.tiktok.com/@fillbookhq/video/1")).toMatch(/not a YouTube link/);
+    expect(postLinkProblem("tiktok", "https://faketiktok.com/x")).toMatch(/not a TikTok link/);
+    expect(postLinkProblem("instagram", "not a link")).toBe("That doesn't look like a link.");
   });
 });
