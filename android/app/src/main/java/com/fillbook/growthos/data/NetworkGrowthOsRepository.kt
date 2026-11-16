@@ -482,6 +482,7 @@ class NetworkGrowthOsRepository(
         repliedToText = optStringOrNull("repliedToText"),
         followUpDue = optBoolean("followUpDue", false),
         authorExternalId = optStringOrNull("authorExternalId"),
+        possiblyAutomated = optBoolean("possiblyAutomated", false),
     )
 
     // Folded into /api/approvals (?resource=inbound) rather than a new endpoint --

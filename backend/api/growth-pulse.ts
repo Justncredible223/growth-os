@@ -397,19 +397,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ];
         if (videoIds.length === 0) return "0 videos with a recorded YouTube URL to poll";
 
+        // P2 2026-11-15: YouTube gets its own Health row, so a broken sync no longer looks like an empty queue.
+        await recordSyncAttempt(client, "youtube_comments");
         const repo = new SupabaseInboundRepository(client);
         let totalFetched = 0;
         let totalInserted = 0;
         const truncatedVideos: string[] = [];
-        for (const videoId of videoIds) {
-          const result = await ingestInboundYoutubeComments({ adapter, repo }, cursorStore, videoId, now);
-          totalFetched += result.fetched;
-          totalInserted += result.inserted;
-          if (result.truncated) truncatedVideos.push(videoId);
+        try {
+          for (const videoId of videoIds) {
+            const result = await ingestInboundYoutubeComments({ adapter, repo }, cursorStore, videoId, now);
+            totalFetched += result.fetched;
+            totalInserted += result.inserted;
+            if (result.truncated) truncatedVideos.push(videoId);
+          }
+        } catch (err) {
+          await recordSyncFailure(client, "youtube_comments", errorMessage(err));
+          throw err;
         }
         const summary = `${totalInserted} new inbound across ${videoIds.length} video(s) (${totalFetched} fetched)`;
         // A video that got more than 250 comments since the last run: stored what was read, and the step fails so it shows in the log.
-        if (truncatedVideos.length > 0) throw new Error(`${summary}; stopped at the page cap with older comments unread on: ${truncatedVideos.join(", ")}`);
+        if (truncatedVideos.length > 0) {
+          const message = `${summary}; stopped at the page cap with older comments unread on: ${truncatedVideos.join(", ")}`;
+          await recordSyncFailure(client, "youtube_comments", message);
+          throw new Error(message);
+        }
+        await recordSyncSuccess(client, "youtube_comments", summary);
         return summary;
       }),
     );

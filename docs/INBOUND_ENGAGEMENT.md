@@ -8,6 +8,48 @@ person's reply had actually been answered. A manual review found real
 people who had replied and apparently never got a response — this is the
 system built to make that structurally harder to repeat.
 
+
+## How it works now (2026-11-15) -- read this first
+
+The sections below are history. Where they disagree with this one, this one is current.
+
+- **Sources and schedule.**
+  - X mentions and replies to @FillbookHQ, plus top-level comments on our YouTube Shorts.
+  - Synced by `api/growth-pulse.ts` at 15:00, 20:00 and 01:00 UTC.
+  - Health has its own rows for X (`x_inbound`) and YouTube (`youtube_comments`).
+- **No silent loss.**
+  - X follows pagination after the stored cursor, up to 5 pages (250 mentions, $0.25).
+  - YouTube follows pages until it reaches the stored comment, up to 5 pages.
+  - Stopping at either cap records a sync failure in Health.
+- **Priority.**
+  - p1: a direct reply.
+  - p2: someone with a conversation we answered, a tracked creator, or a Prospecting reply we posted.
+  - p3: a question.
+  - p4: a mention.
+  - Low-value items are closed at ingestion.
+- **Queue order.**
+  - Follow-ups flagged 48 hours or more ago come back on top as "FOLLOW-UP DUE".
+  - Then p1, p2, p3 and p4, newest first within each.
+- **One person, many replies.**
+  - Items from the same person are grouped under a header ("@name · 8 replies") with the first one shown.
+  - Each message keeps its own card and actions, so one Responded marks one item.
+- **Possibly automated.**
+  - An advisory label on a person: at least 4 messages in 24 hours that are under 200 characters and not questions, and no conversation we have answered with them.
+  - It never closes, hides, reorders or restricts anything.
+- **Context.**
+  - The post an item answers is shown before drafting, from our stored posts (`x_own_posts`, no X read).
+  - The drafter also gets the rebuilt thread.
+  - An unsent follow-up draft is never treated as something we said.
+- **States.**
+  - Draft, Follow up and Responded work only on open items (new, needs_response, draft_ready, follow_up, review_needed).
+  - Responded twice and Close twice change nothing.
+  - A responded item is not closed.
+  - Errors: 409 for a wrong state, 422 for a rejected draft, 404 for a missing item. The app shows the reason.
+- **Counts.**
+  - The Morning Brief, Home and the tab use the same summary: messages needing a response, plus how many people they come from.
+  - Backlog review items are not counted as overdue.
+- **Check for missed replies.** Runs at most once an hour and reports how many it found.
+
 ## What this is NOT
 
 - Not auto-reply, auto-like, auto-follow, or auto-DM. Nothing here can

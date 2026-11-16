@@ -315,6 +315,8 @@ data class InboundEngagement(
     val followUpDue: Boolean = false,
     /** The author's stable id, used to group several replies from one person. */
     val authorExternalId: String? = null,
+    /** Advisory: several short replies from this account in a short period (never closes or reorders anything). */
+    val possiblyAutomated: Boolean = false,
 )
 
 data class InboundSummary(
