@@ -61,7 +61,7 @@ describe("buildMetricoolPackage (policy 2026-11-08, team decision 2026-11-14)", 
   it("tells Justin that copying is not approval and how to approve", () => {
     const text = metricoolPackageText(p);
     expect(text).toContain(`METRICOOL PACKAGE ${p.packageId}`);
-    expect(text).toContain(`File SHA256 ${"a".repeat(64)}`);
+    expect(text).toContain(`File fingerprint ${"a".repeat(64)}`);
     expect(text).toContain(`Copying this is not approval. To approve, write: approve ${p.packageId} for`);
     expect(text).toContain("Checks: all passed");
   });
@@ -102,5 +102,24 @@ describe("getMetricoolPackage", () => {
     await expect(getMetricoolPackage(fakeClient(null), "nope")).rejects.toBeInstanceOf(MetricoolPackageError);
     await expect(getMetricoolPackage(fakeClient({ id: "r", campaign_asset_id: "a", status: "rendering", storage_path: null, duration_seconds: null }), "r")).rejects.toBeInstanceOf(MetricoolPackageError);
     await expect(getMetricoolPackage(fakeClient({ id: "r", campaign_asset_id: "a", status: "ready", storage_path: "p", duration_seconds: 1 }, { junk: true }), "r")).rejects.toBeInstanceOf(MetricoolPackageError);
+  });
+});
+
+describe("P2 2026-11-15 (ChatGPT): the package follows the posting rules", () => {
+  it("leaves YouTube out while the 48-hour rule blocks it, and says so", () => {
+    const p = buildMetricoolPackage({ ...input, youtubeBlockedUntil: "2026-11-17T19:00:00.000Z" });
+    expect(p.posts.youtube).toBeUndefined();
+    expect(p.posts.tiktok).toBeDefined();
+    expect(metricoolPackageText(p)).toContain("YouTube left out: one YouTube post per 48 hours");
+    expect(buildMetricoolPackage({ ...input, youtubeBlockedUntil: null }).posts.youtube).toBeDefined();
+  });
+
+  it("puts the pinned comment in as the first comment, and adds Instagram when there is an Instagram caption", () => {
+    const p = buildMetricoolPackage({ ...input, metadata: { ...META, pinnedComment: "Track your drawdown in Fillbook.", instagramCaption: "Demo data. The floor moves with you." } });
+    expect((p.posts.tiktok as any).firstCommentText).toBe("Track your drawdown in Fillbook.");
+    expect((p.posts.youtube as any).firstCommentText).toBe("Track your drawdown in Fillbook.");
+    expect((p.posts.instagram as any).providers).toEqual([{ network: "instagram" }]);
+    expect(metricoolPackageText(p)).toContain("Instagram info:");
+    expect(buildMetricoolPackage(input).posts.instagram).toBeUndefined();
   });
 });

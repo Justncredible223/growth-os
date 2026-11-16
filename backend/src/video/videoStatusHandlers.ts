@@ -7,6 +7,7 @@ import { dayForTitle } from "./todaysVideo.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "./videoRenderEligibility.js";
 import { RETENTION_MARKER, removeRenderSafely } from "./videoRenderRetention.js";
+import { durableRenderCapReason } from "./durableRenderCaps.js";
 
 /**
  * The platform-specific publishing metadata generated alongside the video
@@ -313,6 +314,8 @@ export async function retryFailedRender(client: SupabaseClient, videoRenderId: s
     throw new VideoStatusActionError("Only a failed, stuck or missing render can be retried.");
   }
 
+  const durableCap = await durableRenderCapReason(client);
+  if (durableCap) return { queued: false, reason: durableCap };
   const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
     p_campaign_asset_id: campaignAssetId,
     p_monthly_cap: MAX_VIDEO_RENDERS_PER_MONTH,
