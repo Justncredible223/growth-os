@@ -1229,7 +1229,8 @@ export function deriveTodayXPostView(
 
   // run.status === "ready" from here on.
   if (dismissed) {
-    return { state: "empty", canRegenerate: true };
+    // P0 2026-11-15: with no attempts left a new draft cannot be written, so don't offer one.
+    return { state: "empty", canRegenerate: run.attempts < MAX_ATTEMPTS_PER_DAY, ...(run.attempts >= MAX_ATTEMPTS_PER_DAY ? { reason: maxAttemptsMessage(run.attempts) } : {}) };
   }
 
   const topicLabel = feedPostTopicLabel(run.topicKey) ?? undefined;

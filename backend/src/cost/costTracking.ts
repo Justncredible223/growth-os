@@ -431,8 +431,9 @@ export async function getTodayXSearchSpendUsd(client: SupabaseClient, now: Date 
 }
 
 /** Real recorded spend today (any provider/event_type), created_at-based, UTC calendar day. Distinct from getProspectingMonthSpendUsd (that one is a budget gate scoped to one event_type over a month) -- this is what a "today's spend" display should actually query instead of an unfiltered lifetime sum. */
-export async function getTodaySpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
-  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+export async function getTodaySpendUsd(client: SupabaseClient, now: Date = new Date(), since?: Date): Promise<number> {
+  // P0 2026-11-15: Home passes the start of the owner's Arizona day; without it, the UTC day as before.
+  const startOfToday = (since ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))).toISOString();
   return sumCostUsd(await selectCostEvents(client, "cost_usd", { since: startOfToday, label: "getTodaySpendUsd" }));
 }
 

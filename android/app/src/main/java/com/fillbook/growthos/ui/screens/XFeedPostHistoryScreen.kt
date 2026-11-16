@@ -60,6 +60,24 @@ fun XFeedPostHistoryScreen(repo: GrowthOsRepository) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    var markingId by remember { mutableStateOf<String?>(null) }
+
+    // P0 2026-11-15: a draft posted late at night can be confirmed after midnight. One server call, safe to repeat.
+    fun markPosted(entry: XFeedPostHistoryEntry) {
+        val id = entry.campaignAssetId ?: return
+        val text = entry.previewText ?: return
+        scope.launch {
+            markingId = id
+            try {
+                repo.markTodayXPostPosted(id, text, entry.operatingDate)
+                entries = repo.getTodayXPostHistory()
+                errorMessage = null
+            } catch (e: Exception) {
+                errorMessage = authErrorMessage(e) ?: "Couldn't mark that draft posted. Try again."
+            }
+            markingId = null
+        }
+    }
 
     suspend fun refresh() {
         try {
@@ -119,7 +137,7 @@ fun XFeedPostHistoryScreen(repo: GrowthOsRepository) {
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(entries) { entry -> HistoryCard(entry) }
+                    items(entries) { entry -> HistoryCard(entry, marking = markingId == entry.campaignAssetId, onMarkPosted = { markPosted(entry) }) }
                 }
             }
         }
@@ -127,7 +145,7 @@ fun XFeedPostHistoryScreen(repo: GrowthOsRepository) {
 }
 
 @Composable
-private fun HistoryCard(entry: XFeedPostHistoryEntry) {
+private fun HistoryCard(entry: XFeedPostHistoryEntry, marking: Boolean = false, onMarkPosted: () -> Unit = {}) {
     GrowthCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(entry.operatingDate, style = MaterialTheme.typography.labelLarge, color = TextTertiary)
@@ -172,6 +190,9 @@ private fun HistoryCard(entry: XFeedPostHistoryEntry) {
                     // action this screen doesn't have (see release notes),
                     // so this stays read-only + copy for now.
                     CopyButton(text = text, label = "X feed post (${entry.operatingDate})")
+                    if (entry.state == XFeedPostHistoryState.UNPOSTED_DRAFT && entry.campaignAssetId != null) {
+                        TextButton(onClick = onMarkPosted, enabled = !marking) { Text(if (marking) "Saving..." else "I posted this") }
+                    }
                 }
             }
         }

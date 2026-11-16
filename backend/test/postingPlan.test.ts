@@ -45,11 +45,48 @@ describe("buildPostingPlan (one video a day at 12pm Arizona)", () => {
     expect(plan.slots[0]).toMatchObject({ status: "upcoming", remaining: ["youtube_shorts", "instagram"] });
   });
 
-  it("never brings back a video first posted on an earlier day, and leaves slots empty when nothing is ready", () => {
-    const old = video("old", "2026-09-20T01:00:00Z", [{ platform: "tiktok", url: "https://tiktok.com/x", postedAt: "2026-09-24T14:00:00Z" }]);
-    const plan = buildPostingPlan([old], NOW);
+  it("never brings back a video posted everywhere on an earlier day, and leaves slots empty when nothing is ready", () => {
+    const all = (at: string): PlanVideo["posts"] => (["tiktok", "youtube_shorts", "instagram"] as const).map((platform) => ({ platform, url: "https://x/" + platform, postedAt: at }));
+    const plan = buildPostingPlan([video("old", "2026-09-20T01:00:00Z", all("2026-09-24T14:00:00Z"))], NOW);
     expect(plan.slots.every((s) => s.status === "empty" && s.video === null)).toBe(true);
     expect(plan.backlog).toBe(0);
+    expect(plan.carryOver).toEqual([]);
+  });
+});
+
+describe("partly posted videos stay actionable across days (P0 2026-11-15)", () => {
+  const tiktokAt = (at: string): PlanVideo["posts"] => [{ platform: "tiktok", url: "https://tiktok.com/x", postedAt: at }];
+
+  it("keeps yesterday's partly posted video in today's slot after midnight, ahead of a new video", () => {
+    // Posted to TikTok at 11:50 PM Arizona on the 24th; it is now 10:00 AM on the 25th.
+    const partly = video("partly", "2026-09-24T01:00:00Z", tiktokAt("2026-09-25T06:50:00Z"));
+    const plan = buildPostingPlan([video("new", "2026-09-25T01:00:00Z"), partly], NOW);
+    expect(plan.slots[0]!.video?.campaignAssetId).toBe("partly");
+    expect(plan.slots[0]).toMatchObject({ status: "upcoming", remaining: ["youtube_shorts", "instagram"], blocked: [] });
+    expect(plan.backlog).toBe(1);
+    expect(plan.carryOver).toEqual([]);
+  });
+
+  it("lists an earlier video that only waits for YouTube under carryOver, and gives the slot to a new video", () => {
+    const posts: PlanVideo["posts"] = [
+      { platform: "tiktok", url: "https://tiktok.com/x", postedAt: "2026-09-24T19:00:00Z" },
+      { platform: "instagram", url: "https://instagram.com/x", postedAt: "2026-09-24T19:05:00Z" },
+    ];
+    const plan = buildPostingPlan([video("yt-left", "2026-09-23T01:00:00Z", posts), video("new", "2026-09-25T01:00:00Z")], NOW, "2026-09-24T12:00:00Z");
+    expect(plan.slots[0]!.video?.campaignAssetId).toBe("new");
+    expect(plan.carryOver).toHaveLength(1);
+    expect(plan.carryOver[0]).toMatchObject({ remaining: [], blocked: ["youtube_shorts"] });
+    expect(plan.carryOver[0]!.video.campaignAssetId).toBe("yt-left");
+    // Once the 48 hours pass, YouTube can be posted, so the video takes the slot again.
+    const later = buildPostingPlan([video("yt-left", "2026-09-23T01:00:00Z", posts), video("new", "2026-09-25T01:00:00Z")], new Date("2026-09-26T17:00:00Z"), "2026-09-24T12:00:00Z");
+    expect(later.slots[0]!.video?.campaignAssetId).toBe("yt-left");
+    expect(later.slots[0]!.remaining).toEqual(["youtube_shorts"]);
+  });
+
+  it("stops carrying a partly posted video once its first post is more than a week old", () => {
+    const plan = buildPostingPlan([video("old", "2026-09-10T01:00:00Z", tiktokAt("2026-09-17T14:00:00Z"))], NOW);
+    expect(plan.slots[0]!.status).toBe("empty");
+    expect(plan.carryOver).toEqual([]);
   });
 });
 
@@ -109,12 +146,14 @@ describe("one YouTube post per 48 hours (owner rule 2026-10-17)", () => {
     expect(buildPostingPlan([v()], NOW_YT).slots[0]!.remaining).toContain("youtube_shorts");
   });
 
-  it("counts a slot as done when TikTok and Instagram are posted and YouTube is not allowed yet", () => {
+  it("marks a slot waiting, never done, when TikTok and Instagram are posted and YouTube is not allowed yet", () => {
     const posted = [
       { platform: "tiktok" as const, url: "https://tiktok.com/x", postedAt: "2026-10-18T19:10:00Z" },
       { platform: "instagram" as const, url: "https://instagram.com/x", postedAt: "2026-10-18T19:20:00Z" },
     ];
-    expect(buildPostingPlan([v(posted)], NOW_YT, "2026-10-17T19:00:00Z").slots[0]!.status).toBe("done");
+    const slot = buildPostingPlan([v(posted)], NOW_YT, "2026-10-17T19:00:00Z").slots[0]!;
+    expect(slot.status).toBe("waiting");
+    expect(slot.blocked).toEqual(["youtube_shorts"]);
   });
 
   it("is exactly 48 hours", () => {

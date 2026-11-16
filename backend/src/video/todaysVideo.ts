@@ -3,6 +3,7 @@ import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "..
 import { listMotionConcepts } from "../../scripts/video-factory/motionCatalog.js";
 import { dailyPosition } from "../shortform/motionPlans.js";
 import { startOfDay } from "./dailyLimit.js";
+import { phoenixLabel, type PostingPlan } from "../posting/postingPlan.js";
 
 type Client = ReturnType<typeof getServiceClient>;
 
@@ -151,4 +152,24 @@ export async function loadTodaysVideo(client: Client, now: Date = new Date()): P
     platformsPosted,
     startOfToday: startOfDay(now).toISOString(),
   });
+}
+
+/**
+ * P0 2026-11-15 (ChatGPT): Home's video card follows the posting plan's pick once a video is rendered, so a partly posted video from
+ * yesterday, or one waiting for YouTube's 48-hour rule, stays on Home instead of reading "No video yet today". States that need the
+ * owner earlier in the pipeline (drafting, approval, rendering, a failed render) keep the card.
+ */
+export function applyPostingPlan(video: TodaysVideo | null, plan: PostingPlan | null): TodaysVideo | null {
+  const slot = plan?.slots[0];
+  if (!plan || !slot?.video) return video;
+  if (video && !["none", "ready", "posted"].includes(video.state)) return video;
+  const v = slot.video;
+  const posted = v.posts.map((p) => p.platform as string);
+  const names = (list: string[]) => list.map((p) => PLATFORM_NAMES[p] ?? p).join(", ");
+  const youtubeNote = slot.blocked.includes("youtube_shorts") && plan.youtubeNextAt ? ` YouTube opens ${phoenixLabel(plan.youtubeNextAt)} (one post per 48 hours).` : "";
+  const base = { title: v.title, day: dayForTitle(`${MANUAL_MOTION_CONCEPT_TITLE_PREFIX}${v.title}`), platformsPosted: posted };
+  if (slot.status === "done") return { ...base, state: "posted", headline: "Posted", detail: `Posted on all ${POSTING_PLATFORM_COUNT}: ${names(posted)}.` };
+  if (slot.status === "waiting") return { ...base, state: "posted", headline: "Waiting for YouTube", detail: `Posted on ${names(posted)}.${youtubeNote}` };
+  if (posted.length === 0) return { ...base, state: "ready", headline: "Ready to post", detail: `Download it in Video Status, post it, then paste the links.${youtubeNote}` };
+  return { ...base, state: "ready", headline: "Partly posted", detail: `Posted on ${names(posted)}. Still to post: ${names(slot.remaining)}.${youtubeNote}` };
 }

@@ -1,4 +1,7 @@
-import { loadTodaysVideo } from "../src/video/todaysVideo.js";
+import { applyPostingPlan, loadTodaysVideo } from "../src/video/todaysVideo.js";
+import { loadPostingPlan } from "../src/posting/postingRepository.js";
+import { startOfDay } from "../src/video/dailyLimit.js";
+import { recordOwnerPublication } from "../src/attribution/contentPublications.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
@@ -418,7 +421,7 @@ async function handleXFeedPost(req: VercelRequest, res: VercelResponse): Promise
 
   try {
     const client = getServiceClient();
-    const body = req.body as { action?: string; campaignAssetId?: string; postedText?: string } | undefined;
+    const body = req.body as { action?: string; campaignAssetId?: string; postedText?: string; operatingDate?: string } | undefined;
     const now = new Date();
     const operatingDate = getOperatingDate(now, getScheduleTimezone());
 
@@ -440,14 +443,31 @@ async function handleXFeedPost(req: VercelRequest, res: VercelResponse): Promise
         res.status(400).json({ error: "postedText is required when marking posted" });
         return;
       }
-      const runRepo = new SupabaseXFeedPostRunRepository(client);
-      const run = await runRepo.getRun(operatingDate);
-      if (!run || run.campaignAssetId !== body.campaignAssetId) {
-        res.status(404).json({ error: "No matching Today's X Post run for this asset" });
+      // P0 2026-11-15 (ChatGPT): a draft posted late at night can be confirmed after midnight, from Previous drafts. The day it belongs
+      // to may be given (today or up to MARK_POSTED_MAX_DAYS_BACK earlier); without one it is today's, as before.
+      const targetDate = body.operatingDate ?? operatingDate;
+      const dateProblem = markPostedDateProblem(targetDate, operatingDate);
+      if (dateProblem) {
+        res.status(400).json({ error: dateProblem });
         return;
       }
-      await runRepo.markPosted(operatingDate, now.toISOString(), body.postedText);
-      res.status(200).json({ todayXPost: await computeTodayXPostView(client, now) });
+      const runRepo = new SupabaseXFeedPostRunRepository(client);
+      const run = await runRepo.getRun(targetDate);
+      if (!run || run.campaignAssetId !== body.campaignAssetId || run.status !== "ready") {
+        res.status(404).json({ error: "No matching X post draft for this asset on that day" });
+        return;
+      }
+      // Idempotent: a second tap (or a retry after a lost response) changes nothing and is not counted twice.
+      const alreadyPosted = Boolean(run.postedAt);
+      if (!alreadyPosted) {
+        const postedAt = now.toISOString();
+        await runRepo.markPosted(targetDate, postedAt, body.postedText);
+        // One publication row per asset and channel (upsert), so the growth-loop counts see this post exactly once.
+        await recordOwnerPublication(client, { campaignAssetId: body.campaignAssetId, channel: "x", ownerReportedPublishedAt: postedAt }).catch((err) =>
+          console.warn(`mark-posted: content_publications sync failed for ${body.campaignAssetId}`, err),
+        );
+      }
+      res.status(200).json({ todayXPost: await computeTodayXPostView(client, now), operatingDate: targetDate, alreadyPosted });
       return;
     }
 
@@ -455,6 +475,18 @@ async function handleXFeedPost(req: VercelRequest, res: VercelResponse): Promise
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }
+}
+
+/** How many days back a draft may still be marked posted (P0 2026-11-15). */
+export const MARK_POSTED_MAX_DAYS_BACK = 7;
+
+/** Why a mark-posted day is refused, or null when it is today or within MARK_POSTED_MAX_DAYS_BACK before it. */
+export function markPostedDateProblem(requested: string, today: string): string | null {
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(requested) || Number.isNaN(Date.parse(`${requested}T00:00:00Z`))) return "operatingDate must be YYYY-MM-DD";
+  if (requested > today) return "That day hasn't happened yet.";
+  const daysBack = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${requested}T00:00:00Z`)) / 86_400_000;
+  if (daysBack > MARK_POSTED_MAX_DAYS_BACK) return `Only drafts from the last ${MARK_POSTED_MAX_DAYS_BACK} days can be marked posted.`;
+  return null;
 }
 
 export interface XFeedPostHistoryEntry {
@@ -684,8 +716,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const client = getServiceClient();
-    const startOfToday = new Date();
-    startOfToday.setUTCHours(0, 0, 0, 0);
+    // P0 2026-11-15: "today" on Home is the owner's day in Arizona, not the UTC day (which started at 5 PM Arizona).
+    const startOfToday = startOfDay(new Date());
     const yearMonth = new Date().toISOString().slice(0, 7);
 
     const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
@@ -705,7 +737,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       monthAutoDraftSpendUsd,
       todayXPost,
       todaySpendUsd,
-      todaysVideo,
+      todaysVideoRaw,
+      postingPlan,
       recentConversions,
       recentPublications,
       recentLinkClicks,
@@ -735,9 +768,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         autoDraftRunRepo.getLastRun(),
         autoDraftRunRepo.getMonthSpendUsd(yearMonth),
         computeTodayXPostView(client, now),
-        getTodaySpendUsd(client),
+        getTodaySpendUsd(client, now, startOfToday),
         // The daily video's state for the Home card. A failure here must not break Home, so it resolves to null.
         loadTodaysVideo(client, now).catch(() => null),
+        // P0 2026-11-15: the posting plan picks which rendered video Home shows (partly posted videos stay until finished).
+        loadPostingPlan(client, now).catch(() => null),
         // Attribution loop this session closed (see backend/src/attribution/):
         // FillbookHQ's signup webhook writes here. Surfaced on Home so the
         // loop is actually visible instead of a table nobody queries.
@@ -808,7 +843,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(200).json({
       todayXPost,
-      video: todaysVideo,
+      video: applyPostingPlan(todaysVideoRaw, postingPlan),
       signalsAnalyzedToday: signalsToday.count ?? 0,
       opportunitiesFound: openOpportunities.count ?? 0,
       assetsReady: readyAssetsAwaitingDecision.count ?? 0,

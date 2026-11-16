@@ -53,6 +53,8 @@ internal fun slotLabel(time: String): String {
 
 internal fun slotStatusLabel(slot: PlanSlot): Pair<String, StatusTone> = when (slot.status) {
     "done" -> "Posted everywhere" to StatusTone.READY
+    // P0 2026-11-15: never "Posted everywhere" while YouTube is still to come.
+    "waiting" -> "Waiting for YouTube" to StatusTone.NEUTRAL
     "due" -> (if (slot.remaining.size == PostingPlatform.entries.size) "Post now" else "${slot.remaining.size} left to post") to StatusTone.WAITING
     "upcoming" -> "Up next" to StatusTone.NEUTRAL
     else -> "No video ready" to StatusTone.SKIPPED
@@ -80,24 +82,41 @@ fun PostingPlanCard(plan: PostingPlan, onAddLink: (PlanVideo, PostingPlatform) -
             val video = slot.video
             if (video != null) {
                 Text(video.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 72.dp, top = 2.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 64.dp)) {
-                    PostingPlatform.entries.forEach { platform ->
-                        val posted = video.posts.any { it.platform == platform }
-                        if (!posted && platform == PostingPlatform.YOUTUBE_SHORTS && youtubeWait != null) {
-                            // One YouTube post per 48 hours: no button until the window opens (the server refuses it too).
-                            TextButton(onClick = {}, enabled = false) { Text(youtubeWait, color = TextTertiary, style = MaterialTheme.typography.labelMedium) }
-                            return@forEach
-                        }
-                        TextButton(onClick = { onAddLink(video, platform) }) {
-                            Text(if (posted) "✓ ${platform.label}" else "+ ${platform.label}", color = if (posted) Success else Accent, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
+                PlatformChips(video, youtubeWait, onAddLink)
             }
+        }
+        // P0 2026-11-15: partly posted videos from earlier days stay here until every platform has its link.
+        plan.carryOver.forEach { item ->
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("Earlier", style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(72.dp))
+                QuietStatusLabel(if (item.remaining.isEmpty()) "Waiting for YouTube" else "${item.remaining.size} left to post", if (item.remaining.isEmpty()) StatusTone.NEUTRAL else StatusTone.WAITING)
+            }
+            Text(item.video.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 72.dp, top = 2.dp))
+            PlatformChips(item.video, youtubeWait, onAddLink)
         }
         if (plan.backlog > 0) {
             Spacer(Modifier.height(8.dp))
             Text("${plan.backlog} more ready video${if (plan.backlog == 1) "" else "s"} waiting for the next days.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        }
+    }
+}
+
+/** One chip per platform: a check when its link is saved, otherwise a tap to add it; YouTube shows its wait during the 48 hours. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlatformChips(video: PlanVideo, youtubeWait: String?, onAddLink: (PlanVideo, PostingPlatform) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(start = 64.dp)) {
+        PostingPlatform.entries.forEach { platform ->
+            val posted = video.posts.any { it.platform == platform }
+            if (!posted && platform == PostingPlatform.YOUTUBE_SHORTS && youtubeWait != null) {
+                // One YouTube post per 48 hours: no button until the window opens (the server refuses it too).
+                TextButton(onClick = {}, enabled = false) { Text(youtubeWait, color = TextTertiary, style = MaterialTheme.typography.labelMedium) }
+                return@forEach
+            }
+            TextButton(onClick = { onAddLink(video, platform) }) {
+                Text(if (posted) "✓ ${platform.label}" else "+ ${platform.label}", color = if (posted) Success else Accent, style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }

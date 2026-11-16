@@ -30,14 +30,19 @@ data class PlanVideo(
 data class PlanSlot(
     /** The slot time, "12:00" now (Arizona time); the server decides, the app just formats it. */
     val time: String,
-    /** "done", "due", "upcoming" or "empty". */
+    /** "done", "waiting" (only a blocked platform is left, e.g. YouTube's 48 hours), "due", "upcoming" or "empty". */
     val status: String,
     val video: PlanVideo?,
     val remaining: List<PostingPlatform>,
+    /** Platforms not posted yet that may not be posted now (YouTube during its 48 hours). */
+    val blocked: List<PostingPlatform> = emptyList(),
 )
 
+/** A partly posted video from an earlier day that is not in today's slot (P0 2026-11-15); stays until every platform is posted. */
+data class CarryOverVideo(val video: PlanVideo, val remaining: List<PostingPlatform>, val blocked: List<PostingPlatform>)
+
 /** [youtubeNextAt]: when YouTube may be posted to again (ISO), or null when it may be posted now. One YouTube post per 48 hours (2026-10-17). */
-data class PostingPlan(val date: String, val slots: List<PlanSlot>, val backlog: Int, val youtubeNextAt: String? = null)
+data class PostingPlan(val date: String, val slots: List<PlanSlot>, val backlog: Int, val youtubeNextAt: String? = null, val carryOver: List<CarryOverVideo> = emptyList())
 
 data class PostResult(
     val id: String,
@@ -77,6 +82,20 @@ private fun JSONObject.intOrNull(key: String): Int? = if (!has(key) || isNull(ke
 private fun JSONObject.doubleOrNull(key: String): Double? = if (!has(key) || isNull(key)) null else getDouble(key)
 private fun JSONObject.stringOrNull(key: String): String? = if (!has(key) || isNull(key)) null else getString(key)
 
+private fun JSONObject.toPlanVideo(): PlanVideo = PlanVideo(
+    campaignAssetId = getString("campaignAssetId"),
+    videoRenderId = stringOrNull("videoRenderId"),
+    title = getString("title"),
+    posts = getJSONArray("posts").mapObjects { p ->
+        PostingPlatform.fromApi(p.getString("platform"))?.let { PlanPost(it, p.getString("url"), p.getString("postedAt")) }
+    }.filterNotNull(),
+)
+
+private fun JSONObject.platformList(key: String): List<PostingPlatform> {
+    val arr = optJSONArray(key) ?: return emptyList()
+    return (0 until arr.length()).mapNotNull { PostingPlatform.fromApi(arr.getString(it)) }
+}
+
 internal fun JSONObject.toPostingOverview(): PostingOverview {
     val plan = getJSONObject("plan")
     val results = getJSONObject("results")
@@ -90,19 +109,16 @@ internal fun JSONObject.toPostingOverview(): PostingOverview {
                 PlanSlot(
                     time = s.getString("time"),
                     status = s.getString("status"),
-                    video = s.optJSONObject("video")?.let { v ->
-                        PlanVideo(
-                            campaignAssetId = v.getString("campaignAssetId"),
-                            videoRenderId = v.stringOrNull("videoRenderId"),
-                            title = v.getString("title"),
-                            posts = v.getJSONArray("posts").mapObjects { p ->
-                                PostingPlatform.fromApi(p.getString("platform"))?.let { PlanPost(it, p.getString("url"), p.getString("postedAt")) }
-                            }.filterNotNull(),
-                        )
-                    },
-                    remaining = (0 until s.getJSONArray("remaining").length()).mapNotNull { PostingPlatform.fromApi(s.getJSONArray("remaining").getString(it)) },
+                    video = s.optJSONObject("video")?.toPlanVideo(),
+                    remaining = s.platformList("remaining"),
+                    blocked = s.platformList("blocked"),
                 )
             },
+            carryOver = plan.optJSONArray("carryOver")?.let { arr ->
+                (0 until arr.length()).map { arr.getJSONObject(it) }.mapNotNull { c ->
+                    c.optJSONObject("video")?.toPlanVideo()?.let { CarryOverVideo(it, c.platformList("remaining"), c.platformList("blocked")) }
+                }
+            } ?: emptyList(),
         ),
         results = PostingResults(
             videos = results.getJSONArray("videos").mapObjects { v ->
