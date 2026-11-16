@@ -22,6 +22,7 @@ import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js
 import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
 import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
 import { computeGrowthLoopSummary, type GrowthLoopPublicationRow, type GrowthLoopConversionRow } from "../src/attribution/growthLoopAnalytics.js";
+import { summarizeInbound } from "../src/inbound/inboundHandlers.js";
 
 /**
  * `?resource=strategy` handles Strategy Evolution -- a read of the latest
@@ -214,14 +215,13 @@ async function handleBrief(req: VercelRequest, res: VercelResponse): Promise<voi
       client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", since),
       client.from("opportunities").select("id, title, score").eq("status", "open").gte("created_at", since).order("score", { ascending: false }).limit(5),
       client.from("campaign_assets").select("id, campaigns!inner(status)", { count: "exact", head: true }).eq("stage", "ready_for_owner").eq("campaigns.status", "in_review"),
-      client.from("inbound_engagements").select("status"),
+      summarizeInbound(client),
       new SupabaseStrategyRepository(client).getLatest(),
       client.from("notifications").select("id, title, severity").is("read_at", null).order("created_at", { ascending: false }).limit(5),
     ]);
 
-    const needsResponse = ((inboundSummaryRow.data ?? []) as Array<{ status: string }>).filter(
-      (r) => r.status === "needs_response" || r.status === "review_needed" || r.status === "draft_ready",
-    ).length;
+    // P1 2026-11-15: the same count the Inbound tab shows (it used to leave out "new", count our own posts and stop at 1000 rows).
+    const needsResponse = inboundSummaryRow.needsResponse;
 
     res.status(200).json({
       generatedAt: new Date().toISOString(),

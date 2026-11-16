@@ -49,6 +49,8 @@ export interface InboundRepository {
    */
   upsertIfNew(engagement: NewInboundEngagement): Promise<{ id: string; created: boolean }>;
   countPriorFromAuthor(platform: string, authorExternalId: string): Promise<number>;
+  /** Rows from this author that we responded to, in a conversation other than [excludeConversationId]. Optional so simple fakes need not implement it (callers then fall back to countPriorFromAuthor). */
+  countAnsweredFromAuthor?(platform: string, authorExternalId: string, excludeConversationId: string | null): Promise<number>;
   findLatestInConversation(conversationId: string): Promise<InboundEngagement | null>;
   listByStatus(statuses: InboundStatus[]): Promise<InboundEngagement[]>;
   getById(id: string): Promise<InboundEngagement | null>;

@@ -114,7 +114,13 @@ async function buildRow(
   const creatorId = mention.authorHandle ? await deps.findCreatorIdByHandle(mention.authorHandle) : null;
   const priorProspectingOutreach =
     mention.authorId && deps.hasProspectingOutreach ? await deps.hasProspectingOutreach(mention.authorId) : false;
-  const hasExistingRelationship = priorCount > 0 || creatorId !== null || priorProspectingOutreach;
+  // P1 2026-11-15: "Relationship" means a conversation we actually answered before (not any earlier row: a low-value "nice" or an
+  // earlier message in this same thread used to make nearly everyone p2), a tracked creator, or a Prospecting reply we posted.
+  const answeredBefore =
+    mention.authorId && deps.repo.countAnsweredFromAuthor
+      ? await deps.repo.countAnsweredFromAuthor("x", mention.authorId, mention.conversationId ?? null)
+      : priorCount;
+  const hasExistingRelationship = answeredBefore > 0 || creatorId !== null || priorProspectingOutreach;
 
   const priority = classifyPriority({
     text: mention.text,

@@ -80,6 +80,31 @@ describe("computeInboundSummary", () => {
   });
 
   it("returns all zeros for an empty active set -- an empty queue is a real state, not an error", () => {
-    expect(computeInboundSummary([], now)).toEqual({ needsResponse: 0, followUp: 0, repeatEngagers: 0, overdue: 0 });
+    expect(computeInboundSummary([], now)).toEqual({ needsResponse: 0, people: 0, followUp: 0, followUpDue: 0, repeatEngagers: 0, overdue: 0 });
+  });
+});
+
+describe("P1 2026-11-15: people, due follow-ups, backlog not overdue, queue order", () => {
+  it("counts people, due follow-ups, and leaves backlog review items out of overdue", async () => {
+    const { computeInboundSummary, sortInboundQueue } = await import("../src/inbound/inboundHandlers");
+    const now = new Date("2026-11-16T12:00:00Z");
+    const row = (o: Record<string, unknown>) => ({ platform: "x", authorExternalId: "a", authorHandle: "a", isRepeatEngager: false, priority: "p3_comment", status: "needs_response", observedAt: "2026-11-16T10:00:00Z", updatedAt: "2026-11-16T10:00:00Z", id: Math.random().toString(), ...o }) as any;
+    const rows = [
+      ...Array.from({ length: 8 }, () => row({ authorExternalId: "kezie" })),
+      row({ authorExternalId: "b", status: "review_needed", observedAt: "2026-11-01T10:00:00Z" }),
+      row({ authorExternalId: "c", status: "follow_up", updatedAt: "2026-11-13T10:00:00Z" }),
+      row({ authorExternalId: "d", status: "follow_up", updatedAt: "2026-11-16T09:00:00Z" }),
+    ];
+    const s = computeInboundSummary(rows, now);
+    expect(s.needsResponse).toBe(9);
+    expect(s.people).toBe(2);
+    expect(s.followUpDue).toBe(1);
+    expect(s.overdue).toBe(0);
+    const order = sortInboundQueue([
+      row({ id: "mention", priority: "p4_mention" }),
+      row({ id: "direct", priority: "p1_direct_reply", observedAt: "2026-11-15T10:00:00Z" }),
+      row({ id: "due", status: "follow_up", priority: "p4_mention", updatedAt: "2026-11-10T10:00:00Z" }),
+    ], now).map((r: any) => r.id);
+    expect(order).toEqual(["due", "direct", "mention"]);
   });
 });

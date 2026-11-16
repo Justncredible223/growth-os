@@ -96,6 +96,19 @@ export class SupabaseInboundRepository implements InboundRepository {
     return count ?? 0;
   }
 
+  async countAnsweredFromAuthor(platform: string, authorExternalId: string, excludeConversationId: string | null): Promise<number> {
+    let query = this.client
+      .from("inbound_engagements")
+      .select("id", { count: "exact", head: true })
+      .eq("platform", platform)
+      .eq("author_external_id", authorExternalId)
+      .eq("status", "responded");
+    if (excludeConversationId) query = query.neq("conversation_id", excludeConversationId);
+    const { count, error } = await query;
+    if (error) throw new Error(`countAnsweredFromAuthor failed: ${error.message}`);
+    return count ?? 0;
+  }
+
   async findLatestInConversation(conversationId: string): Promise<InboundEngagement | null> {
     const { data, error } = await this.client
       .from("inbound_engagements")

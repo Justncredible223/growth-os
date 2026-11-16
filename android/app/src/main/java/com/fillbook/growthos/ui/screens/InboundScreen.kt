@@ -119,7 +119,10 @@ fun InboundScreen(repo: GrowthOsRepository) {
     var recovering by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
     // The owner's in-progress edits to a draft, keyed by item id. Sent back when they tap "Responded" so the drafter can learn their wording.
-    val editedDrafts = remember { mutableStateMapOf<String, String>() }
+    // Saveable (P1 2026-11-15): leaving the app to post on X used to drop the edit, and with it the final text the drafter learns from.
+    val editedDrafts = rememberSaveable(saver = editedDraftsSaver) { mutableStateMapOf<String, String>() }
+    // Authors whose extra replies are shown (several replies from one person are grouped under the first).
+    var expandedAuthors by rememberSaveable { mutableStateOf(listOf<String>()) }
     // Without this, a "Follow up" tap has no way back -- the item just sits
     // wherever it landed in the date-sorted list, potentially many screens
     // down once a handful of newer items arrive. Defaults to null (all
@@ -224,11 +227,15 @@ fun InboundScreen(repo: GrowthOsRepository) {
         scope.launch {
             recovering = true
             try {
-                repo.runInboundBacklogRecovery()
+                val found = repo.runInboundBacklogRecovery()
                 actionError = null
                 refresh()
+                snackbarHostState.showSnackbar(if (found == 0) "No missed replies found." else "Found $found missed repl${if (found == 1) "y" else "ies"}.")
             } catch (e: Exception) {
-                actionError = "Couldn't check for missed replies. Check your connection and try again."
+                // The cooldown and other refusals come back with the server's own reason.
+                actionError = (e as? com.fillbook.growthos.data.NetworkException)
+                    ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(409, 500)) }
+                    ?: "Couldn't check for missed replies. Check your connection and try again."
             } finally {
                 recovering = false
             }
@@ -240,7 +247,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
         ScreenHeader(
             "Inbound",
             "People who engaged with Fillbook on X -- nothing here ever sends itself.",
-            kicker = summary?.takeIf { it.needsResponse > 0 }?.let { "${it.needsResponse} need${if (it.needsResponse == 1) "s" else ""} a response" },
+            kicker = summary?.takeIf { it.needsResponse > 0 }?.let { inboundKicker(it) },
             dense = true,
         )
 
@@ -394,8 +401,22 @@ fun InboundScreen(repo: GrowthOsRepository) {
                                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                                     verticalArrangement = Arrangement.spacedBy(if (twoPane) 8.dp else 12.dp),
                                 ) {
-                                    items(filteredItems, key = { it.id }) { item ->
-                                        if (twoPane) {
+                                    val rows = inboundDisplayRows(filteredItems, expandedAuthors)
+                                    items(rows, key = { it.key }) { row ->
+                                        val item = row.item
+                                        if (row.header != null) {
+                                            val h = row.header
+                                            Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text("@${h.handle} · ${h.count} replies", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                                                    Text("One person. Each reply is its own item; answer the ones worth it.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                                                }
+                                                TextButton(onClick = {
+                                                    expandedAuthors = if (h.authorKey in expandedAuthors) expandedAuthors - h.authorKey else expandedAuthors + h.authorKey
+                                                }) { Text(if (h.authorKey in expandedAuthors) "Show fewer" else "Show all ${h.count}") }
+                                            }
+                                        } else if (item == null) {
+                                        } else if (twoPane) {
                                             SelectableRow(selected = item.id == validSelectedId, onClick = { selectedId = item.id }) {
                                                 RowTitleSubtitle(
                                                     title = "@${item.authorHandle ?: "unknown"}",
@@ -472,6 +493,7 @@ private fun InboundCard(
                     IconPill(platformDisplayName(item.platform), platformIcon(item.platform), TextSecondary)
                     Pill(inboundPriorityLabel(item.priority), inboundPriorityColor(item.priority))
                     if (item.isRepeatEngager) Pill("REPEAT", Accent)
+                    if (item.followUpDue) Pill("FOLLOW-UP DUE", Warning)
                 }
             }
             StatusChip(inboundStatusLabel(item.status), inboundStatusTone(item.status))
@@ -480,12 +502,13 @@ private fun InboundCard(
         Spacer(Modifier.height(10.dp))
         ExpandableText(item.body, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 3)
 
-        item.inResponseToText?.let { context ->
+        // P1 2026-11-15: the post they answered, shown before any draft (it used to appear only after drafting, as the oldest lines of the thread).
+        (item.repliedToText ?: item.inResponseToText)?.let { context ->
             Spacer(Modifier.height(8.dp))
             InsetRow {
-                Text("Replying to:", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                Text(if (item.repliedToText != null) "Replying to your post:" else "Replying to:", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
                 Spacer(Modifier.height(2.dp))
-                Text(context, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                ExpandableText(context, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, collapsedMaxLines = 3)
             }
         }
 
@@ -502,13 +525,20 @@ private fun InboundCard(
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
                 )
                 val charCount = (editedText ?: draft).length
-                Text(
-                    "$charCount / 280",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (charCount > 280) Danger else TextTertiary,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.End,
-                )
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    // A bad draft can be written again (P1 2026-11-15); the edit box is cleared with it.
+                    TextButton(onClick = onDraft, enabled = !busy) { Text("Redraft", maxLines = 1) }
+                    Spacer(Modifier.weight(1f))
+                    // X's limit; YouTube comments are not held to it.
+                    if (item.platform == "x") {
+                        Text(
+                            "$charCount / 280",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (charCount > 280) Danger else TextTertiary,
+                            textAlign = TextAlign.End,
+                        )
+                    }
+                }
             }
         }
 
@@ -558,3 +588,39 @@ private fun InboundFilterChip(label: String, selected: Boolean, onClick: () -> U
         ),
     )
 }
+
+/** One row of the Inbound list: a person header, or an item. P1 2026-11-15 (ChatGPT: group a burst, keep every message separate). */
+internal data class InboundGroupHeader(val authorKey: String, val handle: String, val count: Int)
+internal data class InboundDisplayRow(val key: String, val item: InboundEngagement? = null, val header: InboundGroupHeader? = null)
+
+/**
+ * Several items from one person are grouped: a header ("@kezie · 8 replies"), the first item, and the rest only when expanded. Each item
+ * keeps its own card and actions, so one Responded never marks several posts answered. Single items are shown as before. Pure, unit-tested.
+ */
+internal fun inboundDisplayRows(items: List<InboundEngagement>, expanded: List<String>): List<InboundDisplayRow> {
+    val keyOf = { i: InboundEngagement -> "${i.platform}:${i.authorExternalId ?: i.authorHandle ?: i.id}" }
+    val groups = LinkedHashMap<String, MutableList<InboundEngagement>>()
+    for (i in items) groups.getOrPut(keyOf(i)) { mutableListOf() }.add(i)
+    val rows = mutableListOf<InboundDisplayRow>()
+    for ((key, group) in groups) {
+        if (group.size == 1) {
+            rows += InboundDisplayRow(group[0].id, item = group[0])
+            continue
+        }
+        rows += InboundDisplayRow("header-$key", header = InboundGroupHeader(key, group[0].authorHandle ?: "unknown", group.size))
+        val shown = if (key in expanded) group else group.take(1)
+        shown.forEach { rows += InboundDisplayRow(it.id, item = it) }
+    }
+    return rows
+}
+
+/** "8 need a response" or, when they come from fewer people, "8 need a response · 1 person". */
+internal fun inboundKicker(s: InboundSummary): String {
+    val base = "${s.needsResponse} need${if (s.needsResponse == 1) "s" else ""} a response"
+    return if (s.people in 1 until s.needsResponse) "$base · ${s.people} ${if (s.people == 1) "person" else "people"}" else base
+}
+
+private val editedDraftsSaver = androidx.compose.runtime.saveable.listSaver<androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>, String>(
+    save = { map -> map.flatMap { (k, v) -> listOf(k, v) } },
+    restore = { list -> mutableStateMapOf<String, String>().apply { list.chunked(2).forEach { (k, v) -> put(k, v) } } },
+)

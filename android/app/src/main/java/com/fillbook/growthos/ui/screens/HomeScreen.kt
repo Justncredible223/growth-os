@@ -489,7 +489,12 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, o
         inbound != null && inbound.needsResponse > 0 -> NextAction(
             "Next best action",
             "${inbound.needsResponse} inbound repl${if (inbound.needsResponse == 1) "y" else "ies"} need${if (inbound.needsResponse == 1) "s" else ""} a response",
-            if (inbound.overdue > 0) "${inbound.overdue} of these have been waiting over 48 hours." else "Real people who engaged with @FillbookHQ, waiting to hear back.",
+            // P1 2026-11-15: 8 replies from one account read as 8 people; say how many people it really is.
+            when {
+                inbound.people in 1 until inbound.needsResponse -> "From ${inbound.people} ${if (inbound.people == 1) "person" else "people"}. Each reply is its own item; answer the ones worth it."
+                inbound.overdue > 0 -> "${inbound.overdue} of these have been waiting over 48 hours."
+                else -> "Real people who engaged with @FillbookHQ, waiting to hear back."
+            },
             "Open Inbound",
             "inbound",
             Icons.Filled.Forum,

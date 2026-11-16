@@ -194,3 +194,16 @@ describe("P0 2026-11-15: a mentions read that hit its page cap is reported, not 
     expect(quiet.truncated).toBeUndefined();
   });
 });
+
+describe("P1 2026-11-15: p2 relationship means a conversation we answered", () => {
+  it("an earlier unanswered message from the same author does not make the next one p2", async () => {
+    const { InMemoryIngestionCursorStore } = await import("../src/signals/adapters/ingestionCursorStore");
+    const { InMemoryInboundRepository } = await import("../src/inbound/inMemoryInboundRepository");
+    const repo = new InMemoryInboundRepository();
+    const m = (id: string, conv: string) => ({ id, text: "Great breakdown of drawdown, how do you track it?", authorId: "kz", authorHandle: "kezie", createdAt: new Date("2026-11-15T20:00:00Z"), publicMetrics: null, inReplyToUserId: "someone-else", conversationId: conv, referencedTweets: [] });
+    const deps = { adapter: { fetchOwnMentions: async () => [m("2", "c2"), m("1", "c1")] }, repo, findCreatorIdByHandle: async () => null } as any;
+    await ingestInboundMentions(deps, new InMemoryIngestionCursorStore(), "me");
+    const rows = await repo.listByStatus(["needs_response", "new", "review_needed", "draft_ready", "follow_up", "responded", "closed"] as any);
+    expect(rows.every((r: any) => r.priority !== "p2_relationship")).toBe(true);
+  });
+});
