@@ -89,6 +89,10 @@ export function describeTodaysVideo(input: TodaysVideoInput): TodaysVideo {
 
   const render = input.render;
   // P1 2026-11-15: an approved video with no render row (a render limit refused it, or it was dismissed) used to read "Rendering" forever.
+  // Retention removes a video's render once it is posted on every platform, so no render plus all links saved means it went out, not that it is missing.
+  if (!render && input.platformsPosted.length >= POSTING_PLATFORM_COUNT) {
+    return base("none", null, "No video yet today", `Last video: ${stripPrefix(latest.thesis)} (posted on all ${POSTING_PLATFORM_COUNT} platforms). Request today's in Video Status.`);
+  }
   if (!render) return base("none", latest.thesis, "No render yet", "The render was not queued (a render limit, or it was dismissed). Open Video Status to request it again.");
   if (render.status === "queued" || render.status === "rendering") {
     return base("rendering", latest.thesis, "Rendering", render?.status === "rendering" ? "The video is rendering. You get a push when it is ready." : "The render is queued. You get a push when it is ready.");
@@ -163,6 +167,8 @@ export async function loadTodaysVideo(client: Client, now: Date = new Date()): P
       const { data: renders, error: renderError } = await client.from("video_renders").select("status, error").eq("campaign_asset_id", assetId).order("created_at", { ascending: false }).limit(1);
       if (renderError) throw new Error(`today's video lookup failed (renders): ${renderError.message}`);
       render = ((renders ?? []) as Array<{ status: string; error: string | null }>)[0] ?? null;
+    }
+    if (assetId) {
       // video_posts exists once migration 0043 is applied; before that the card simply shows no posts.
       const { data: posts, error: postError } = await client.from("video_posts").select("platform").eq("campaign_asset_id", assetId);
       if (!postError) platformsPosted = ((posts ?? []) as Array<{ platform: string }>).map((p) => p.platform);

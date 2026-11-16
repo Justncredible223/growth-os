@@ -83,3 +83,15 @@ describe("Home P1 (2026-11-15)", () => {
     expect(describeTodaysVideo({ ...base, latest: newer, failedDraft }).state).toBe("needs_approval");
   });
 });
+
+describe("fully posted video whose render was cleaned up", () => {
+  it("is not reported as a missing render", () => {
+    const input = {
+      pendingTitles: [], render: null, startOfToday: "2026-11-15T07:00:00Z",
+      latest: { thesis: "Supply and demand", status: "approved", createdAt: "2026-11-14T10:00:00Z" },
+      platformsPosted: ["tiktok", "youtube_shorts", "instagram"],
+    };
+    expect(describeTodaysVideo(input).headline).toBe("No video yet today");
+    expect(describeTodaysVideo({ ...input, platformsPosted: [] }).headline).toBe("No render yet");
+  });
+});
