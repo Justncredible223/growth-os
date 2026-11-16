@@ -53,6 +53,10 @@ export interface ProspectingRunResult {
   screenedOut?: number;
   /** How many of this run's X requests read the creator watchlist instead of searching topics. */
   creatorRequests?: number;
+  /** How many posts the AI relevance screen checked this run (each is one Haiku call). */
+  screenChecks?: number;
+  /** Set when the run stopped early: "cost_not_recorded" = a search cost row could not be saved, so the budget could not be checked. */
+  stoppedReason?: "cost_not_recorded";
 }
 
 /** Rows scanned to count what is waiting. Was QUEUE_FULL_THRESHOLD + 1; the selectable count needs the whole backlog (the queue endpoint reads up to 500). */
@@ -485,6 +489,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     searchRequests,
     screenedOut,
     creatorRequests,
+    screenChecks: screenedChecked,
     ...(costNotRecorded ? { stoppedReason: "cost_not_recorded" as const } : {}),
   };
 }

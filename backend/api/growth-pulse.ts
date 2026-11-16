@@ -254,8 +254,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // failure -- still counts as a successful sync attempt so
             // Health doesn't flag it as broken.
             await recordSyncSuccess(client, "prospecting", `skipped -- ${result.skipReason}`);
-            // The search makes no model call (drafting happens on the owner's tap, see api/approvals.ts), so LLM is always 0 here.
-            return `skipped -- ${result.skipReason}; X reads: 0 posts $0.000; LLM: 0 calls $0.0000`;
+            // A skipped run reads nothing and screens nothing.
+            return `skipped -- ${result.skipReason}; X reads: 0 posts $0.000; LLM: 0 calls`;
           }
           if ("stoppedReason" in result && result.stoppedReason === "cost_not_recorded") {
             // P0 (ChatGPT 2026-11-15): a search that could not save its cost stopped itself; record it as a failure so Health shows it.
@@ -263,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } else {
             await recordSyncSuccess(client, "prospecting", `${result.newCandidates} new, ${result.postsRead} read`);
           }
-          return `${result.newCandidates} new (${result.excludedAsSpam} excluded as spam, ${result.excludedAsIrrelevant} as off-topic, ${result.selectableBefore ?? "?"} already selectable); X reads: ${result.postsRead} posts $${result.costUsd.toFixed(3)}; LLM: 0 calls $0.0000; topics: ${result.topicsSearched.join(", ")}`;
+          return `${result.newCandidates} new (${result.excludedAsSpam} excluded as spam, ${result.excludedAsIrrelevant} as off-topic, ${result.selectableBefore ?? "?"} already selectable); X reads: ${result.postsRead} posts $${result.costUsd.toFixed(3)}; LLM: ${"screenChecks" in result ? result.screenChecks : 0} screening calls (cost in prospecting_llm_call events); topics: ${result.topicsSearched.join(", ")}`;
         } catch (err) {
           await recordSyncFailure(client, "prospecting", errorMessage(err));
           throw err;

@@ -18,7 +18,7 @@ import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SHOWCASE_IDS, SHOWCASE_NONE } from "../content/fillbookShowcase.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
-import { OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, SCREENED_OUT_REASON, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
+import { FREE_FILTER_REASON, MAYBE_REASONS, OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, SCREENED_OUT_AT_DRAFT_REASON, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
 
 /** Thrown from inside the draft-retry loop when the model says the post is irrelevant, so the loop stops without retrying. */
 class ProspectingIrrelevantSignal extends Error {}
@@ -177,7 +177,8 @@ export async function listProspectingQueue(
   const overriddenIds = new Set(overridden.map((row) => row.id));
   const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle) }) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
   if (irrelevantIds.length > 0) {
-    await Promise.all(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant")));
+    // One failed update must not fail the whole queue read (P1 2026-11-15); the next read retries it.
+    await Promise.allSettled(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON })));
   }
   const eligible = irrelevantIds.length > 0 ? nonTerminal.filter((row) => !irrelevantIds.includes(row.id)) : nonTerminal;
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, now);
@@ -301,7 +302,7 @@ export async function draftScreenedOutPost(client: SupabaseClient, id: string, d
   // A double tap or retry after success: hand back the card that exists.
   if (row.status === "ready" && row.draftReply && row.scoreBreakdown?.[OWNER_OVERRIDE_KEY] === "true") return row;
   const since = now.getTime() - MAYBE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-  if (row.status !== "not_relevant" || row.skipReason !== SCREENED_OUT_REASON || Date.parse(row.updatedAt) < since) {
+  if (row.status !== "not_relevant" || !MAYBE_REASONS.includes(row.skipReason ?? "") || Date.parse(row.updatedAt) < since) {
     throw new ProspectingConflictError("Only a post the AI screen turned away in the last 7 days can be drafted anyway.");
   }
   return draftCandidateCore(client, id, deps, true, row);
@@ -327,7 +328,7 @@ async function draftCandidateCore(
   }
 
   if (!ownerOverride && !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle) })) {
-    await repo.updateStatus(id, "not_relevant");
+    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON });
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",
     );
@@ -352,7 +353,8 @@ async function draftCandidateCore(
   // isn't actually relevant gets rejected without paying for a full draft.
   const trustedCreator = isSeedCreator(row.authorHandle);
   if (!ownerOverride && !trustedCreator && !(await cheapRelevanceCheck(draftContext))) {
-    await repo.updateStatus(id, "not_relevant");
+    // Kept reachable from Maybe: an AI judgement the owner can overrule with Draft anyway.
+    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON });
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
   }
 
@@ -444,7 +446,7 @@ async function draftCandidateCore(
     },
   }).catch(async (err) => {
     if (err instanceof ProspectingIrrelevantSignal) {
-      await repo.updateStatus(id, "not_relevant");
+      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON });
       throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");
     }
     throw err;

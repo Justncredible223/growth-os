@@ -453,7 +453,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                         } else {
                             DetailPlaceholder(
                                 title = if (items.isEmpty()) "Nothing to reply to" else "Pick a candidate",
-                                hint = if (items.isEmpty()) "New opportunities are found on a schedule." else "Its post, draft reply and actions show here.",
+                                hint = if (items.isEmpty()) "New posts are searched three times a day." else "Its post, draft reply and actions show here.",
                             )
                         }
                     },
@@ -772,6 +772,10 @@ internal fun searchNowStatusLine(lastRun: ProspectingSearchRunResult?): String? 
             lastRun.skipReason?.startsWith("system_paused") == true -> "Search skipped -- Prospecting is currently paused."
             lastRun.skipReason?.startsWith("monthly_budget_reached") == true -> "Search skipped -- this month's Prospecting budget is used up."
             lastRun.skipReason?.startsWith("queue_full") == true -> "Search skipped -- the queue already has plenty of candidates waiting."
+            lastRun.skipReason?.startsWith("enough_waiting") == true -> "Search skipped -- enough good posts are already waiting."
+            lastRun.skipReason?.startsWith("daily_search_budget") == true -> "Search skipped -- today's search budget is used up. It resets tomorrow."
+            lastRun.skipReason?.startsWith("daily_search_cap") == true -> "Search skipped -- today's search limit is reached. It resets tomorrow."
+            lastRun.skipReason?.startsWith("searched_recently") == true -> "Search skipped -- these topics were searched in the last 3 hours."
             else -> lastRun.skipReason?.let { "Search skipped: $it" } ?: "Search skipped."
         }
     }
@@ -809,7 +813,7 @@ private fun formatFollowerCount(count: Int): String = when {
  * other.
  */
 internal fun prospectingEmptyStateMessage(diagnostics: ProspectingDiagnostics?): String {
-    val fallback = "New opportunities are found once a day. Check back soon, or pull to refresh."
+    val fallback = "New posts are searched three times a day. Check back soon, or pull to refresh."
     if (diagnostics == null) return fallback
     if (diagnostics.totalConsidered == 0) {
         return "No new candidates were found. Discovery will try again on its next scheduled run."
@@ -823,6 +827,10 @@ internal fun prospectingEmptyStateMessage(diagnostics: ProspectingDiagnostics?):
         if (diagnostics.belowQualityBar > 0) {
             val n = diagnostics.belowQualityBar
             add(if (n == 1) "1 candidate didn't meet today's quality bar" else "$n candidates didn't meet today's quality bar")
+        }
+        if (diagnostics.deferred > 0) {
+            val n = diagnostics.deferred
+            add(if (n == 1) "1 post is from someone you replied to in the last 3 days" else "$n posts are from people you replied to in the last 3 days")
         }
     }
     if (reasons.isEmpty()) return fallback
