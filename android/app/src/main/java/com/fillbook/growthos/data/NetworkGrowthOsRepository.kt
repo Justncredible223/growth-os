@@ -479,6 +479,9 @@ class NetworkGrowthOsRepository(
         creatorHandle = optStringOrNull("creatorHandle"),
         observedAt = getString("observedAt"),
         sourceReference = optStringOrNull("sourceReference"),
+        repliedToText = optStringOrNull("repliedToText"),
+        followUpDue = optBoolean("followUpDue", false),
+        authorExternalId = optStringOrNull("authorExternalId"),
     )
 
     // Folded into /api/approvals (?resource=inbound) rather than a new endpoint --
@@ -496,6 +499,8 @@ class NetworkGrowthOsRepository(
             followUp = json.getInt("followUp"),
             repeatEngagers = json.getInt("repeatEngagers"),
             overdue = json.getInt("overdue"),
+            people = json.optInt("people", 0),
+            followUpDue = json.optInt("followUpDue", 0),
         )
     }
 
@@ -520,8 +525,9 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=inbound", JSONObject().put("action", "close").put("id", id))
     }
 
-    override suspend fun runInboundBacklogRecovery() {
-        post("/api/approvals?resource=inbound", JSONObject().put("action", "backlog-recover"))
+    override suspend fun runInboundBacklogRecovery(): Int {
+        val json = post("/api/approvals?resource=inbound", JSONObject().put("action", "backlog-recover"))
+        return json.optInt("inserted", 0)
     }
 
     private fun JSONObject.toProspectingCandidate() = ProspectingCandidate(

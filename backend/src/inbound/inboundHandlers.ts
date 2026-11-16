@@ -19,6 +19,7 @@ import { findCreatorIdByHandle } from "../creators/supabaseCreatorRepository.js"
 import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../lib/integrationHealth.js";
 import { errorMessage } from "../lib/errorMessage.js";
 import type { InboundEngagement, InboundRepository, InboundStatus } from "./types.js";
+import { SupabaseProspectingRepository } from "../prospecting/supabaseProspectingRepository.js";
 
 export class InboundActionError extends Error {}
 
@@ -37,6 +38,10 @@ const OVERDUE_HOURS = 48;
 export interface InboundListItem extends InboundEngagement {
   creatorHandle: string | null;
   creatorCategory: string | null;
+  /** The text of our post this item replies to, from x_own_posts (null when it is not one of our stored posts). */
+  repliedToText?: string | null;
+  /** A follow-up flagged more than FOLLOW_UP_DUE_HOURS ago. */
+  followUpDue?: boolean;
 }
 
 /**
@@ -76,18 +81,45 @@ export async function listInbound(client: SupabaseClient, includeResolved = fals
     }
   }
 
-  return rows.map((row) => ({
+  // P1 2026-11-15: show the post each reply answers before any draft exists, from our own stored posts (x_own_posts; no X read).
+  const parentIds = [...new Set(rows.map((r) => r.inReplyToExternalId).filter((id): id is string => Boolean(id)))];
+  const parentText = new Map<string, string>();
+  if (parentIds.length > 0) {
+    const { data } = await client.from("x_own_posts").select("tweet_id, text").in("tweet_id", parentIds);
+    for (const p of (data ?? []) as Array<{ tweet_id: string; text: string }>) parentText.set(p.tweet_id, p.text);
+  }
+
+  return sortInboundQueue(rows).map((row) => ({
     ...row,
     creatorHandle: row.creatorId ? (creatorById.get(row.creatorId)?.handle ?? null) : null,
     creatorCategory: row.creatorId ? (creatorById.get(row.creatorId)?.category ?? null) : null,
+    repliedToText: row.inReplyToExternalId ? (parentText.get(row.inReplyToExternalId) ?? null) : null,
+    followUpDue: isFollowUpDue(row, new Date()),
   }));
 }
 
 export interface InboundSummary {
   needsResponse: number;
+  /** How many different people those unresolved items come from (8 replies from one account is 1 person). P1 2026-11-15. */
+  people: number;
   followUp: number;
+  /** Follow-ups flagged more than FOLLOW_UP_DUE_HOURS ago: they come back to the top of the queue. */
+  followUpDue: number;
   repeatEngagers: number;
   overdue: number;
+}
+
+/** A follow-up comes back to the top of the queue this long after it was flagged (P1 2026-11-15: they used to sit forever). */
+export const FOLLOW_UP_DUE_HOURS = 48;
+
+/** Queue order: due follow-ups, then direct replies, relationships, comments and mentions, newest first within each. */
+const PRIORITY_RANK: Record<string, number> = { p1_direct_reply: 1, p2_relationship: 2, p3_comment: 3, p4_mention: 4, low_value: 5 };
+export function isFollowUpDue(row: Pick<InboundEngagement, "status" | "updatedAt">, now: Date): boolean {
+  return row.status === "follow_up" && Date.parse(row.updatedAt) < now.getTime() - FOLLOW_UP_DUE_HOURS * 60 * 60 * 1000;
+}
+export function sortInboundQueue<T extends Pick<InboundEngagement, "status" | "updatedAt" | "priority" | "observedAt">>(rows: T[], now: Date = new Date()): T[] {
+  const rank = (r: T) => (isFollowUpDue(r, now) ? 0 : (PRIORITY_RANK[r.priority] ?? 9));
+  return [...rows].sort((a, b) => rank(a) - rank(b) || Date.parse(b.observedAt) - Date.parse(a.observedAt));
 }
 
 /**
@@ -123,11 +155,15 @@ export function computeInboundSummary(active: InboundEngagement[], now: Date = n
   const isUnresolved = (status: string) =>
     status === "needs_response" || status === "new" || status === "review_needed" || status === "draft_ready";
 
+  const unresolved = active.filter((r) => isUnresolved(r.status));
   return {
-    needsResponse: active.filter((r) => isUnresolved(r.status)).length,
+    needsResponse: unresolved.length,
+    people: new Set(unresolved.map((r) => `${r.platform}:${r.authorExternalId ?? r.authorHandle ?? r.id}`)).size,
     followUp: active.filter((r) => r.status === "follow_up").length,
+    followUpDue: active.filter((r) => isFollowUpDue(r, now)).length,
     repeatEngagers: active.filter((r) => r.isRepeatEngager).length,
-    overdue: active.filter((r) => isUnresolved(r.status) && new Date(r.observedAt).getTime() < cutoff).length,
+    // review_needed rows come from a backlog pass and are old by nature, so they are not counted as overdue (P1 2026-11-15).
+    overdue: unresolved.filter((r) => r.status !== "review_needed" && new Date(r.observedAt).getTime() < cutoff).length,
   };
 }
 
@@ -192,7 +228,13 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     inResponseToText: row.inResponseToText ?? (thread || null),
     ...(thread ? { thread } : {}),
     isRepeatEngager: row.isRepeatEngager,
-    priorInteractionCount: await repo.countPriorFromAuthor(row.platform, row.authorExternalId ?? ""),
+    // P1 2026-11-15: the count no longer includes this message itself.
+    priorInteractionCount: Math.max(0, (await repo.countPriorFromAuthor(row.platform, row.authorExternalId ?? "")) - 1),
+    // A Prospecting reply is only recorded once it was posted, so this is "we really replied to them before".
+    priorProspectingReply:
+      row.platform === "x" && row.authorExternalId
+        ? await new SupabaseProspectingRepository(client).hasPriorOutreach("x", row.authorExternalId).catch(() => false)
+        : false,
     styleExamples: await loadInboundStyleExamples(client),
   };
 
@@ -290,15 +332,32 @@ export async function closeInbound(client: SupabaseClient, id: string, note?: st
  * 'needs_response': see ingestInboundMentions's doc comment for why.
  * Anything already tracked is left completely untouched.
  */
-export async function runBacklogRecovery(client: SupabaseClient): Promise<{ fetched: number; inserted: number; skippedExisting: number }> {
+/** "Check for missed replies" runs at most once per this many minutes (P1 2026-11-15: it had no limit, about $0.05 a tap). */
+export const BACKLOG_COOLDOWN_MINUTES = 60;
+const BACKLOG_LAST_RUN_KEY = "inbound_backlog_last_run";
+
+export async function runBacklogRecovery(client: SupabaseClient, now: Date = new Date()): Promise<{ fetched: number; inserted: number; skippedExisting: number }> {
+  const cooldownStore = new SupabaseIngestionCursorStore(client);
+  const last = await cooldownStore.load(BACKLOG_LAST_RUN_KEY).catch(() => null);
+  if (last && now.getTime() - Date.parse(last) < BACKLOG_COOLDOWN_MINUTES * 60 * 1000) {
+    const minutes = Math.ceil((Date.parse(last) + BACKLOG_COOLDOWN_MINUTES * 60 * 1000 - now.getTime()) / 60000);
+    throw new InboundConflictError(`Missed replies were checked less than an hour ago. Try again in ${minutes} min.`);
+  }
   await recordSyncAttempt(client, "x_inbound");
   try {
+    await cooldownStore.save(BACKLOG_LAST_RUN_KEY, now.toISOString());
     const adapter = createXSignalAdapter(client);
     const userId = await adapter.resolveOwnUserId();
     const repo = new SupabaseInboundRepository(client);
     const cursorStore = new SupabaseIngestionCursorStore(client);
     const result = await ingestInboundMentions(
-      { adapter, repo, findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle) },
+      {
+        adapter,
+        repo,
+        findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle),
+        // Same relationship input as the forward sync, so a recovered item gets the same priority it would have had.
+        hasProspectingOutreach: (authorExternalId) => new SupabaseProspectingRepository(client).hasPriorOutreach("x", authorExternalId),
+      },
       cursorStore,
       userId,
       new Date(),

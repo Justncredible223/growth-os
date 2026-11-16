@@ -17,6 +17,10 @@ export class InMemoryInboundRepository implements InboundRepository {
     return this.rows.filter((r) => r.platform === platform && r.authorExternalId === authorExternalId).length;
   }
 
+  async countAnsweredFromAuthor(platform: string, authorExternalId: string, excludeConversationId: string | null): Promise<number> {
+    return this.rows.filter((r) => r.platform === platform && r.authorExternalId === authorExternalId && r.status === "responded" && (excludeConversationId === null || r.conversationId !== excludeConversationId)).length;
+  }
+
   async findLatestInConversation(conversationId: string): Promise<InboundEngagement | null> {
     const matches = this.rows
       .filter((r) => r.conversationId === conversationId)

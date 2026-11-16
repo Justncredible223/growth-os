@@ -185,6 +185,8 @@ export interface InboundDraftContext {
   thread?: string;
   isRepeatEngager: boolean;
   priorInteractionCount: number;
+  /** True when Fillbook already replied to one of this person's own posts through Prospecting (recorded only once posted). */
+  priorProspectingReply?: boolean;
   /** Recent owner edits shown as tone examples. Optional and best-effort, see inboundStyleExamples.ts. */
   styleExamples?: StyleExample[];
   /** Set on a retry: why the previous draft was rejected, so the model fixes it. See xReplyGuardrails.ts's buildRetryFeedback. */
@@ -211,9 +213,14 @@ export async function draftInboundResponse(
   verifiedKnowledgeSummary: string,
 ): Promise<InboundDraftResult> {
   const profile = inboundPlatformProfile(context.platform);
-  const relationshipNote = context.isRepeatEngager
-    ? `This person has engaged with Fillbook on ${profile.displayName} ${context.priorInteractionCount} time(s) before -- an existing relationship, not a stranger.`
-    : "No prior recorded engagement from this person.";
+  const relationshipNote = [
+    context.isRepeatEngager && context.priorInteractionCount > 0
+      ? `This person has engaged with Fillbook on ${profile.displayName} ${context.priorInteractionCount} time(s) before -- an existing relationship, not a stranger.`
+      : null,
+    context.priorProspectingReply ? "Fillbook replied to one of this person's own posts before (through Prospecting)." : null,
+  ]
+    .filter(Boolean)
+    .join(" ") || "No prior recorded engagement from this person.";
 
   const userMessage = [
     `Platform: ${profile.displayName}`,

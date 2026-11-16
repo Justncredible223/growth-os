@@ -109,7 +109,8 @@ interface GrowthOsRepository {
     suspend fun markInboundFollowUp(id: String)
     suspend fun closeInbound(id: String)
     /** Ignores the ingestion cursor and re-checks the recent window -- the "we found unanswered replies" recovery pass. */
-    suspend fun runInboundBacklogRecovery()
+    /** Returns how many new items the check stored. */
+    suspend fun runInboundBacklogRecovery(): Int
 
     /** The active Prospecting queue -- OTHER people's public X posts worth replying to, ranked highest score first. Marks any still-"new" rows "shown" server-side, so a refresh never presents the same candidate as freshly found twice. [ProspectingQueueResult.diagnostics] is null only when the API response predates that field -- never fabricated client-side. */
     suspend fun getProspectingQueue(): ProspectingQueueResult

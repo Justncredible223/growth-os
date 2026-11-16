@@ -309,6 +309,12 @@ data class InboundEngagement(
     val creatorHandle: String?,
     val observedAt: String,
     val sourceReference: String?,
+    /** Our own post this item replies to (from the backend's stored posts), shown before any draft exists. P1 2026-11-15. */
+    val repliedToText: String? = null,
+    /** A follow-up flagged more than 48 hours ago: it is back at the top of the queue. */
+    val followUpDue: Boolean = false,
+    /** The author's stable id, used to group several replies from one person. */
+    val authorExternalId: String? = null,
 )
 
 data class InboundSummary(
@@ -316,6 +322,9 @@ data class InboundSummary(
     val followUp: Int,
     val repeatEngagers: Int,
     val overdue: Int,
+    /** How many different people the items needing a response come from. 0 when the API predates it. */
+    val people: Int = 0,
+    val followUpDue: Int = 0,
 )
 
 /**
