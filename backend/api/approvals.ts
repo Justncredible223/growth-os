@@ -904,7 +904,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           decided_at: now,
         })
         .eq("id", asset.campaign_id)
-        .eq("status", "in_review")
+        // Fix 2026-11-15: Today's X Post drafts stay "draft" (never in_review), and Home's "New draft" rejects the current one before asking
+        // for another. Reject may therefore also move a draft campaign; approve still moves only in_review. A decided campaign never moves.
+        .in("status", action === "reject" ? ["in_review", "draft"] : ["in_review"])
         .select("id");
       if (updateError) throw updateError;
       if ((moved ?? []).length === 0) {
