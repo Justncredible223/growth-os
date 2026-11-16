@@ -27,7 +27,8 @@ export interface PlanVideo {
   posts: PlanPost[];
 }
 
-export type SlotStatus = "done" | "due" | "upcoming" | "empty";
+/** "waiting" (P0 2026-11-15): everything allowed is posted, but a platform is still blocked (YouTube's 48-hour rule). Never "done". */
+export type SlotStatus = "done" | "waiting" | "due" | "upcoming" | "empty";
 
 export interface PlanSlot {
   time: (typeof POSTING_SLOT_TIMES)[number];
@@ -36,6 +37,15 @@ export interface PlanSlot {
   video: PlanVideo | null;
   /** Platforms still to post for this slot's video. */
   remaining: PostingPlatform[];
+  /** Platforms not posted yet that may not be posted now (YouTube while the 48-hour rule blocks it). */
+  blocked: PostingPlatform[];
+}
+
+/** A video first posted on an earlier day and not posted everywhere yet (P0 2026-11-15). It stays actionable until it is. */
+export interface CarryOverVideo {
+  video: PlanVideo;
+  remaining: PostingPlatform[];
+  blocked: PostingPlatform[];
 }
 
 export interface PostingPlan {
@@ -44,6 +54,8 @@ export interface PostingPlan {
   slots: PlanSlot[];
   /** Ready videos not posted anywhere yet, beyond today's slots. */
   backlog: number;
+  /** Partly posted videos from earlier days that are not in today's slot, oldest first post first. */
+  carryOver: CarryOverVideo[];
   /** When YouTube may be posted to again (ISO), or null when it may be posted now. See YOUTUBE_MIN_HOURS_BETWEEN_POSTS. */
   youtubeNextAt: string | null;
 }
@@ -82,30 +94,54 @@ function remainingPlatforms(video: PlanVideo, youtubeBlocked: boolean): PostingP
   return POSTING_PLATFORMS.filter((p) => !done.has(p) && !(youtubeBlocked && p === "youtube_shorts"));
 }
 
+function blockedPlatforms(video: PlanVideo, youtubeBlocked: boolean): PostingPlatform[] {
+  return youtubeBlocked && !video.posts.some((p) => p.platform === "youtube_shorts") ? ["youtube_shorts"] : [];
+}
+
+const postedEverywhere = (v: PlanVideo): boolean => POSTING_PLATFORMS.every((pl) => v.posts.some((p) => p.platform === pl));
+
+/** A partly posted video keeps coming back for this many days after its first post, then it is left alone (old history). */
+export const CARRY_OVER_DAYS = 7;
+
 /**
- * Fills today's slot(s) (one a day now). Videos first posted today keep the slots, in the order they went out; the rest go to
- * ready videos that aren't fully posted yet, oldest first. A video posted before today never returns to the plan.
+ * Fills today's slot(s) (one a day now). Videos first posted today keep the slots, in the order they went out. Then (P0 2026-11-15,
+ * ChatGPT) a video first posted on an earlier day that still has a platform it may be posted to now, oldest first post first; then
+ * ready videos not posted anywhere yet, oldest first. Partly posted videos from earlier days that don't get the slot are listed in
+ * carryOver so their remaining platforms stay one tap away, until every platform is posted or CARRY_OVER_DAYS have passed.
  */
 export function buildPostingPlan(videos: PlanVideo[], now: Date = new Date(), lastYoutubePostAt: string | null = null): PostingPlan {
   const date = phoenixDate(now);
   const youtubeNextAt = youtubeNextAllowedAt(lastYoutubePostAt, now);
   const firstPostDate = (v: PlanVideo) => (v.posts.length ? phoenixDate(new Date(v.posts.map((p) => p.postedAt).sort()[0]!)) : null);
 
-  const startedToday = videos
-    .filter((v) => firstPostDate(v) === date)
-    .sort((a, b) => a.posts.map((p) => p.postedAt).sort()[0]!.localeCompare(b.posts.map((p) => p.postedAt).sort()[0]!));
+  const firstPostAt = (v: PlanVideo) => v.posts.map((p) => p.postedAt).sort()[0]!;
+  const youtubeBlocked = youtubeNextAt !== null;
+  const carryCutoff = new Date(now.getTime() - CARRY_OVER_DAYS * 24 * 3_600_000).toISOString();
+
+  const startedToday = videos.filter((v) => firstPostDate(v) === date).sort((a, b) => firstPostAt(a).localeCompare(firstPostAt(b)));
+  const unfinishedEarlier = videos
+    .filter((v) => v.posts.length > 0 && firstPostDate(v)! < date && !postedEverywhere(v) && firstPostAt(v) >= carryCutoff)
+    .sort((a, b) => firstPostAt(a).localeCompare(firstPostAt(b)));
+  const actionableEarlier = unfinishedEarlier.filter((v) => remainingPlatforms(v, youtubeBlocked).length > 0);
   const waiting = videos.filter((v) => v.posts.length === 0).sort((a, b) => a.readyAt.localeCompare(b.readyAt));
-  const queue = [...startedToday, ...waiting];
+  const queue = [...startedToday, ...actionableEarlier, ...waiting];
 
   const slots: PlanSlot[] = POSTING_SLOT_TIMES.map((time, i) => {
     const startsAt = phoenixInstant(date, time);
     const video = queue[i] ?? null;
-    const remaining = video ? remainingPlatforms(video, youtubeNextAt !== null) : [];
-    const status: SlotStatus = !video ? "empty" : remaining.length === 0 ? "done" : now >= startsAt ? "due" : "upcoming";
-    return { time, startsAt: startsAt.toISOString(), status, video, remaining };
+    const remaining = video ? remainingPlatforms(video, youtubeBlocked) : [];
+    const blocked = video ? blockedPlatforms(video, youtubeBlocked) : [];
+    const status: SlotStatus = !video ? "empty" : remaining.length === 0 ? (blocked.length > 0 ? "waiting" : "done") : now >= startsAt ? "due" : "upcoming";
+    return { time, startsAt: startsAt.toISOString(), status, video, remaining, blocked };
   });
 
-  return { date, slots, backlog: Math.max(0, waiting.length - Math.max(0, POSTING_SLOT_TIMES.length - startedToday.length)), youtubeNextAt };
+  const inSlots = new Set(slots.map((s) => s.video?.campaignAssetId).filter(Boolean));
+  const carryOver: CarryOverVideo[] = unfinishedEarlier
+    .filter((v) => !inSlots.has(v.campaignAssetId))
+    .map((v) => ({ video: v, remaining: remainingPlatforms(v, youtubeBlocked), blocked: blockedPlatforms(v, youtubeBlocked) }));
+  const waitingInSlots = waiting.filter((v) => inSlots.has(v.campaignAssetId)).length;
+
+  return { date, slots, backlog: waiting.length - waitingInSlots, carryOver, youtubeNextAt };
 }
 
 export interface ReplyViewSample {

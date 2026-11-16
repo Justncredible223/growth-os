@@ -471,8 +471,9 @@ class NetworkGrowthOsRepository(
         return json.optJSONObject("todayXPost").toTodayXPost()
     }
 
-    override suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String): TodayXPost {
+    override suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String, operatingDate: String?): TodayXPost {
         val body = JSONObject().put("action", "mark-posted").put("campaignAssetId", campaignAssetId).put("postedText", postedText)
+        operatingDate?.let { body.put("operatingDate", it) }
         val json = post("/api/summary?resource=x-feed-post", body)
         return json.optJSONObject("todayXPost").toTodayXPost()
     }

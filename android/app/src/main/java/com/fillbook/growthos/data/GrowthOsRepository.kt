@@ -81,7 +81,8 @@ interface GrowthOsRepository {
      * draft) -- required so future originality checks compare against
      * what was actually posted, not a pre-edit draft.
      */
-    suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String): TodayXPost
+    /** [operatingDate]: the day the draft belongs to, for a draft from Previous drafts (P0 2026-11-15); null = today's. */
+    suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String, operatingDate: String? = null): TodayXPost
     /** Prior days' X feed post runs (never today's own) -- the Previous Drafts / history surface. */
     suspend fun getTodayXPostHistory(): List<XFeedPostHistoryEntry>
 

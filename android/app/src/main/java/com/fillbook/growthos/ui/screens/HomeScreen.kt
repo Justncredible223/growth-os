@@ -282,7 +282,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                     item {
                         Box20 {
                             TwoUp(
-                                left = { NextBestActionCard(s, inbound, onNavigate) },
+                                left = { NextBestActionCard(s, inbound, health, onNavigate) },
                                 right = s.video?.let { video -> { TodaysVideoCard(video, onNavigate) } },
                             )
                         }
@@ -305,7 +305,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                         }
                     }
                 } else {
-                    item { Box20 { NextBestActionCard(s, inbound, onNavigate) } }
+                    item { Box20 { NextBestActionCard(s, inbound, health, onNavigate) } }
 
                     s.video?.let { video -> item { Box20 { TodaysVideoCard(video, onNavigate) } } }
 
@@ -484,7 +484,7 @@ private fun Box20(content: @Composable () -> Unit) {
  * strongest thing on the screen after the masthead -- see HeroActionCard.
  */
 @Composable
-private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, onNavigate: (String) -> Unit) {
+private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, health: List<HealthItem>, onNavigate: (String) -> Unit) {
     val (kicker, title, subtitle, actionLabel, route, icon) = when {
         inbound != null && inbound.needsResponse > 0 -> NextAction(
             "Next best action",
@@ -505,6 +505,25 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, o
             "AI-reviewed and waiting on your decision -- approve, reject, or open in-platform.",
             "Review now",
             "approvals",
+            Icons.Filled.CheckCircle,
+        )
+        // P0 2026-11-15: a video to finish or fix, an X draft to post, or a failing system part now count as "needs you".
+        summary.video?.state == TodaysVideoState.FAILED -> NextAction("Next best action", "Today's video failed to render", summary.video.detail, "Open Video Status", "video_status", Icons.Filled.CheckCircle)
+        summary.video?.state == TodaysVideoState.READY -> NextAction("Next best action", "Video: ${summary.video.headline.lowercase()}", summary.video.detail, "Open Video Status", "video_status", Icons.Filled.CheckCircle)
+        summary.todayXPost.state == TodayXPostState.READY || summary.todayXPost.state == TodayXPostState.HANDED_OFF -> NextAction(
+            "Next best action",
+            if (summary.todayXPost.state == TodayXPostState.READY) "Today's X post is ready to copy" else "Confirm today's X post went out",
+            "Open Today's X Post below.",
+            "See it below",
+            "home",
+            Icons.Filled.CheckCircle,
+        )
+        health.any { it.status.name == "DOWN" } -> NextAction(
+            "Next best action",
+            "${health.count { it.status.name == "DOWN" }} system part${if (health.count { it.status.name == "DOWN" } == 1) " is" else "s are"} down",
+            health.first { it.status.name == "DOWN" }.let { "${it.label}: ${it.detail}" },
+            "Open System",
+            "system",
             Icons.Filled.CheckCircle,
         )
         else -> NextAction(
