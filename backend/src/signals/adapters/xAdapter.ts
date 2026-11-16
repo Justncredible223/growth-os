@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XTokenState, XTokenStore } from "./xTokenStore.js";
 import { BootstrappingXTokenStore, SupabaseXTokenStore, bootstrapXTokenStateFromEnv } from "./xTokenStore.js";
 
+/** Pages of 50 mentions one sync may read (250 mentions, $0.25 at the Owned Reads rate) before it stops and warns. */
+export const MENTION_MAX_PAGES = 5;
+
 const TOKEN_ENDPOINT = "https://api.x.com/2/oauth2/token";
 const API_BASE = "https://api.x.com/2";
 const REFRESH_SAFETY_MARGIN_MS = 60_000;
@@ -201,7 +204,35 @@ export class XSignalAdapter {
    * user expansion so a mention arrives with a real @handle instead of
    * only a numeric author id nothing downstream could act on.
    */
+  /** Set by the last fetchOwnMentions call: true when it stopped at the page cap with more mentions still unread. */
+  private mentionsWereTruncated = false;
+
+  /**
+   * GET /2/users/:id/mentions, newest first. With a since_id it follows X's pagination (P0, ChatGPT 2026-11-15: one page of 50 plus a
+   * cursor jump lost every older mention when more than 50 arrived between runs), up to MENTION_MAX_PAGES pages; stopping at the cap
+   * sets mentionsTruncated() so the caller can raise a warning instead of losing them silently. Without a since_id (first run, backlog
+   * recovery) it reads one page.
+   */
   async fetchOwnMentions(userId: string, sinceId?: string, now: Date = new Date()): Promise<XMention[]> {
+    const all: XMention[] = [];
+    let token: string | undefined;
+    this.mentionsWereTruncated = false;
+    const maxPages = sinceId ? MENTION_MAX_PAGES : 1;
+    for (let page = 0; page < maxPages; page++) {
+      const { items, nextToken } = await this.fetchOwnMentionsPage(userId, sinceId, token, now);
+      all.push(...items);
+      token = nextToken;
+      if (!token) break;
+    }
+    if (token && sinceId) this.mentionsWereTruncated = true;
+    return all;
+  }
+
+  mentionsTruncated(): boolean {
+    return this.mentionsWereTruncated;
+  }
+
+  private async fetchOwnMentionsPage(userId: string, sinceId: string | undefined, paginationToken: string | undefined, now: Date): Promise<{ items: XMention[]; nextToken?: string }> {
     const params: Record<string, string> = {
       max_results: "50",
       "tweet.fields": "created_at,public_metrics,author_id,conversation_id,referenced_tweets,in_reply_to_user_id",
@@ -209,6 +240,7 @@ export class XSignalAdapter {
       "user.fields": "username",
     };
     if (sinceId) params.since_id = sinceId;
+    if (paginationToken) params.pagination_token = paginationToken;
 
     const json = (await this.authedGet(`/users/${userId}/mentions`, params, now)) as {
       data?: Array<{
@@ -222,11 +254,12 @@ export class XSignalAdapter {
         referenced_tweets?: Array<{ type: string; id: string }>;
       }>;
       includes?: { users?: Array<{ id: string; username: string }> };
+      meta?: { next_token?: string };
     };
 
     const handleByAuthorId = new Map((json.includes?.users ?? []).map((u) => [u.id, u.username]));
 
-    return (json.data ?? []).map((post) => ({
+    const items: XMention[] = (json.data ?? []).map((post) => ({
       id: post.id,
       text: post.text,
       authorId: post.author_id ?? null,
@@ -241,6 +274,7 @@ export class XSignalAdapter {
         )
         .map((r) => ({ type: r.type, id: r.id })),
     }));
+    return { items, nextToken: json.meta?.next_token };
   }
 
   /**

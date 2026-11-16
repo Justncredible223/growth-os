@@ -1141,7 +1141,7 @@ fun extractEngagementErrorMessage(httpCode: Int?, networkExceptionMessage: Strin
 }
 
 fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? =
-    extractServerActionErrorMessage(httpCode, networkExceptionMessage, setOf(404))
+    extractServerActionErrorMessage(httpCode, networkExceptionMessage, setOf(404, 422))
 
 /**
  * The server's own `{error: message}` text for the HTTP codes in [codes] (default: the 404 action error, 409 not-eligible and 500 such as

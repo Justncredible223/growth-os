@@ -67,6 +67,11 @@ export class RunScopedXReads {
     return this.userId;
   }
 
+  /** True when the last real mentions read stopped at the page cap (see XSignalAdapter.fetchOwnMentions). */
+  mentionsTruncated(): boolean {
+    return (this.adapter as { mentionsTruncated?: () => boolean }).mentionsTruncated?.() ?? false;
+  }
+
   async fetchOwnMentions(userId: string, sinceId?: string, now: Date = new Date()): Promise<XMention[]> {
     if (!this.mentions || this.mentions.userId !== userId) {
       const cursors = await Promise.all(this.mentionCursorSources.map((s) => this.cursorStore.load(s)));

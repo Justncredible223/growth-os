@@ -113,7 +113,8 @@ export async function buildInboundThread(client: SupabaseClient, row: InboundEng
       if (posted) {
         if (!turns.has(posted.tweet_id)) turns.set(posted.tweet_id, { who: "us", handle: "FillbookHQ", text: clip(posted.text), at: posted.created_at });
         candidateId = posted.prospecting_candidate_id ?? candidateId;
-      } else if (r.status === "responded" || r.status === "follow_up") {
+      } else if (r.status === "responded") {
+        // P0 2026-11-15: only a responded row was actually said. A follow_up row's draft was never posted, so it is not shown as our turn.
         const said = (r.final_response ?? r.draft_response)?.trim();
         // A just-posted reply has no tweet id yet; place it right after the message it answered.
         if (said) turns.set(`row:${r.id}`, { who: "us", handle: "FillbookHQ", text: clip(said), at: new Date(Date.parse(r.observed_at) + 1000).toISOString() });

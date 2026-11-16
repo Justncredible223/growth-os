@@ -9,7 +9,7 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { buildUtmParams, utmQueryString } from "../src/attribution/utmBuilder.js";
 import { getOrCreateDestinationLink } from "../src/attribution/contentPublications.js";
 import {
-  InboundActionError,
+  InboundActionError, InboundConflictError, InboundDraftRejectedError,
   closeInbound,
   draftResponseForInbound,
   listInbound,
@@ -135,6 +135,15 @@ async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<v
         res.status(400).json({ error: "action must be one of: draft, mark-responded, follow-up, close, backlog-recover" });
     }
   } catch (err) {
+    // P0 2026-11-15: real status codes, so the app can show the reason instead of "check your connection".
+    if (err instanceof InboundDraftRejectedError) {
+      res.status(422).json({ error: err.message });
+      return;
+    }
+    if (err instanceof InboundConflictError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     if (err instanceof InboundActionError) {
       res.status(404).json({ error: err.message });
       return;

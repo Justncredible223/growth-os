@@ -227,3 +227,43 @@ describe("markResponded -- capturing the owner's edit", () => {
     expect(row.final_response).toBeUndefined();
   });
 });
+
+describe("P0 status guards (ChatGPT 2026-11-15)", () => {
+  async function load() {
+    return await import("../src/inbound/inboundHandlers");
+  }
+  function clientWith(status: string, respondedAt: string | null = null) {
+    const c = buildClient();
+    const row = c.tables.inbound_engagements!.find((r: any) => r.id === "eng-1")!;
+    row.status = status;
+    row.responded_at = respondedAt;
+    return { c, row };
+  }
+
+  it("a second Responded changes nothing (respondedAt is kept)", async () => {
+    const { c, row } = clientWith("responded", "2026-11-15T10:00:00.000Z");
+    await markResponded(asSupabase(c), "eng-1");
+    expect(row.status).toBe("responded");
+    expect(row.responded_at).toBe("2026-11-15T10:00:00.000Z");
+  });
+
+  it("a closed item can't be marked responded, drafted or flagged (409-type error)", async () => {
+    const { InboundConflictError, markFollowUp } = await load();
+    const { c, row } = clientWith("closed");
+    await expect(markResponded(asSupabase(c), "eng-1")).rejects.toBeInstanceOf(InboundConflictError);
+    await expect(draftResponseForInbound(asSupabase(c), "eng-1")).rejects.toBeInstanceOf(InboundConflictError);
+    await expect(markFollowUp(asSupabase(c), "eng-1")).rejects.toBeInstanceOf(InboundConflictError);
+    expect(row.status).toBe("closed");
+  });
+
+  it("a responded item is not drafted again and not closed; closing twice is a no-op", async () => {
+    const { InboundConflictError, closeInbound } = await load();
+    const r = clientWith("responded", "2026-11-15T10:00:00.000Z");
+    await expect(draftResponseForInbound(asSupabase(r.c), "eng-1")).rejects.toBeInstanceOf(InboundConflictError);
+    await expect(closeInbound(asSupabase(r.c), "eng-1")).rejects.toBeInstanceOf(InboundConflictError);
+    expect(r.row.status).toBe("responded");
+    const cl = clientWith("closed");
+    await closeInbound(asSupabase(cl.c), "eng-1");
+    expect(cl.row.status).toBe("closed");
+  });
+});

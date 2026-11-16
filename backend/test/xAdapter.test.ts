@@ -302,3 +302,34 @@ describe("XSignalAdapter", () => {
     });
   });
 });
+
+describe("P0 2026-11-15: mentions follow pagination after a since_id, and warn at the cap", () => {
+  const now = new Date("2026-09-01T12:00:00Z");
+  const store = () => new InMemoryXTokenStore({ accessToken: "t", refreshToken: "r", expiresAt: new Date(now.getTime() + 3600_000) });
+  const page = (ids: string[], next?: string) => jsonResponse({ data: ids.map((id) => ({ id, text: "hi", author_id: "9" })), ...(next ? { meta: { next_token: next } } : {}) });
+
+  it("reads every page until there is no next token", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(page(["5", "4"], "p2")).mockResolvedValueOnce(page(["3", "2"]));
+    const adapter = new XSignalAdapter("c", "s", store(), fetchMock);
+    const items = await adapter.fetchOwnMentions("123", "1", now);
+    expect(items.map((m) => m.id)).toEqual(["5", "4", "3", "2"]);
+    expect(adapter.mentionsTruncated()).toBe(false);
+    expect(String(fetchMock.mock.calls[1]![0])).toContain("pagination_token=p2");
+  });
+
+  it("stops at 5 pages and says so", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => page(["9"], "more"));
+    const adapter = new XSignalAdapter("c", "s", store(), fetchMock);
+    await adapter.fetchOwnMentions("123", "1", now);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(adapter.mentionsTruncated()).toBe(true);
+  });
+
+  it("without a since_id it reads one page, as before", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => page(["9"], "more"));
+    const adapter = new XSignalAdapter("c", "s", store(), fetchMock);
+    await adapter.fetchOwnMentions("123", undefined, now);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(adapter.mentionsTruncated()).toBe(false);
+  });
+});

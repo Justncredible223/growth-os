@@ -149,3 +149,28 @@ describe("ingestInboundYoutubeComments", () => {
     expect(rows.find((r) => r.externalId === "c2")!.isRepeatEngager).toBe(true);
   });
 });
+
+describe("P0 2026-11-15: YouTube comments follow pages until the stored cursor", () => {
+  it("reads older pages until it finds the cursor, and stores only the new comments", async () => {
+    const { ingestInboundYoutubeComments } = await import("../src/inbound/inboundYoutubeIngestion");
+    const { InMemoryInboundRepository } = await import("../src/inbound/inMemoryInboundRepository");
+    const c = (id: string) => ({ id, text: "nice video", authorDisplayName: "a", authorChannelId: "ch-" + id, publishedAt: new Date("2026-11-15T10:00:00Z") });
+    const pages: Record<string, { comments: ReturnType<typeof c>[]; nextPageToken?: string }> = {
+      first: { comments: [c("c9"), c("c8")], nextPageToken: "t2" },
+      t2: { comments: [c("c7"), c("c6")], nextPageToken: "t3" },
+      t3: { comments: [c("c5"), c("old")], nextPageToken: "t4" },
+    };
+    const adapter = {
+      fetchTopLevelComments: async () => pages.first!.comments,
+      fetchTopLevelCommentsPage: async (_v: string, token?: string) => pages[token ?? "first"]!,
+    };
+    const saved = new Map<string, string>([["youtube_comments:vid", "old"]]);
+    const cursorStore = { load: async (k: string) => saved.get(k) ?? null, save: async (k: string, v: string) => void saved.set(k, v) } as any;
+    const repo = new InMemoryInboundRepository();
+    const keyFn = (await import("../src/inbound/inboundYoutubeIngestion")) as any;
+    if (keyFn.youtubeCommentCursorKey) { saved.clear(); saved.set(keyFn.youtubeCommentCursorKey("vid"), "old"); }
+    const result = await ingestInboundYoutubeComments({ adapter: adapter as any, repo }, cursorStore, "vid");
+    expect(result.inserted).toBe(5);
+    expect(result.truncated).toBeUndefined();
+  });
+});

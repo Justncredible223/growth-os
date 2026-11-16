@@ -8,7 +8,7 @@ import { closeOwnAccountItems, isOwnAccountAuthor } from "./ownAccount.js";
 export const INBOUND_CURSOR_SOURCE = "x_mention_inbound";
 
 export interface IngestInboundDeps {
-  adapter: Pick<XSignalAdapter, "fetchOwnMentions">;
+  adapter: Pick<XSignalAdapter, "fetchOwnMentions"> & { mentionsTruncated?: () => boolean };
   repo: InboundRepository;
   /** Resolves a handle to a tracked creator's id, if any -- links relationship context without this module depending on the creators module's repository shape. */
   findCreatorIdByHandle: (handle: string) => Promise<string | null>;
@@ -24,6 +24,8 @@ export interface IngestInboundDeps {
 }
 
 export interface IngestInboundResult {
+  /** True when the mentions read stopped at its page cap with more unread (the caller raises a warning). */
+  truncated?: boolean;
   fetched: number;
   inserted: number;
   skippedExisting: number;
@@ -58,6 +60,7 @@ export async function ingestInboundMentions(
 ): Promise<IngestInboundResult> {
   const sinceId = backlogRecovery ? undefined : ((await cursorStore.load(INBOUND_CURSOR_SOURCE)) ?? undefined);
   const mentions = await deps.adapter.fetchOwnMentions(userId, sinceId, now);
+  const truncated = deps.adapter.mentionsTruncated?.() ?? false;
   let inserted = 0;
   let skippedExisting = 0;
   let skippedOwnAccount = 0;
@@ -88,6 +91,7 @@ export async function ingestInboundMentions(
   }
 
   return {
+    ...(truncated ? { truncated: true } : {}),
     fetched: mentions.length,
     inserted,
     skippedExisting,
