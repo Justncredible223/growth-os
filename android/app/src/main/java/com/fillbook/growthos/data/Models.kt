@@ -77,6 +77,10 @@ data class ApprovalAsset(
     val waitingSince: String? = null,
     /** How many other waiting drafts say nearly the same thing. */
     val similarToOthers: Int = 0,
+    /** Waiting 7 days or more (flagged only; never rejected automatically). P2 2026-11-15. */
+    val stale: Boolean = false,
+    /** The text shown is the owner's own edit (saved as a new version). */
+    val ownerEdited: Boolean = false,
 )
 
 /** The daily auto-draft stops while [cap] drafts are waiting; [blocksAutoDraft] says it is stopped now. */

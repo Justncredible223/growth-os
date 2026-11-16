@@ -48,6 +48,9 @@ interface GrowthOsRepository {
 
     /** The owner's confirmation that an approved draft was posted, with the post link if they have it. */
     suspend fun markApprovalPosted(campaignAssetId: String, url: String?) {}
+
+    /** Saves the owner's edit of a waiting draft as a new version (the AI's text is kept as the earlier one). */
+    suspend fun editApproval(campaignAssetId: String, text: String) {}
     suspend fun getCampaigns(): List<Campaign>
     suspend fun getCostSummary(): CostSummary
     /**

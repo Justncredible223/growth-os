@@ -809,8 +809,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
+      // P2 2026-11-15 (ChatGPT): the owner's edit before approving is saved as a new version; the AI's text stays as the earlier one.
+      if (action === "edit") {
+        const text = typeof (body as { text?: unknown })?.text === "string" ? ((body as { text?: string }).text ?? "").trim() : "";
+        if (!campaignAssetId || text.length < 1 || text.length > 4000) {
+          res.status(400).json({ error: "Body must be { campaignAssetId, action: 'edit', text: 1-4000 characters }" });
+          return;
+        }
+        const { data: editAsset } = await client.from("campaign_assets").select("id, stage, campaigns(status)").eq("id", campaignAssetId).maybeSingle();
+        const ea = editAsset as { stage: string; campaigns: { status: string } | { status: string }[] | null } | null;
+        if (!ea) {
+          res.status(404).json({ error: "This draft no longer exists." });
+          return;
+        }
+        const eStatus = Array.isArray(ea.campaigns) ? ea.campaigns[0]?.status : ea.campaigns?.status;
+        if (ea.stage !== "ready_for_owner" || eStatus !== "in_review") {
+          res.status(409).json({ error: "Only a draft still waiting for a decision can be edited." });
+          return;
+        }
+        const { data: latest } = await client.from("content_versions").select("version, body, metadata").eq("campaign_asset_id", campaignAssetId).order("version", { ascending: false }).limit(1).maybeSingle();
+        const prev = latest as { version: number; body: string; metadata: Record<string, unknown> | null } | null;
+        if (prev && prev.body.trim() === text) {
+          res.status(200).json({ campaignAssetId, version: prev.version, unchanged: true, draftingNote: findDraftingNote(text) });
+          return;
+        }
+        const nextVersion = (prev?.version ?? 0) + 1;
+        // Keep where it came from (so it still shows as an HQ draft) but not HQ's draft id: HQ's dedupe matches its own text, not the owner's.
+        const { hqDraftId: _drop, ...keep } = (prev?.metadata ?? {}) as Record<string, unknown>;
+        const { error: insertError } = await client.from("content_versions").insert({
+          campaign_asset_id: campaignAssetId,
+          version: nextVersion,
+          body: text,
+          metadata: { ...keep, ownerEdited: true, editedFromVersion: prev?.version ?? null },
+          created_by: "owner_edit",
+        });
+        if (insertError) throw insertError;
+        res.status(200).json({ campaignAssetId, version: nextVersion, draftingNote: findDraftingNote(text) });
+        return;
+      }
+
       if (!campaignAssetId || (action !== "approve" && action !== "reject")) {
-        res.status(400).json({ error: "Body must be { campaignAssetId: string, action: 'approve' | 'reject' | 'hand-off' }" });
+        res.status(400).json({ error: "Body must be { campaignAssetId: string, action: 'approve' | 'reject' | 'hand-off' | 'edit' | 'mark-posted' }" });
         return;
       }
 
@@ -1015,6 +1054,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           source,
           displayTitle: source === "hq" ? readableTitle(body, campaignTitle) : campaignTitle,
           waitingSince: (asset.created_at as string | null) ?? null,
+          // P2 2026-11-15: waiting 7 days or more. Flagged for the owner; never rejected or deleted automatically.
+          stale: asset.created_at ? Date.now() - Date.parse(asset.created_at as string) >= 7 * 24 * 60 * 60 * 1000 : false,
+          ownerEdited: Boolean((latestVersion?.metadata as { ownerEdited?: unknown } | null)?.ownerEdited),
           // The daily concept behind a motion video draft and its day (1-30); null for any other draft.
           conceptTitle: campaignTitle.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX) ? campaignTitle.slice(MANUAL_MOTION_CONCEPT_TITLE_PREFIX.length) : null,
           conceptDay: dayForTitle(campaignTitle),
