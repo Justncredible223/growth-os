@@ -313,6 +313,10 @@ class NetworkGrowthOsRepository(
         post("/api/approvals", body)
     }
 
+    override suspend fun editApproval(campaignAssetId: String, text: String) {
+        post("/api/approvals", JSONObject().put("campaignAssetId", campaignAssetId).put("action", "edit").put("text", text))
+    }
+
     private fun parseApprovals(json: JSONObject): List<ApprovalAsset> {
         return json.getJSONArray("approvals").map { item ->
             ApprovalAsset(
@@ -345,6 +349,8 @@ class NetworkGrowthOsRepository(
                 displayTitle = item.optStringOrNull("displayTitle"),
                 waitingSince = item.optStringOrNull("waitingSince"),
                 similarToOthers = item.optInt("similarToOthers", 0),
+                stale = item.optBoolean("stale", false),
+                ownerEdited = item.optBoolean("ownerEdited", false),
             )
         }
     }

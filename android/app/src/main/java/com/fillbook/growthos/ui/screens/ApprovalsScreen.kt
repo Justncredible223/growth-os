@@ -112,6 +112,10 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var unpostedOpen by rememberSaveable { mutableStateOf(false) }
     var pendingPosted by remember { mutableStateOf<com.fillbook.growthos.data.ApprovedUnposted?>(null) }
     var postedUrl by remember { mutableStateOf("") }
+    // P2 2026-11-15: the draft being edited and its text; and the confirm for rejecting every draft waiting 7+ days.
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var editText by remember { mutableStateOf("") }
+    var confirmRejectStale by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -266,6 +270,31 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                         },
                         onReject = { pendingReject = asset },
                         onCopyAndShare = { copyAndShare(asset) },
+                        editing = editingId == asset.id,
+                        editText = editText,
+                        onEditTextChange = { editText = it },
+                        onStartEdit = { editingId = asset.id; editText = asset.previewText },
+                        onCancelEdit = { editingId = null },
+                        onSaveEdit = {
+                            val text = editText
+                            if (asset.id !in busyIds) {
+                                busyIds.add(asset.id)
+                                scope.launch {
+                                    try {
+                                        repo.editApproval(asset.id, text)
+                                        editingId = null
+                                        refresh()
+                                        snackbarHostState.showSnackbar("Edit saved as a new version.")
+                                    } catch (e: Exception) {
+                                        actionError = (e as? com.fillbook.growthos.data.NetworkException)
+                                            ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(400, 404, 409, 422, 500)) }
+                                            ?: "Couldn't save the edit. Check your connection and try again."
+                                    } finally {
+                                        busyIds.remove(asset.id)
+                                    }
+                                }
+                            }
+                        },
                     )
                 }
 
@@ -294,6 +323,20 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Warning,
                                         )
+                                    }
+                                }
+                                val staleCount = assets.count { it.stale }
+                                if (staleCount > 0) {
+                                    item(key = "stale-row") {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                            Text(
+                                                "$staleCount draft${if (staleCount == 1) " has" else "s have"} waited 7 days or more.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextTertiary,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            TextButton(onClick = { confirmRejectStale = true }) { Text("Reject old drafts") }
+                                        }
                                     }
                                 }
                                 if (filtered.isEmpty()) {
@@ -356,6 +399,22 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    if (confirmRejectStale) {
+        val stale = assets.filter { it.stale }
+        AlertDialog(
+            onDismissRequest = { confirmRejectStale = false },
+            title = { Text("Reject ${stale.size} old draft${if (stale.size == 1) "" else "s"}?") },
+            text = { Text("Every draft that has waited 7 days or more will be rejected with the reason \"Too old\". Nothing is deleted, and nothing else changes.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRejectStale = false
+                    stale.forEach { decide(it, approve = false, reason = "Too old") }
+                }) { Text("Reject ${stale.size}") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRejectStale = false }) { Text("Cancel") } },
+        )
     }
 
     pendingPosted?.let { item ->
@@ -455,6 +514,12 @@ private fun ApprovalCard(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onCopyAndShare: () -> Unit,
+    editing: Boolean = false,
+    editText: String = "",
+    onEditTextChange: (String) -> Unit = {},
+    onStartEdit: () -> Unit = {},
+    onCancelEdit: () -> Unit = {},
+    onSaveEdit: () -> Unit = {},
 ) {
     val total = asset.reviewPassCount + asset.reviewFailCount
     val flagged = asset.reviewFailCount > 0
@@ -475,6 +540,8 @@ private fun ApprovalCard(
                     IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
                     IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
                     if (asset.isAutoDraft) Pill("AUTO-DRAFT", statusToneColor(StatusTone.NEW))
+                    if (asset.stale) Pill("WAITING 7+ DAYS", Warning)
+                    if (asset.ownerEdited) Pill("YOUR EDIT", Accent)
                 }
                 approvalSourceLine(asset)?.let { line ->
                     Spacer(Modifier.height(4.dp))
@@ -483,7 +550,22 @@ private fun ApprovalCard(
             }
         }
         Spacer(Modifier.height(12.dp))
-        ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
+        if (editing) {
+            androidx.compose.material3.OutlinedTextField(
+                value = editText,
+                onValueChange = onEditTextChange,
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onSaveEdit, enabled = !busy && editText.isNotBlank()) { Text("Save edit") }
+                TextButton(onClick = onCancelEdit, enabled = !busy) { Text("Cancel") }
+            }
+        } else {
+            ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
+            // P2 2026-11-15: fix a draft before approving it; saved as a new version, never in place.
+            TextButton(onClick = onStartEdit, enabled = !busy) { Text("Edit") }
+        }
         if (asset.similarToOthers > 0) {
             Spacer(Modifier.height(6.dp))
             Text(

@@ -260,3 +260,13 @@ describe("P0 2026-11-15: drafting notes are refused at intake, a half-finished h
     expect(updates.some((u) => u.table === "campaign_assets" && u.row.stage === "ready_for_owner")).toBe(true);
   });
 });
+
+describe("xPostTextProblem: the checks an owner's edit must pass too (ChatGPT 2026-11-15)", () => {
+  it("finds links, drafting notes and markdown labels, and passes a clean post", async () => {
+    const { xPostTextProblem } = await import("../src/hq/hqHandoff");
+    expect(xPostTextProblem("Check https://example.com for more")).toBe("it contains a link");
+    expect(xPostTextProblem("Log your trades daily. (Character count: 120)")).toMatch(/character or word count/);
+    expect(xPostTextProblem("**Draft 1 (X)** Log your trades.")).toMatch(/markdown labels/);
+    expect(xPostTextProblem("Log one line after every session: the plan versus what you did.")).toBeNull();
+  });
+});

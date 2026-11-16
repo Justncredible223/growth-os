@@ -61,6 +61,20 @@ const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,80}$/;
 /** Markdown bold markers, or a line that starts with a draft label ("Draft 1", "Option 2", "Version A"). */
 const MARKDOWN_LABEL = /\*\*|^\s*(?:draft|option|version|variant)\s*(?:#?\d+|[a-c])\s*(?:[:.)\]-]|\(|$)/im;
 
+/**
+ * The deterministic checks an X post body must pass, shared by HQ intake and the owner's edit in Approvals (ChatGPT 2026-11-15: an edit
+ * passes the same checks as a new draft). Null when the text is fine, otherwise the reason.
+ */
+export function xPostTextProblem(text: string): string | null {
+  if (MARKDOWN_LABEL.test(text)) return "remove markdown labels such as **Draft 1 (X)** and keep a single post";
+  if (containsLink(text)) return "it contains a link";
+  const violation = containsUnverifiedClaim(text) ?? containsFalseGiveawayClaim(text) ?? dashProblem(text);
+  if (violation) return violation.reason;
+  const note = findDraftingNote(text);
+  if (note) return `it contains ${note}`;
+  return null;
+}
+
 export function validateHqHandoffBody(body: unknown): HqHandoffValidation {
   const bad = (error: string): HqHandoffValidation => ({ ok: false, status: 400, error });
   if (!body || typeof body !== "object") return bad("Body must be a JSON object");
