@@ -6,6 +6,7 @@ import { buildPinnedComment } from "./pinnedComment.js";
 import { dayForTitle } from "./todaysVideo.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "./videoRenderEligibility.js";
+import { RETENTION_MARKER, removeRenderSafely } from "./videoRenderRetention.js";
 
 /**
  * The platform-specific publishing metadata generated alongside the video
@@ -109,7 +110,8 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
     .limit(limit);
   if (error) throw new Error(`listVideoRenderStatuses failed: ${error.message}`);
 
-  const rows = (data ?? []) as VideoRenderRow[];
+  // Rows retention or Dismiss is removing (tombstones) are not shown.
+  const rows = ((data ?? []) as VideoRenderRow[]).filter((r) => !(r.status === "canceled" && (r.error ?? "").startsWith(RETENTION_MARKER)));
 
   // One batched query for every row's own latest content_versions.metadata,
   // instead of one query per row -- a render's own campaign_asset_id is the
@@ -149,13 +151,17 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
       const isConcept = thesis !== undefined && thesis.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX);
       let downloadUrl: string | null = null;
       let thumbnailDownloadUrl: string | null = null;
+      let fileMissing = false;
+      if (row.status === "ready" && !row.storage_path) fileMissing = true;
       if (row.status === "ready" && row.storage_path) {
         // A signing failure (bucket hiccup, transient error) never fails the
         // whole status list -- this row just surfaces with no download link,
         // and the next refresh tries again, same "never block on a
         // best-effort extra" pattern used throughout this feature.
-        const { data: signed } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS);
+        const { data: signed, error: signError } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS);
         downloadUrl = signed?.signedUrl ?? null;
+        // P0 2026-11-15: never show "ready" for a file that is gone; a not-found answer (not a passing hiccup) marks it missing.
+        if (!downloadUrl && /not.?found|does not exist/i.test(signError?.message ?? "")) fileMissing = true;
       }
       if (row.status === "ready" && row.thumbnail_path) {
         const { data: signedThumb } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(row.thumbnail_path, SIGNED_URL_TTL_SECONDS);
@@ -180,6 +186,8 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         conceptTitle: isConcept ? thesis!.slice(MANUAL_MOTION_CONCEPT_TITLE_PREFIX.length) : null,
         conceptDay: isConcept ? dayForTitle(thesis!) : null,
         publishedUrl: row.published_url,
+        fileMissing,
+        stuck: (row.status === "queued" || row.status === "rendering") && Date.now() - Date.parse(row.updated_at) > STUCK_RENDER_RETRY_MINUTES * 60 * 1000,
       };
     }),
   );
@@ -215,7 +223,8 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
     .eq("id", videoRenderId)
     .maybeSingle();
   if (fetchError) throw new Error(`dismissVideoRender fetch failed: ${fetchError.message}`);
-  if (!data) throw new Error(`video render not found: ${videoRenderId}`);
+  // P0 2026-11-15: a second tap (or a retry after a timeout) finds nothing to do, which is success, not an error.
+  if (!data) return;
   const {
     campaign_asset_id: campaignAssetId,
     status,
@@ -228,25 +237,14 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
     thumbnail_path: string | null;
   };
 
-  // For ready renders, delete the video (and thumbnail, if one was ever
-  // generated) from storage before removing DB rows.
-  if (status === "ready") {
-    const pathsToDelete = [storagePath, thumbnailPath].filter((p): p is string => p !== null);
-    if (pathsToDelete.length > 0) {
-      const { error: storageError } = await client.storage.from("rendered-videos").remove(pathsToDelete);
-      if (storageError) throw new Error(`dismissVideoRender storage delete failed: ${storageError.message}`);
-    }
-  }
+  // A video published automatically keeps its audit row (platform_publications references the render), so it is not dismissed.
+  const { count: publishedCount } = await client.from("platform_publications").select("id", { count: "exact", head: true }).eq("video_render_id", videoRenderId);
+  if ((publishedCount ?? 0) > 0) throw new VideoStatusActionError("This video was published automatically, so its record is kept and it can't be dismissed.");
 
-  // Delete child rows first -- video_render_notifications and
-  // video_storage_reservations both FK-reference video_renders(id) without
-  // ON DELETE CASCADE, so a direct delete of the parent throws a FK violation.
-  const { error: notifError } = await client.from("video_render_notifications").delete().eq("video_render_id", videoRenderId);
-  if (notifError) throw new Error(`dismissVideoRender notif delete failed: ${notifError.message}`);
-  const { error: reserveError } = await client.from("video_storage_reservations").delete().eq("video_render_id", videoRenderId);
-  if (reserveError) throw new Error(`dismissVideoRender reservation delete failed: ${reserveError.message}`);
-  const { error: deleteError } = await client.from("video_renders").delete().eq("id", videoRenderId);
-  if (deleteError) throw new Error(`dismissVideoRender delete failed: ${deleteError.message}`);
+  // P0 2026-11-15: tombstone first, then the files, then the rows (removeRenderSafely). The old order removed the file before a row delete
+  // that could fail, leaving a "ready" card with no file.
+  void status;
+  await removeRenderSafely(client, videoRenderId, [storagePath, thumbnailPath]);
 
   const { error: markError } = await client
     .from("campaign_assets")
@@ -256,6 +254,15 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
 }
 
 export class VideoStatusActionError extends Error {}
+
+/** A queued or rendering video with no progress for this long is "stuck": flagged in the app and in Health, and can be retried. */
+export const STUCK_RENDER_RETRY_MINUTES = 45;
+
+/** True when the stored file is there (a signed link can be made for it). */
+export async function renderFileExists(client: SupabaseClient, path: string): Promise<boolean> {
+  const { data, error } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60);
+  return !error && Boolean(data?.signedUrl);
+}
 
 export interface RetryRenderResult {
   queued: boolean;
@@ -273,7 +280,28 @@ export async function retryFailedRender(client: SupabaseClient, videoRenderId: s
   if (error) throw new Error(`retryFailedRender fetch failed: ${error.message}`);
   if (!data) throw new VideoStatusActionError(`video render not found: ${videoRenderId}`);
   const { campaign_asset_id: campaignAssetId, status } = data as { campaign_asset_id: string; status: string };
-  if (status !== "failed") throw new VideoStatusActionError("Only a failed render can be retried.");
+  // P0 2026-11-15: a render stuck in queued/rendering for STUCK_RENDER_RETRY_MINUTES, or a ready render whose file is gone, can be retried
+  // too. A stuck row is first marked failed with a conditional update, so a runner that is in fact still working (it touches updated_at)
+  // is never raced: the update matches nothing and the retry is refused.
+  if (status === "queued" || status === "rendering") {
+    const cutoff = new Date(Date.now() - STUCK_RENDER_RETRY_MINUTES * 60 * 1000).toISOString();
+    const { data: marked } = await client
+      .from("video_renders")
+      .update({ status: "failed", error: `No progress for ${STUCK_RENDER_RETRY_MINUTES} minutes; retried by the owner.`, updated_at: new Date().toISOString() })
+      .eq("id", videoRenderId)
+      .in("status", ["queued", "rendering"])
+      .lt("updated_at", cutoff)
+      .select("id");
+    if ((marked ?? []).length === 0) throw new VideoStatusActionError(`This render is still running. It can be retried after ${STUCK_RENDER_RETRY_MINUTES} minutes without progress.`);
+  } else if (status === "ready") {
+    const { data: row } = await client.from("video_renders").select("storage_path").eq("id", videoRenderId).maybeSingle();
+    const path = (row as { storage_path?: string | null } | null)?.storage_path ?? null;
+    const missing = !path || !(await renderFileExists(client, path));
+    if (!missing) throw new VideoStatusActionError("This video is ready; there is nothing to retry.");
+    await client.from("video_renders").update({ status: "failed", error: "The video file is missing; re-rendered by the owner.", updated_at: new Date().toISOString() }).eq("id", videoRenderId).eq("status", "ready");
+  } else if (status !== "failed") {
+    throw new VideoStatusActionError("Only a failed, stuck or missing render can be retried.");
+  }
 
   const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
     p_campaign_asset_id: campaignAssetId,

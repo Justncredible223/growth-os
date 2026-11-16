@@ -515,7 +515,15 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
         res.status(400).json({ error: "Body must include { action: 'dismiss', videoRenderId: string }" });
         return;
       }
-      await dismissVideoRender(client, body.videoRenderId);
+      try {
+        await dismissVideoRender(client, body.videoRenderId);
+      } catch (err) {
+        if (err instanceof VideoStatusActionError) {
+          res.status(409).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
       res.status(200).json({ dismissed: true });
       return;
     }
@@ -528,7 +536,7 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
         res.status(200).json(await retryFailedRender(client, body.videoRenderId));
       } catch (err) {
         if (err instanceof VideoStatusActionError) {
-          res.status(400).json({ error: err.message });
+          res.status(409).json({ error: err.message });
           return;
         }
         throw err;
@@ -574,7 +582,7 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
       res.status(400).json({
         error:
           "Body must be { action: 'register-device', fcmToken: string }, { action: 'dismiss', videoRenderId: string }, " +
-          "{ action: 'retry-render', videoRenderId: string }, or { action: 'set-published-url', videoRenderId: string, publishedUrl: string }",
+          "{ action: 'retry-render', videoRenderId: string }, { action: 'metricool-package', videoRenderId: string } or { action: 'set-published-url', videoRenderId: string, publishedUrl: string }",
       });
       return;
     }

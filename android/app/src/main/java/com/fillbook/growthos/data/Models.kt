@@ -641,6 +641,10 @@ data class VideoRenderStatus(
     val videoMetadata: VideoRenderMetadata? = null,
     /** The real external URL the owner pasted back in after manually posting this video -- null until they do. See setVideoPublishedUrl. */
     val publishedUrl: String? = null,
+    /** A ready video whose file is gone (P0 2026-11-15): shown as missing with Re-render, never as ready. */
+    val fileMissing: Boolean = false,
+    /** Queued or rendering with no progress for 45 minutes: shown as stuck with Retry render. */
+    val stuck: Boolean = false,
     /** The daily concept behind this video and its day (1-30), when it came from one. */
     val conceptTitle: String? = null,
     val conceptDay: Int? = null,

@@ -46,9 +46,33 @@ describe("retryFailedRender", () => {
     expect(calls).toEqual([]);
   });
 
-  it("refuses to retry a render that did not fail", async () => {
-    const { client, rpc } = fakeClient({ render: { campaign_asset_id: "asset-1", status: "ready" } });
+  it("refuses to retry a ready render whose file is there", async () => {
+    const { client, rpc } = fakeClient({ render: { campaign_asset_id: "asset-1", status: "ready", storage_path: "x.mp4" } });
+    (client as any).storage = { from: () => ({ createSignedUrl: async () => ({ data: { signedUrl: "https://signed" }, error: null }) }) };
     await expect(retryFailedRender(client, "render-1")).rejects.toBeInstanceOf(VideoStatusActionError);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("P0 2026-11-15: a ready render whose file is gone can be re-rendered", async () => {
+    const { client, rpc } = fakeClient({ render: { campaign_asset_id: "asset-1", status: "ready", storage_path: "gone.mp4" }, rpcRow: { eligible: true, reason: null } });
+    (client as any).storage = { from: () => ({ createSignedUrl: async () => ({ data: null, error: { message: "Object not found" } }) }) };
+    const fromBase = (client as any).from;
+    (client as any).from = (t: string) => { const c = fromBase(t); c.update = () => c; return c; };
+    const result = await retryFailedRender(client, "render-1");
+    expect(result.queued).toBe(true);
+    expect(rpc).toHaveBeenCalled();
+  });
+
+  it("P0 2026-11-15: a render that is still making progress is not retried (no second runner)", async () => {
+    const { client, rpc } = fakeClient({ render: { campaign_asset_id: "asset-1", status: "rendering" } });
+    const fromBase = (client as any).from;
+    (client as any).from = (t: string) => {
+      const c = fromBase(t);
+      c.update = () => c; c.in = () => c; c.lt = () => c;
+      c.select = () => Object.assign(Promise.resolve({ data: [], error: null }), c, { maybeSingle: c.maybeSingle });
+      return c;
+    };
+    await expect(retryFailedRender(client, "render-1")).rejects.toThrow(/still running/);
     expect(rpc).not.toHaveBeenCalled();
   });
 
