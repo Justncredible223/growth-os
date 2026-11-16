@@ -105,6 +105,12 @@ export interface ProspectingRepository {
 
 /** The reason stored on a post the model relevance screen turned away (set in prospectingSearch.ts). */
 export const SCREENED_OUT_REASON = "screened_out_at_discovery";
+/** The AI check at draft time turned the post away (P1 2026-11-15): kept reachable from Maybe / Draft anyway, like a discovery screen-out. */
+export const SCREENED_OUT_AT_DRAFT_REASON = "screened_out_at_draft";
+/** Every reason a post lands in Maybe: an AI judgement the owner may overrule. The free regex gate's drops are deterministic and stay out. */
+export const MAYBE_REASONS: readonly string[] = [SCREENED_OUT_REASON, SCREENED_OUT_AT_DRAFT_REASON];
+/** The free filter dropped the post (at draft time or when the queue is read): stored so nobody has to guess why it vanished. */
+export const FREE_FILTER_REASON = "free_filter";
 
 /** Keys stored inside score_breakdown when the owner chose to draft a post the screen turned away. */
 export const OWNER_OVERRIDE_KEY = "owner_override";

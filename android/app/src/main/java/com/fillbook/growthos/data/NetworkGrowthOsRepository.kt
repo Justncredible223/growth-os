@@ -590,7 +590,7 @@ class NetworkGrowthOsRepository(
 
     private fun JSONObject.toProspectingPacing() = ProspectingPacing(
         repliedLast24h = optInt("repliedLast24h"),
-        dailyCap = optInt("dailyCap", 5),
+        dailyCap = optInt("dailyCap", 10),
         cooldownMinutes = optInt("cooldownMinutes", 20),
         nextReplyAtMillis = if (isNull("nextReplyAt")) null else runCatching { java.time.Instant.parse(getString("nextReplyAt")).toEpochMilli() }.getOrNull(),
         reason = if (isNull("reason")) null else optString("reason"),

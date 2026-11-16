@@ -34,6 +34,8 @@ internal fun optionText(candidate: ProspectingCandidate, style: String, edits: M
 /** The text that would be copied or posted right now. Falls back to the single-draft behavior when there are no options. */
 internal fun currentReplyText(candidate: ProspectingCandidate, edits: Map<String, String>, chosen: String?): String? {
     if (candidate.draftOptions.isEmpty()) return edits[candidate.id] ?: candidate.draftReply
+    // One option is shown in the single draft box, which saves edits under the bare id (P1 2026-11-15: those edits were being dropped).
+    if (!hasTwoOptions(candidate)) return edits[candidate.id] ?: candidate.draftOptions.first().text
     val style = activeStyle(candidate, chosen) ?: return candidate.draftReply
     return optionText(candidate, style, edits)
 }

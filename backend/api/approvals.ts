@@ -213,14 +213,18 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
       case "skip":
         await markProspectingSkipped(client, id, body?.reason);
         res.status(200).json({ id, status: "skipped" });
+        // A closed card leaves a gap like a reply does (P1 2026-11-15); the refill keeps its own budget and waiting-count gates.
+        waitUntil(refillProspectingQueue(client));
         return;
       case "not-relevant":
         await markProspectingNotRelevant(client, id);
         res.status(200).json({ id, status: "not_relevant" });
+        waitUntil(refillProspectingQueue(client));
         return;
       case "already-handled":
         await markProspectingAlreadyHandled(client, id);
         res.status(200).json({ id, status: "already_handled" });
+        waitUntil(refillProspectingQueue(client));
         return;
       default:
         res.status(400).json({ error: "action must be one of: draft, draft-maybe, open, mark-replied, skip, not-relevant, already-handled" });

@@ -249,3 +249,30 @@ describe("draft-maybe auth", () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 });
+
+describe("P1 (2026-11-15): a post the AI turns away at draft time stays reachable from Maybe", () => {
+  it("records screened_out_at_draft and Draft anyway can then draft it", async () => {
+    const repo = new Repo();
+    repo.seed(maybeRow({ status: "shown", skipReason: null, postText: "My funded account got pulled today on a trailing drawdown breach.", updatedAt: hoursAgo(1) }));
+    const drafter = vi.fn(async (_c: ProspectingDraftContext) => good());
+    // The cheap check says no.
+    await expect(draftProspectingCandidateReply(client, "m1", baseDeps(repo, drafter))).rejects.toThrow(/relevance check/);
+    const row = await repo.getById("m1");
+    expect(row!.status).toBe("not_relevant");
+    expect(row!.skipReason).toBe("screened_out_at_draft");
+    expect(drafter).not.toHaveBeenCalled();
+    // The owner overrules it.
+    const updated = await draftScreenedOutPost(client, "m1", baseDeps(repo, drafter), NOW);
+    expect(updated.status).toBe("ready");
+    expect(updated.draftReply).toBe(SHARP);
+  });
+
+  it("a post the free filter drops at draft time records why, and does not go to Maybe", async () => {
+    const repo = new Repo();
+    repo.seed(maybeRow({ status: "shown", skipReason: null }));
+    const drafter = vi.fn(async (_c: ProspectingDraftContext) => good());
+    await expect(draftProspectingCandidateReply(client, "m1", baseDeps(repo, drafter))).rejects.toThrow(/Not eligible/);
+    expect((await repo.getById("m1"))!.skipReason).toBe("free_filter");
+    await expect(draftScreenedOutPost(client, "m1", baseDeps(repo, drafter), NOW)).rejects.toBeInstanceOf(ProspectingConflictError);
+  });
+});

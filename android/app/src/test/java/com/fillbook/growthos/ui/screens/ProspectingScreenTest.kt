@@ -33,7 +33,7 @@ class ProspectingScreenTest {
     @Test
     fun `falls back to the original generic copy when diagnostics is null -- an API response that predates the field`() {
         assertEquals(
-            "New opportunities are found once a day. Check back soon, or pull to refresh.",
+            "New posts are searched three times a day. Check back soon, or pull to refresh.",
             prospectingEmptyStateMessage(null),
         )
     }
@@ -89,8 +89,14 @@ class ProspectingScreenTest {
     fun `falls back to the generic message if diagnostics are present but neither known exclusion reason explains the empty queue`() {
         // A hypothetical future/edge shape (e.g. all deferred, none too-old or below-bar) --
         // should never leave the owner with a blank or nonsensical explanation.
+        val message = prospectingEmptyStateMessage(diagnostics(totalConsidered = 5, deferred = 0))
+        assertEquals("New posts are searched three times a day. Check back soon, or pull to refresh.", message)
+    }
+
+    @Test
+    fun `posts held back because the owner replied to their author recently are explained, not hidden`() {
         val message = prospectingEmptyStateMessage(diagnostics(totalConsidered = 5, deferred = 5))
-        assertEquals("New opportunities are found once a day. Check back soon, or pull to refresh.", message)
+        assertEquals("5 posts are from people you replied to in the last 3 days. Check back soon, or pull to refresh.", message)
     }
 }
 

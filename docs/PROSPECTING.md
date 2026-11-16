@@ -11,6 +11,30 @@ target, not invented here. Prospecting is the system that finds those
 conversations, drafts something genuinely useful to say, and gets out of
 the way.
 
+
+## How it works now (2026-11-15) -- read this first
+
+The dated sections below are a change log. Where they disagree with this section, this section is current.
+
+- **Schedule.** Search runs from `api/growth-pulse.ts` at 15:00, 20:00 and 01:00 UTC (08:00, 13:00 and 18:00 Phoenix), from the app's "Search now" (`api/ingest.ts`), and as a background refill after the owner closes out a card (Replied, Skip, Not relevant or Handled).
+- **Searches.** Each scheduled or refill run makes at most 2 X requests, and "Search now" makes at most 3. Requests take turns between the creator watchlist (50 hand-picked traders, `prospectingWatchlist.ts`) and the pain-phrase topics. X returns posts from the last 12 hours only.
+- **Filters.**
+  - The free regex gate checks for futures evidence and screens out promo, spam and sales funnels.
+  - A Haiku relevance screen then checks up to 8 new posts a run.
+  - Every drop is counted in the run's `context.funnel` (`GET /api/summary?view=prospecting-runs`).
+- **Daily set.** Posts must be at most 12 hours old and have a freshness-decayed score of 45 or more. There is one post per author, authors replied to in the last 3 days are held back, and at most 15 are shown.
+- **Drafting.**
+  - A Haiku check runs first, then Sonnet writes a "sharp" and a "helpful" option. The Fillbook option C is off.
+  - A post the AI turns away at draft time is kept with `skip_reason=screened_out_at_draft` and appears under Maybe, so "Draft anyway" can reach it.
+  - A post dropped by the free filter gets `skip_reason=free_filter`.
+- **Replies** (P0, 2026-11-15).
+  - A reply is recorded once; a retry or a second tap counts nothing again.
+  - Only open posts can be marked replied: new, shown, drafting, ready, or expired.
+  - The server enforces the pacing: 20 minutes between replies and 10 a day, or 90 minutes and 4 a day in recovery mode.
+- **Costs.**
+  - The daily search budget is $0.50 and 30 requests. The monthly Prospecting budget is $40, counting X reads and Prospecting model calls.
+  - If a search cannot record its cost, the run stops and shows as a sync failure in Health, because the budget checks read those cost rows.
+
 ## What this is NOT
 
 - Not auto-reply, auto-post, or auto-anything. `XSignalAdapter` has no

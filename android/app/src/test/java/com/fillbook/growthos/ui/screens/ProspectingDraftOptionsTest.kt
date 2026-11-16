@@ -70,4 +70,12 @@ class ProspectingDraftOptionsTest {
         assertEquals("Sharp", styleLabel("sharp"))
         assertEquals("Helpful", styleLabel("helpful"))
     }
+
+    @Test
+    fun singleOption_usesTheEditFromTheSingleDraftBox() {
+        val c = candidate(listOf(DraftOption("sharp", "first")))
+        org.junit.Assert.assertEquals("edited by hand", currentReplyText(c, mapOf(c.id to "edited by hand"), null))
+        org.junit.Assert.assertEquals("edited by hand", finalReplyToSend(c, mapOf(c.id to "edited by hand"), null))
+        org.junit.Assert.assertEquals("first", currentReplyText(c, emptyMap(), null))
+    }
 }
