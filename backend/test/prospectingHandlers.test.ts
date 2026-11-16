@@ -331,8 +331,10 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
     expect(same.finalReply).toBeNull();
     expect(same.replyMentionsFillbook).toBe(true);
 
-    repo.seed(candidate({ id: "x-3", draftReply: "draft" }));
-    const edited = await markProspectingReplied(fakeClient, "x-3", "edited by hand", undefined, undefined, { repo });
+    // A separate repo: two replies back to back would (correctly) hit the 20-minute pacing.
+    const repo2 = new InMemoryProspectingRepository();
+    repo2.seed(candidate({ id: "x-3", draftReply: "draft" }));
+    const edited = await markProspectingReplied(fakeClient, "x-3", "edited by hand", undefined, undefined, { repo: repo2 });
     expect(edited.finalReply).toBe("edited by hand");
   });
 
@@ -905,5 +907,67 @@ describe("listProspectingQueue -- posts past the reply window are removed, not k
 
     expect(candidates.map((c) => c.id)).toEqual(["other"]);
     expect(repo.rows.get("again")?.status).not.toBe("expired");
+  });
+});
+
+describe("P0 (ChatGPT 2026-11-15): a reply is recorded once, from a valid state, and only when pacing allows", () => {
+  const noRecovery = async () => ({ active: false, dailyCap: null, maxPostAgeHours: null }) as never;
+
+  it("a second tap returns the stored row and records no second outreach", async () => {
+    const { markProspectingRepliedOnce } = await import("../src/prospecting/prospectingHandlers");
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "r-1", authorExternalId: "77" }));
+    const first = await markProspectingRepliedOnce(fakeClient, "r-1", undefined, undefined, undefined, { repo, loadRecovery: noRecovery });
+    expect(first.recorded).toBe(true);
+    const again = await markProspectingRepliedOnce(fakeClient, "r-1", undefined, undefined, undefined, { repo, loadRecovery: noRecovery });
+    expect(again.recorded).toBe(false);
+    expect(again.candidate.status).toBe("replied");
+    expect(repo.outreach).toHaveLength(1);
+  });
+
+  it("refuses skipped, not relevant and handled posts", async () => {
+    const { markProspectingRepliedOnce, ProspectingConflictError } = await import("../src/prospecting/prospectingHandlers");
+    for (const status of ["skipped", "not_relevant", "already_handled"] as const) {
+      const repo = new InMemoryProspectingRepository();
+      repo.seed(candidate({ id: "s-1", status }));
+      await expect(markProspectingRepliedOnce(fakeClient, "s-1", undefined, undefined, undefined, { repo, loadRecovery: noRecovery })).rejects.toThrow(ProspectingConflictError);
+      expect((await repo.getById("s-1"))!.status).toBe(status);
+    }
+  });
+
+  it("accepts a post that aged out of the window while the owner was posting", async () => {
+    const { markProspectingRepliedOnce } = await import("../src/prospecting/prospectingHandlers");
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "e-1", status: "expired" }));
+    const r = await markProspectingRepliedOnce(fakeClient, "e-1", undefined, undefined, undefined, { repo, loadRecovery: noRecovery });
+    expect(r.recorded).toBe(true);
+  });
+
+  it("refuses a reply inside the cooldown and says when the next one is fine", async () => {
+    const { markProspectingRepliedOnce, ProspectingPacingError } = await import("../src/prospecting/prospectingHandlers");
+    const repo = new InMemoryProspectingRepository();
+    const now = new Date("2026-11-15T20:00:00Z");
+    repo.seed(candidate({ id: "p-0", status: "replied", repliedAt: "2026-11-15T19:50:00Z" }));
+    repo.seed(candidate({ id: "p-1", authorExternalId: "88" }));
+    const err = await markProspectingRepliedOnce(fakeClient, "p-1", undefined, undefined, undefined, { repo, loadRecovery: noRecovery }, now).catch((e) => e);
+    expect(err).toBeInstanceOf(ProspectingPacingError);
+    expect(err.nextReplyAt).toBe("2026-11-15T20:10:00.000Z");
+    expect((await repo.getById("p-1"))!.status).not.toBe("replied");
+    expect(repo.outreach).toEqual([]);
+  });
+
+  it("when a racing tap already moved the row, nothing is counted twice", async () => {
+    const { markProspectingRepliedOnce } = await import("../src/prospecting/prospectingHandlers");
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "race-1", authorExternalId: "99" }));
+    // Simulate the other tap winning between our read and our conditional update.
+    const original = repo.updateStatus.bind(repo);
+    repo.updateStatus = (async (id: string, status: never, fields?: never) => {
+      await original(id, "replied" as never, { repliedAt: "2026-11-15T20:00:00Z" } as never);
+      return false;
+    }) as unknown as typeof repo.updateStatus;
+    const r = await markProspectingRepliedOnce(fakeClient, "race-1", undefined, undefined, undefined, { repo, loadRecovery: noRecovery });
+    expect(r.recorded).toBe(false);
+    expect(repo.outreach).toEqual([]);
   });
 });

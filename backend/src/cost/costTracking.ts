@@ -290,6 +290,32 @@ export async function recordXSearchCostEvent(
   return costUsd;
 }
 
+/**
+ * Same as recordXSearchCostEvent, but says whether the row was really saved. Prospecting's daily budget, request cap and repeat-query skip
+ * all read these rows, so a search that cannot record its cost must stop instead of searching on unmetered (ChatGPT P0 2026-11-15: fail closed).
+ */
+export async function recordXSearchCostEventChecked(
+  client: SupabaseClient,
+  resultsReturned: number,
+  context: Record<string, unknown> = {},
+): Promise<{ costUsd: number; recorded: boolean }> {
+  const costUsd = resultsReturned * X_SEARCH_COST_PER_READ_USD;
+  try {
+    const { error } = await client.from("cost_events").insert({
+      event_type: "x_search_read",
+      provider: "x",
+      model: "search/recent",
+      input_tokens: 0,
+      output_tokens: resultsReturned,
+      cost_usd: costUsd,
+      context,
+    });
+    return { costUsd, recorded: !error };
+  } catch {
+    return { costUsd, recorded: false };
+  }
+}
+
 /** X Owned Reads rate: tweets the authenticated account itself posted (results tracking). */
 export const X_OWNED_READ_COST_USD = 0.001;
 

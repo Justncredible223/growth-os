@@ -356,6 +356,22 @@ describe("runProspectingSearch", () => {
       expect(result.selectableAfter).toBeGreaterThanOrEqual(2);
     });
 
+    it("stops after the first request when its cost cannot be recorded (budget checks would be blind: fail closed)", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const failing = { from: () => ({ insert: async () => ({ error: { message: "insert failed" } }) }) } as any;
+      const result = await run(new FakeProspectingRepo(), adapter, { client: failing });
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
+      expect((result as { stoppedReason?: string }).stoppedReason).toBe("cost_not_recorded");
+    });
+
+    it("also stops when the cost insert throws", async () => {
+      const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+      const throwing = { from: () => ({ insert: async () => { throw new Error("network"); } }) } as any;
+      const result = await run(new FakeProspectingRepo(), adapter, { client: throwing });
+      expect(adapter.searchRecentPosts).toHaveBeenCalledTimes(1);
+      expect((result as { stoppedReason?: string }).stoppedReason).toBe("cost_not_recorded");
+    });
+
     it("moves to the next topic only when the first topic left the buffer short, and never past the slice", async () => {
       const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
       await run(new FakeProspectingRepo(), adapter);

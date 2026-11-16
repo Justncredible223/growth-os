@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
-import { X_SEARCH_COST_PER_READ_USD, recordXSearchCostEvent } from "../cost/costTracking.js";
+import { X_SEARCH_COST_PER_READ_USD, recordXSearchCostEventChecked } from "../cost/costTracking.js";
 import { PROSPECTING_TOPICS, topicsInSearchOrder, type ProspectingTopic } from "./prospectingTopics.js";
 import { isReplyWorthyBase, isReplyWorthyPost, isSalesFunnelOrEmptyPost, isTooSmallToBeWorthIt, whyNotReplyWorthy, withCryptoExclusions } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
@@ -312,6 +312,8 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   let selectableNow = selectable;
   const searched: string[] = [];
   const priorOutreachCache = new Map<string, boolean>();
+  // Set when a request's cost could not be saved: the budget checks read those rows, so the run stops rather than search unmetered.
+  let costNotRecorded = false;
 
   // One grouped request at a time, stopping as soon as enough usable posts are waiting.
   for (const request of plan) {
@@ -453,12 +455,17 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
       }
 
     } finally {
-      await recordXSearchCostEvent(deps.client, results.length, {
+      const saved = await recordXSearchCostEventChecked(deps.client, results.length, {
         ...(fromWatchlist ? { watchlist: true, creators: request.kind === "creators" ? request.handles.length : 0 } : { topics: groupTopics.map((t) => t.key) }),
         query: groupQuery,
         read: results.length,
         funnel,
       });
+      if (!saved.recorded) costNotRecorded = true;
+    }
+    if (costNotRecorded) {
+      console.warn("[prospecting] stopped searching: the X search cost could not be recorded, so today's budget can't be checked");
+      break;
     }
 
     selectableNow = await countSelectable();
@@ -478,5 +485,6 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     searchRequests,
     screenedOut,
     creatorRequests,
+    ...(costNotRecorded ? { stoppedReason: "cost_not_recorded" as const } : {}),
   };
 }

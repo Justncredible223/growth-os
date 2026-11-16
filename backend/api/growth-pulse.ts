@@ -257,7 +257,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // The search makes no model call (drafting happens on the owner's tap, see api/approvals.ts), so LLM is always 0 here.
             return `skipped -- ${result.skipReason}; X reads: 0 posts $0.000; LLM: 0 calls $0.0000`;
           }
-          await recordSyncSuccess(client, "prospecting", `${result.newCandidates} new, ${result.postsRead} read`);
+          if ("stoppedReason" in result && result.stoppedReason === "cost_not_recorded") {
+            // P0 (ChatGPT 2026-11-15): a search that could not save its cost stopped itself; record it as a failure so Health shows it.
+            await recordSyncFailure(client, "prospecting", "search stopped: an X search cost could not be recorded, so the daily budget could not be checked");
+          } else {
+            await recordSyncSuccess(client, "prospecting", `${result.newCandidates} new, ${result.postsRead} read`);
+          }
           return `${result.newCandidates} new (${result.excludedAsSpam} excluded as spam, ${result.excludedAsIrrelevant} as off-topic, ${result.selectableBefore ?? "?"} already selectable); X reads: ${result.postsRead} posts $${result.costUsd.toFixed(3)}; LLM: 0 calls $0.0000; topics: ${result.topicsSearched.join(", ")}`;
         } catch (err) {
           await recordSyncFailure(client, "prospecting", errorMessage(err));

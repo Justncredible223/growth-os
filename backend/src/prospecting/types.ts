@@ -86,8 +86,12 @@ export interface ProspectingRepository {
         ProspectingCandidate,
         "openedAt" | "draftReply" | "draftOptions" | "postedStyle" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
       >
-    > & { /** Extra keys merged into the score_breakdown JSON (no migration), e.g. the owner override marker. */ breakdownPatch?: Record<string, string> },
-  ): Promise<void>;
+    > & {
+      /** Extra keys merged into the score_breakdown JSON (no migration), e.g. the owner override marker. */ breakdownPatch?: Record<string, string>;
+      /** Only update while the row is still in one of these statuses (atomic in the database). Returns false when it was not. */
+      onlyFrom?: ProspectingStatus[];
+    },
+  ): Promise<boolean | void>;
   /** True if this author has already been replied to via Prospecting before -- feeds both scoring and the Inbound relationship bridge. */
   hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean>;
   recordOutreach(platform: string, authorExternalId: string, authorHandle: string | null): Promise<void>;
