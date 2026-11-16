@@ -122,7 +122,7 @@ async function checkInboundSync(client: SupabaseClient): Promise<HealthItem> {
     }
     const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
     if (row.last_error) {
-      return { label: "Inbound Engagement", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+      return { label: "Inbound Engagement", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${shortError(row.last_error)}` };
     }
     if (!row.last_success_at) {
       return { label: "Inbound Engagement", status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
@@ -140,7 +140,7 @@ async function checkYoutubeCommentsSync(client: SupabaseClient): Promise<HealthI
     const { data } = await client.from("integration_health").select("last_attempted_at, last_success_at, last_error").eq("platform", "youtube_comments").maybeSingle();
     if (!data) return { label, status: "NOT_CONNECTED", detail: "Never synced yet -- needs YOUTUBE_API_KEY and a posted video" };
     const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
-    if (row.last_error) return { label, status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+    if (row.last_error) return { label, status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${shortError(row.last_error)}` };
     if (!row.last_success_at) return { label, status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
     return { label, status: "HEALTHY", detail: `Verified live -- last synced ${row.last_success_at}` };
   } catch (err) {
@@ -161,7 +161,7 @@ async function checkProspectingSync(client: SupabaseClient): Promise<HealthItem>
     }
     const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
     if (row.last_error) {
-      return { label: "Prospecting", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+      return { label: "Prospecting", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${shortError(row.last_error)}` };
     }
     if (!row.last_success_at) {
       return { label: "Prospecting", status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
@@ -204,6 +204,12 @@ export async function verifySearchConsoleLive(client: SupabaseClient): Promise<R
   } catch (err) {
     return { status: "DOWN", error: errorMessage(err), checkedAt: startedAt.toISOString() };
   }
+}
+
+/** One short readable line of a stored error, never a raw JSON dump (shown on Home and System). */
+export function shortError(e: string | null): string {
+  const first = (e ?? "").split(/\r?\n/)[0]!.trim();
+  return first.length > 140 ? `${first.slice(0, 137)}...` : first;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
