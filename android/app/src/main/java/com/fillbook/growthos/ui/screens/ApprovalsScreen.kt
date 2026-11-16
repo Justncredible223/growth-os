@@ -287,7 +287,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                                         snackbarHostState.showSnackbar("Edit saved as a new version.")
                                     } catch (e: Exception) {
                                         actionError = (e as? com.fillbook.growthos.data.NetworkException)
-                                            ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(400, 404, 409, 500)) }
+                                            ?.let { com.fillbook.growthos.data.extractServerActionErrorMessage(it.httpCode, it.message, setOf(400, 404, 409, 422, 500)) }
                                             ?: "Couldn't save the edit. Check your connection and try again."
                                     } finally {
                                         busyIds.remove(asset.id)

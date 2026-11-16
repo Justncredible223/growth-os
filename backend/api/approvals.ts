@@ -71,7 +71,7 @@ import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/v
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
 import { handleEngagement } from "../src/engagement/engagementApi.js";
-import { handleHqHandoff } from "../src/hq/hqHandoff.js";
+import { handleHqHandoff, xPostTextProblem } from "../src/hq/hqHandoff.js";
 import { PAUSE_LOOKBACK_DAYS, loadYieldEvents, queryYieldSummary } from "../src/prospecting/prospectingQueryYield.js";
 import { buildXPostImageCard } from "../src/content/xPostImageCard.js";
 
@@ -816,8 +816,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: "Body must be { campaignAssetId, action: 'edit', text: 1-4000 characters }" });
           return;
         }
-        const { data: editAsset } = await client.from("campaign_assets").select("id, stage, campaigns(status)").eq("id", campaignAssetId).maybeSingle();
-        const ea = editAsset as { stage: string; campaigns: { status: string } | { status: string }[] | null } | null;
+        const { data: editAsset } = await client.from("campaign_assets").select("id, stage, platform, asset_type, campaigns(status)").eq("id", campaignAssetId).maybeSingle();
+        const ea = editAsset as { stage: string; platform: string; asset_type: string; campaigns: { status: string } | { status: string }[] | null } | null;
         if (!ea) {
           res.status(404).json({ error: "This draft no longer exists." });
           return;
@@ -826,6 +826,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (ea.stage !== "ready_for_owner" || eStatus !== "in_review") {
           res.status(409).json({ error: "Only a draft still waiting for a decision can be edited." });
           return;
+        }
+        // ChatGPT 2026-11-15: an edited X post passes the same deterministic checks as a new HQ draft (no AI re-review; see docs/APPROVALS.md).
+        if (ea.asset_type === "x_feed_post") {
+          const problem = xPostTextProblem(text);
+          if (problem) {
+            res.status(422).json({ error: `Edit not saved: ${problem}.` });
+            return;
+          }
         }
         const { data: latest } = await client.from("content_versions").select("version, body, metadata").eq("campaign_asset_id", campaignAssetId).order("version", { ascending: false }).limit(1).maybeSingle();
         const prev = latest as { version: number; body: string; metadata: Record<string, unknown> | null } | null;
