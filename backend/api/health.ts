@@ -117,7 +117,7 @@ async function checkInboundSync(client: SupabaseClient): Promise<HealthItem> {
       .eq("platform", "x_inbound")
       .maybeSingle();
     if (!data) {
-      return { label: "Inbound Engagement", status: "NOT_CONNECTED", detail: "Never synced yet -- runs daily via /api/daily-pipeline" };
+      return { label: "Inbound Engagement", status: "NOT_CONNECTED", detail: "Never synced yet -- runs 3 times a day from /api/growth-pulse" };
     }
     const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
     if (row.last_error) {
@@ -132,6 +132,21 @@ async function checkInboundSync(client: SupabaseClient): Promise<HealthItem> {
   }
 }
 
+/** YouTube comment sync (P2 2026-11-15): same evidence as checkInboundSync, from its own integration_health row. */
+async function checkYoutubeCommentsSync(client: SupabaseClient): Promise<HealthItem> {
+  const label = "YouTube comments";
+  try {
+    const { data } = await client.from("integration_health").select("last_attempted_at, last_success_at, last_error").eq("platform", "youtube_comments").maybeSingle();
+    if (!data) return { label, status: "NOT_CONNECTED", detail: "Never synced yet -- needs YOUTUBE_API_KEY and a posted video" };
+    const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
+    if (row.last_error) return { label, status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+    if (!row.last_success_at) return { label, status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
+    return { label, status: "HEALTHY", detail: `Verified live -- last synced ${row.last_success_at}` };
+  } catch (err) {
+    return { label, status: "DOWN", detail: errorMessage(err) };
+  }
+}
+
 /** Same real attempt/success/error evidence as checkInboundSync above, keyed to Prospecting's own integration_health row -- a search failure (rate limit, expired token, etc.) must be visible here, not silently presented as "just an empty/thin queue today." */
 async function checkProspectingSync(client: SupabaseClient): Promise<HealthItem> {
   try {
@@ -141,7 +156,7 @@ async function checkProspectingSync(client: SupabaseClient): Promise<HealthItem>
       .eq("platform", "prospecting")
       .maybeSingle();
     if (!data) {
-      return { label: "Prospecting", status: "NOT_CONNECTED", detail: "Never synced yet -- runs daily via /api/daily-pipeline" };
+      return { label: "Prospecting", status: "NOT_CONNECTED", detail: "Never synced yet -- runs 3 times a day from /api/growth-pulse" };
     }
     const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
     if (row.last_error) {
@@ -243,6 +258,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   health.push(await checkInboundSync(client));
   health.push(await checkProspectingSync(client));
+  health.push(await checkYoutubeCommentsSync(client));
   try {
     health.push(...(await loadVideoHealth(client)));
   } catch (err) {

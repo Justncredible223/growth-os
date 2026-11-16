@@ -42,6 +42,8 @@ export interface InboundListItem extends InboundEngagement {
   repliedToText?: string | null;
   /** A follow-up flagged more than FOLLOW_UP_DUE_HOURS ago. */
   followUpDue?: boolean;
+  /** This item's author shows the burst pattern (advisory label on the person; see automatedBurstAuthors). */
+  possiblyAutomated?: boolean;
 }
 
 /**
@@ -89,12 +91,21 @@ export async function listInbound(client: SupabaseClient, includeResolved = fals
     for (const p of (data ?? []) as Array<{ tweet_id: string; text: string }>) parentText.set(p.tweet_id, p.text);
   }
 
+  // Advisory label per person; an author we have answered in a conversation before is never labelled.
+  const burst = automatedBurstAuthors(rows);
+  for (const key of [...burst]) {
+    const [platform, authorId] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+    const answered = await repo.countAnsweredFromAuthor(platform, authorId, null).catch(() => 0);
+    if (answered > 0) burst.delete(key);
+  }
+
   return sortInboundQueue(rows).map((row) => ({
     ...row,
     creatorHandle: row.creatorId ? (creatorById.get(row.creatorId)?.handle ?? null) : null,
     creatorCategory: row.creatorId ? (creatorById.get(row.creatorId)?.category ?? null) : null,
     repliedToText: row.inReplyToExternalId ? (parentText.get(row.inReplyToExternalId) ?? null) : null,
     followUpDue: isFollowUpDue(row, new Date()),
+    possiblyAutomated: row.authorExternalId ? burst.has(`${row.platform}:${row.authorExternalId}`) : false,
   }));
 }
 
@@ -111,6 +122,41 @@ export interface InboundSummary {
 
 /** A follow-up comes back to the top of the queue this long after it was flagged (P1 2026-11-15: they used to sit forever). */
 export const FOLLOW_UP_DUE_HOURS = 48;
+
+/**
+ * "Possibly automated activity" (P2, ChatGPT 2026-11-15): an author with at least 4 qualifying messages in 24 hours -- each under 200
+ * characters, not a question -- and no conversation we have answered with them. Other messages from the same author may be longer or ask
+ * questions; at least 4 must qualify. It is advisory only: it labels the person, never closes, hides, reorders or restricts anything, and
+ * never calls any single message automated.
+ */
+export const AUTOMATED_MIN_MESSAGES = 4;
+export const AUTOMATED_WINDOW_HOURS = 24;
+export const AUTOMATED_MAX_CHARS = 200;
+export function qualifiesForAutomatedSignal(body: string): boolean {
+  const text = body.replace(/^(?:@\w+\s+)+/, "").trim();
+  return text.length < AUTOMATED_MAX_CHARS && !text.includes("?");
+}
+/** Author keys (platform:authorExternalId) whose recent messages make the burst pattern. Pure; answered authors are removed by the caller. */
+export function automatedBurstAuthors(rows: Array<Pick<InboundEngagement, "platform" | "authorExternalId" | "body" | "observedAt">>): Set<string> {
+  const byAuthor = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!r.authorExternalId || !qualifiesForAutomatedSignal(r.body)) continue;
+    const key = `${r.platform}:${r.authorExternalId}`;
+    byAuthor.set(key, [...(byAuthor.get(key) ?? []), Date.parse(r.observedAt)]);
+  }
+  const out = new Set<string>();
+  const windowMs = AUTOMATED_WINDOW_HOURS * 60 * 60 * 1000;
+  for (const [key, times] of byAuthor) {
+    const sorted = times.filter((t) => !Number.isNaN(t)).sort((a, b) => a - b);
+    for (let i = 0; i + AUTOMATED_MIN_MESSAGES - 1 < sorted.length; i++) {
+      if (sorted[i + AUTOMATED_MIN_MESSAGES - 1]! - sorted[i]! <= windowMs) {
+        out.add(key);
+        break;
+      }
+    }
+  }
+  return out;
+}
 
 /** Queue order: due follow-ups, then direct replies, relationships, comments and mentions, newest first within each. */
 const PRIORITY_RANK: Record<string, number> = { p1_direct_reply: 1, p2_relationship: 2, p3_comment: 3, p4_mention: 4, low_value: 5 };

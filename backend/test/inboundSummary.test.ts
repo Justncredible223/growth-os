@@ -108,3 +108,20 @@ describe("P1 2026-11-15: people, due follow-ups, backlog not overdue, queue orde
     expect(order).toEqual(["due", "direct", "mention"]);
   });
 });
+
+describe("P2 2026-11-15: possibly automated is an advisory label on a person", () => {
+  it("labels an author with 4+ short non-question messages in 24h, even if others are long or ask questions", async () => {
+    const { automatedBurstAuthors, qualifiesForAutomatedSignal } = await import("../src/inbound/inboundHandlers");
+    const m = (author: string, body: string, at: string) => ({ platform: "x", authorExternalId: author, body, observedAt: at });
+    const rows = [
+      ...["20:00", "20:01", "20:02", "23:30"].map((t) => m("kz", "@FillbookHQ Consistency share is the silent killer.", `2026-11-15T${t}:00Z`)),
+      m("kz", "@FillbookHQ How do you handle the trailing floor on a funded account?", "2026-11-15T21:00:00Z"),
+      ...["01:00", "02:00", "03:00"].map((t) => m("real", "@FillbookHQ Nice post.", `2026-11-15T${t}:00Z`)),
+      m("spread", "@FillbookHQ ok", "2026-11-10T10:00:00Z"), m("spread", "@FillbookHQ ok", "2026-11-12T10:00:00Z"),
+      m("spread", "@FillbookHQ ok", "2026-11-14T10:00:00Z"), m("spread", "@FillbookHQ ok", "2026-11-16T10:00:00Z"),
+    ];
+    expect([...automatedBurstAuthors(rows)]).toEqual(["x:kz"]);
+    expect(qualifiesForAutomatedSignal("@FillbookHQ @someone Great point")).toBe(true);
+    expect(qualifiesForAutomatedSignal("@FillbookHQ what about EOD drawdown?")).toBe(false);
+  });
+});

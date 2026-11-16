@@ -246,7 +246,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
             "Inbound",
-            "People who engaged with Fillbook on X -- nothing here ever sends itself.",
+            "People who engaged with Fillbook on X and YouTube -- nothing here ever sends itself.",
             kicker = summary?.takeIf { it.needsResponse > 0 }?.let { inboundKicker(it) },
             dense = true,
         )
@@ -329,7 +329,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
                             PolishedEmptyState(
                                 icon = Icons.Filled.Forum,
                                 headline = "Nothing waiting on you",
-                                subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X show up here.",
+                                subtitle = "New replies, mentions, comments and follow-ups from Fillbook's audience on X and YouTube show up here.",
                             )
                         }
                         item { SummaryBlock() }
@@ -410,6 +410,9 @@ fun InboundScreen(repo: GrowthOsRepository) {
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text("@${h.handle} · ${h.count} replies", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                                                     Text("One person. Each reply is its own item; answer the ones worth it.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                                                    if (h.possiblyAutomated) {
+                                                        Text("Possibly automated activity: several short replies from this account in a short period.", style = MaterialTheme.typography.bodySmall, color = Warning)
+                                                    }
                                                 }
                                                 TextButton(onClick = {
                                                     expandedAuthors = if (h.authorKey in expandedAuthors) expandedAuthors - h.authorKey else expandedAuthors + h.authorKey
@@ -494,6 +497,7 @@ private fun InboundCard(
                     Pill(inboundPriorityLabel(item.priority), inboundPriorityColor(item.priority))
                     if (item.isRepeatEngager) Pill("REPEAT", Accent)
                     if (item.followUpDue) Pill("FOLLOW-UP DUE", Warning)
+                    if (item.possiblyAutomated) Pill("POSSIBLY AUTOMATED", TextTertiary)
                 }
             }
             StatusChip(inboundStatusLabel(item.status), inboundStatusTone(item.status))
@@ -590,7 +594,7 @@ private fun InboundFilterChip(label: String, selected: Boolean, onClick: () -> U
 }
 
 /** One row of the Inbound list: a person header, or an item. P1 2026-11-15 (ChatGPT: group a burst, keep every message separate). */
-internal data class InboundGroupHeader(val authorKey: String, val handle: String, val count: Int)
+internal data class InboundGroupHeader(val authorKey: String, val handle: String, val count: Int, val possiblyAutomated: Boolean = false)
 internal data class InboundDisplayRow(val key: String, val item: InboundEngagement? = null, val header: InboundGroupHeader? = null)
 
 /**
@@ -607,7 +611,7 @@ internal fun inboundDisplayRows(items: List<InboundEngagement>, expanded: List<S
             rows += InboundDisplayRow(group[0].id, item = group[0])
             continue
         }
-        rows += InboundDisplayRow("header-$key", header = InboundGroupHeader(key, group[0].authorHandle ?: "unknown", group.size))
+        rows += InboundDisplayRow("header-$key", header = InboundGroupHeader(key, group[0].authorHandle ?: "unknown", group.size, group.any { it.possiblyAutomated }))
         val shown = if (key in expanded) group else group.take(1)
         shown.forEach { rows += InboundDisplayRow(it.id, item = it) }
     }
