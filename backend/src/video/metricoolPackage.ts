@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseVideoRenderMetadata, type VideoRenderMetadataJson } from "./videoStatusHandlers.js";
+import { youtubeNextAllowedAt } from "../posting/postingPlan.js";
 
 /**
  * The Metricool package for one finished render (team decision 2026-11-14, Claude + ChatGPT; Metricool posting policy,
@@ -33,8 +34,11 @@ export interface MetricoolPackage {
   durationSeconds: number | null;
   mediaUrl: string;
   mediaUrlExpiresAt: string;
-  /** One createScheduledPost `info` per network, without the date (the session adds publicationDate after Justin's yes). */
-  posts: { tiktok: Record<string, unknown>; youtube: Record<string, unknown> };
+  /** One createScheduledPost `info` per network, without the date (the session adds publicationDate after Justin's yes). YouTube is left out
+   * while the one-post-per-48-hours rule blocks it (P2 2026-11-15); Instagram is included when the video has an Instagram caption. */
+  posts: { tiktok: Record<string, unknown>; youtube?: Record<string, unknown>; instagram?: Record<string, unknown> };
+  /** When YouTube may be posted again (ISO), or null when it may be now. */
+  youtubeBlockedUntil?: string | null;
   /** Rule checks on the package itself; any failure means it must not be queued. */
   checks: Array<{ check: string; ok: boolean }>;
 }
@@ -50,14 +54,19 @@ export function buildMetricoolPackage(input: {
   metadata: VideoRenderMetadataJson;
   mediaUrl: string;
   mediaUrlExpiresAt: string;
+  /** When YouTube may be posted again (ISO), or null/absent when it may be now (one YouTube post per 48 hours). */
+  youtubeBlockedUntil?: string | null;
 }): MetricoolPackage {
   const { metadata: m } = input;
   const tags = m.hashtags.slice(0, MAX_HASHTAGS).map((t) => t.replace(/^#/, ""));
   const tiktokText = `${m.tiktokCaption} ${hashtagLine(tags)}`.trim();
   const youtubeTitle = m.youtubeTitle.slice(0, YOUTUBE_TITLE_MAX);
   const base = { autoPublish: METRICOOL_AUTO_PUBLISH, draft: false, descendants: [], firstCommentText: "", hasNotReadNotes: false, shortener: false, smartLinkData: { ids: [] }, media: [input.mediaUrl], mediaAltText: [] };
+  // P2 2026-11-15: the comment Fillbook pins under the video goes in as the first comment on TikTok and YouTube (it was left empty).
+  const firstComment = { firstCommentText: m.pinnedComment ?? "" };
   const tiktok = {
     ...base,
+    ...firstComment,
     providers: [{ network: "tiktok" }],
     text: tiktokText,
     tiktokData: {
@@ -73,6 +82,7 @@ export function buildMetricoolPackage(input: {
   };
   const youtube = {
     ...base,
+    ...firstComment,
     providers: [{ network: "youtube" }],
     text: m.youtubeDescription,
     youtubeData: { title: youtubeTitle, type: "short", privacy: "public", madeForKids: false, isAiGeneratedContent: true, tags, category: "EDUCATION" },
@@ -87,6 +97,11 @@ export function buildMetricoolPackage(input: {
     { check: `YouTube title at most ${YOUTUBE_TITLE_MAX} characters`, ok: m.youtubeTitle.length <= YOUTUBE_TITLE_MAX },
     { check: "Autopublish stays off until the first two posts are verified", ok: METRICOOL_AUTO_PUBLISH === false },
   ];
+  // P2 2026-11-15: Instagram Reels when the video has an Instagram caption.
+  const instagram = m.instagramCaption
+    ? { ...base, providers: [{ network: "instagram" }], text: `${m.instagramCaption} ${hashtagLine(tags)}`.trim(), instagramData: { type: "REEL" } }
+    : undefined;
+  const youtubeBlocked = Boolean(input.youtubeBlockedUntil);
   const packageId = `mp-${createHash("sha256").update(JSON.stringify([input.videoRenderId, input.sha256, tiktokText, youtubeTitle, m.youtubeDescription])).digest("hex").slice(0, 8)}`;
   return {
     packageId,
@@ -95,7 +110,9 @@ export function buildMetricoolPackage(input: {
     durationSeconds: input.durationSeconds,
     mediaUrl: input.mediaUrl,
     mediaUrlExpiresAt: input.mediaUrlExpiresAt,
-    posts: { tiktok, youtube },
+    // YouTube is left out while the 48-hour rule blocks it, so the package can never schedule a second YouTube post too soon.
+    posts: { tiktok, ...(youtubeBlocked ? {} : { youtube }), ...(instagram ? { instagram } : {}) },
+    youtubeBlockedUntil: input.youtubeBlockedUntil ?? null,
     checks,
   };
 }
@@ -106,16 +123,21 @@ export function metricoolPackageText(p: MetricoolPackage): string {
   return [
     `METRICOOL PACKAGE ${p.packageId}`,
     `Render ${p.videoRenderId}${p.durationSeconds ? `, ${p.durationSeconds.toFixed(1)} s` : ""}`,
-    `File SHA256 ${p.sha256}`,
-    `Platforms: TikTok + YouTube Short (one post each). Autopublish: ${METRICOOL_AUTO_PUBLISH ? "on" : "off (Metricool notifies the phone)"}`,
+    `File fingerprint ${p.sha256}`,
+    `Platforms: ${["TikTok", p.posts.youtube ? "YouTube Short" : null, p.posts.instagram ? "Instagram Reel" : null].filter(Boolean).join(" + ")} (one post each). Autopublish: ${METRICOOL_AUTO_PUBLISH ? "on" : "off (Metricool notifies the phone)"}`,
+    p.youtubeBlockedUntil ? `YouTube left out: one YouTube post per 48 hours, next after ${p.youtubeBlockedUntil}` : null,
     `Media link expires ${p.mediaUrlExpiresAt}`,
     failed.length ? `CHECKS FAILED, do not queue: ${failed.map((c) => c.check).join("; ")}` : "Checks: all passed",
     `Copying this is not approval. To approve, write: approve ${p.packageId} for <date and time, Arizona>`,
     "",
     `TikTok info: ${JSON.stringify(p.posts.tiktok)}`,
     "",
-    `YouTube info: ${JSON.stringify(p.posts.youtube)}`,
-  ].join("\n");
+    p.posts.youtube ? `YouTube info: ${JSON.stringify(p.posts.youtube)}` : null,
+    p.posts.instagram ? "" : null,
+    p.posts.instagram ? `Instagram info: ${JSON.stringify(p.posts.instagram)}` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 }
 
 export class MetricoolPackageError extends Error {}
@@ -141,9 +163,13 @@ export async function getMetricoolPackage(client: SupabaseClient, videoRenderId:
   const metadata = parseVideoRenderMetadata((versions as Array<{ metadata: unknown }> | null)?.[0]?.metadata, r.campaign_asset_id);
   if (!metadata) throw new MetricoolPackageError(`Render ${videoRenderId} has no captions stored, so no package can be built.`);
 
-  const { data: file, error: dlError } = await client.storage.from(STORAGE_BUCKET).download(r.storage_path);
-  if (dlError || !file) throw new Error(`metricool package: could not read the video (${dlError?.message ?? "no data"}).`);
-  const sha256 = createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex");
+  // P2 2026-11-15: fingerprint the file from its storage metadata (ETag and size) instead of downloading the whole MP4 on every tap; a
+  // missing listing falls back to the full download. The package id changes when the file changes either way.
+  const sha256 = await fileFingerprint(client, r.storage_path);
+
+  // The one-YouTube-post-per-48-hours rule (postingPlan.ts) applies to the package too.
+  const { data: lastYt } = await client.from("video_posts").select("posted_at").eq("platform", "youtube_shorts").order("posted_at", { ascending: false }).limit(1);
+  const youtubeBlockedUntil = youtubeNextAllowedAt(((lastYt ?? []) as Array<{ posted_at: string }>)[0]?.posted_at ?? null, now);
 
   const { data: signed, error: signError } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(r.storage_path, MEDIA_URL_TTL_SECONDS);
   if (signError || !signed?.signedUrl) throw new Error(`metricool package: could not sign the media link (${signError?.message ?? "no url"}).`);
@@ -155,5 +181,44 @@ export async function getMetricoolPackage(client: SupabaseClient, videoRenderId:
     metadata,
     mediaUrl: signed.signedUrl,
     mediaUrlExpiresAt: new Date(now.getTime() + MEDIA_URL_TTL_SECONDS * 1000).toISOString(),
+    youtubeBlockedUntil,
   });
+}
+
+async function fileFingerprint(client: SupabaseClient, path: string): Promise<string> {
+  const slash = path.lastIndexOf("/");
+  const folder = slash >= 0 ? path.slice(0, slash) : "";
+  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  let listed: unknown[] | null = null;
+  try {
+    listed = (await client.storage.from(STORAGE_BUCKET).list(folder, { search: name, limit: 5 })).data;
+  } catch {
+    listed = null; // falls back to the full download below
+  }
+  const entry = ((listed ?? []) as Array<{ name: string }>).find((f) => f.name === name) as { metadata?: { eTag?: string; size?: number } } | undefined;
+  if (entry?.metadata?.eTag) {
+    return createHash("sha256").update(`${path}:${entry.metadata.eTag}:${entry.metadata.size ?? ""}`).digest("hex");
+  }
+  const { data: file, error: dlError } = await client.storage.from(STORAGE_BUCKET).download(path);
+  if (dlError || !file) throw new Error(`metricool package: could not read the video (${dlError?.message ?? "no data"}).`);
+  return createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex");
+}
+
+/**
+ * Records that a package was handed to the owner for Metricool (P2 2026-11-15). A handoff, never a publication: posting is only recorded
+ * when the owner saves the post links. Best effort.
+ */
+export async function recordMetricoolHandoff(client: SupabaseClient, p: MetricoolPackage): Promise<void> {
+  try {
+    await client.from("audit_logs").insert({
+      action_name: "metricool_package_copied",
+      action_class: "EXTERNAL_DRAFT",
+      outcome: "drafted",
+      reason: "Metricool package built for the owner to queue by hand; this is not a publication.",
+      agent: "growth-os-app",
+      context: { videoRenderId: p.videoRenderId, packageId: p.packageId, platforms: Object.keys(p.posts) },
+    });
+  } catch {
+    // never block the copy
+  }
 }

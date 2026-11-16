@@ -66,7 +66,7 @@ import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { dayForTitle } from "../src/video/todaysVideo.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../src/opportunities/manualMotionConcept.js";
 import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, retryFailedRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
-import { getMetricoolPackage, metricoolPackageText, MetricoolPackageError } from "../src/video/metricoolPackage.js";
+import { getMetricoolPackage, recordMetricoolHandoff, metricoolPackageText, MetricoolPackageError } from "../src/video/metricoolPackage.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost, removeVideoPost } from "../src/posting/postingRepository.js";
@@ -74,6 +74,7 @@ import { handleEngagement } from "../src/engagement/engagementApi.js";
 import { handleHqHandoff, xPostTextProblem } from "../src/hq/hqHandoff.js";
 import { PAUSE_LOOKBACK_DAYS, loadYieldEvents, queryYieldSummary } from "../src/prospecting/prospectingQueryYield.js";
 import { buildXPostImageCard } from "../src/content/xPostImageCard.js";
+import { durableRenderCapReason } from "../src/video/durableRenderCaps.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -551,6 +552,7 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
       }
       try {
         const pkg = await getMetricoolPackage(client, body.videoRenderId);
+        await recordMetricoolHandoff(client, pkg);
         res.status(200).json({ ...pkg, text: metricoolPackageText(pkg) });
       } catch (err) {
         if (err instanceof MetricoolPackageError) {
@@ -948,7 +950,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // content itself; a monthly-cap denial still returns 200 with the
       // reason surfaced to the app, not an error.
       let videoRender: { queued: boolean; alreadyExisted: boolean; reason: string | null } | undefined;
-      if (action === "approve" && asset.asset_type === "video_script") {
+      const durableCap = action === "approve" && asset.asset_type === "video_script" ? await durableRenderCapReason(client) : null;
+      if (durableCap) {
+        // P2 2026-11-15: the cap counted from durable render history. The approval itself stands; the render waits, as with the RPC's refusal.
+        videoRender = { queued: false, alreadyExisted: false, reason: durableCap };
+      } else if (action === "approve" && asset.asset_type === "video_script") {
         const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
           p_campaign_asset_id: campaignAssetId,
           p_monthly_cap: MAX_VIDEO_RENDERS_PER_MONTH,
