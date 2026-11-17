@@ -450,7 +450,8 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 createVideoResultMessage = if (result.finalStage == "ready_for_owner") {
                     "Video script sent to Approvals for your review."
                 } else {
-                    "Didn't clear review (${assetStageDisplayName(result.finalStage)})" +
+                    // Plain wording: this is a draft the reviewers turned down, not a render waiting in line.
+                    "Rejected by review, no video made" +
                         if (result.blockReasons.isNotEmpty()) ": ${result.blockReasons.joinToString("; ")}" else "."
                 }
                 showVideoConfirmDialog = false

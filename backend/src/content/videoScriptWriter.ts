@@ -137,6 +137,14 @@ QUALITY BAR -- every output must clear this:
       visual: a Fillbook screen with example data showing a rule alert or a number, or a large on-screen
       rule name or figure. Never a generic stock scene of a trader at a desk, and never a plain text card
       of the hook line.
+- THE PAYOFF MUST BE A REAL FILLBOOK SCREEN (the growth strategist rejects drafts without it; owner direction 2026-11-14):
+    * Whatever advice or warning the script gives, the Fillbook screen shown must be the one that pays that exact point off. Advice
+      about checking account buffers before copying must show the per-account buffer or the all-accounts overview, not a calendar or any
+      screen that merely exists. If no verified Fillbook screen pays off the point, change the point, not the screen.
+    * Name the one verified capability the video proves, and show it in the shot where it is mentioned. "The calendar shows each red day"
+      or "track your buffers" without the screen that does it is generic and fails.
+    * Every shot is different. Never repeat the hook line as on-screen text in several shots; each shot adds a new visual or a new
+      number from the example data.
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
   No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
