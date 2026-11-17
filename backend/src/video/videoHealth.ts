@@ -99,10 +99,13 @@ export async function loadVideoHealth(client: SupabaseClient, now: Date = new Da
     updatedAt: r.updated_at,
   }));
 
-  const { data: postRows, error: postError } = await client.from("video_posts").select("id, campaign_asset_id, platform");
+  const { data: postRows, error: postError } = await client.from("video_posts").select("id, campaign_asset_id, platform, posted_at");
   const postingTablesExist = !postError;
-  const posts = postingTablesExist ? ((postRows ?? []) as Array<{ id: string; campaign_asset_id: string; platform: string }>) : [];
-  const youtubeIds = posts.filter((p) => p.platform === "youtube_shorts").map((p) => p.id);
+  const posts = postingTablesExist ? ((postRows ?? []) as Array<{ id: string; campaign_asset_id: string; platform: string; posted_at: string | null }>) : [];
+  // Only YouTube posts the stats sync still pulls (the last 30 days, see youtubePostsDueForStats). Older posts are no longer refreshed, so
+  // counting them made this read "numbers are old" forever once the last YouTube post aged out (2026-11-17).
+  const statsWindowStart = now.getTime() - 30 * DAY_MS;
+  const youtubeIds = posts.filter((p) => p.platform === "youtube_shorts" && p.posted_at && new Date(p.posted_at).getTime() >= statsWindowStart).map((p) => p.id);
 
   let lastYoutubeStatsAt: string | null = null;
   if (youtubeIds.length > 0) {

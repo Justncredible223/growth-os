@@ -79,6 +79,11 @@ export async function refreshYoutubeAnalytics(
     // before pulling numbers.
     .in("status", ["drafted", "published"])
     .not("external_video_id", "is", null);
+  // The automated-upload tables (migrations 0038/0039) are not in the live database: videos are posted by hand and tracked in video_posts,
+  // whose YouTube numbers come from syncYoutubeStats. With no such table there is nothing to refresh here, so this is not a failure.
+  if (error && /(platform_publications|video_publication_metadata)/.test(error.message) && /(does not exist|schema cache|PGRST205|42P01)/i.test(error.message)) {
+    return { publishedVideos: 0, metricsRecorded: 0, skippedNoMetadata: 0 };
+  }
   if (error) throw new Error(`load platform_publications failed: ${error.message}`);
   const publications = (data ?? []) as Array<{ video_render_id: string; external_video_id: string }>;
   if (publications.length === 0) return { publishedVideos: 0, metricsRecorded: 0, skippedNoMetadata: 0 };
