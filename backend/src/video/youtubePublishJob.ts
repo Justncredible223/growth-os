@@ -4,6 +4,7 @@ import type { JobHandler } from "../jobs/jobQueue.js";
 import { errorMessage } from "../lib/errorMessage.js";
 import { createYoutubeUploadClient, type YoutubeUploadClient } from "../signals/adapters/youtubeUploadClient.js";
 import { loadFromSupabase, assertApproved } from "../../scripts/video-factory/loadApprovedScript.js";
+import { videoClaimProblems } from "../content/videoScriptWriter.js";
 import { SupabaseVideoPerformanceRepository, type VideoPerformanceRepository } from "../shortform/performanceRepository.js";
 import type { PublishedVideoMetadata } from "../shortform/metadata.js";
 import { OFFICIAL_HANDLE } from "../shortform/types.js";
@@ -190,6 +191,10 @@ export function createPublishYoutubeJobHandler(deps: PublishYoutubeJobDeps): Job
       // public YouTube channel is exactly the kind of external side effect
       // worth re-checking rather than trusting a chain of earlier gates.
       assertApproved(pkg);
+      // Publish-time claims check (2026-11-18): re-check the stored text instead of trusting generation. A hit fails the job before any upload,
+      // with the reason in the error so a human can correct the script.
+      const claimProblems = videoClaimProblems(pkg.videoScript);
+      if (claimProblems.length > 0) throw new Error(`Blocked: the script has claims Fillbook cannot support (${claimProblems.map((p) => `${p.field} ${p.reason}`).join("; ")}).`);
 
       const { data: fileData, error: downloadError } = await deps.client.storage
         .from(STORAGE_BUCKET)

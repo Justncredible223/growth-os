@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseVideoRenderMetadata, type VideoRenderMetadataJson } from "./videoStatusHandlers.js";
 import { youtubeNextAllowedAt } from "../posting/postingPlan.js";
+import { containsUnverifiedClaim } from "../content/xReplyGuardrails.js";
 
 /**
  * The Metricool package for one finished render (team decision 2026-11-14, Claude + ChatGPT; Metricool posting policy,
@@ -88,7 +89,21 @@ export function buildMetricoolPackage(input: {
     youtubeData: { title: youtubeTitle, type: "short", privacy: "public", madeForKids: false, isAiGeneratedContent: true, tags, category: "EDUCATION" },
   };
   const all = `${tiktokText}\n${youtubeTitle}\n${m.youtubeDescription}`;
+  // Publish-time claims check (ChatGPT decision 2026-11-18): stored text is re-checked here, so an edited or older script can never reach
+  // Metricool with a claim Fillbook cannot support. A failure blocks the package ("CHECKS FAILED, do not queue") and names the field and reason.
+  const claimTexts: Array<[string, string]> = [
+    ["TikTok caption", m.tiktokCaption],
+    ["YouTube title", m.youtubeTitle],
+    ["YouTube description", m.youtubeDescription],
+    ["Instagram caption", m.instagramCaption ?? ""],
+    ["pinned comment", m.pinnedComment ?? ""],
+  ];
+  const claimProblems = claimTexts.flatMap(([field, text]) => {
+    const problem = text ? containsUnverifiedClaim(text) : null;
+    return problem ? [`${field} ${problem.reason}`] : [];
+  });
   const checks = [
+    { check: claimProblems.length ? `No claims Fillbook cannot support: ${claimProblems.join("; ")}` : "No claims Fillbook cannot support (real-time sync, funded or payout promises, risk-free, partnership)", ok: claimProblems.length === 0 },
     { check: "TikTok caption says the figures are demo data", ok: /demo (account )?data|sample/i.test(m.tiktokCaption) },
     { check: "YouTube description says the figures are demo data", ok: /demo data|sample (fillbook )?account/i.test(m.youtubeDescription) },
     { check: "No giveaway link or giveaway wording", ok: !/giveaway/i.test(all) },

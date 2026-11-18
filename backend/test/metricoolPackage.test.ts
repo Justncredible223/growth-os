@@ -123,3 +123,33 @@ describe("P2 2026-11-15 (ChatGPT): the package follows the posting rules", () =>
     expect(buildMetricoolPackage(input).posts.instagram).toBeUndefined();
   });
 });
+
+describe("publish-time claims check (2026-11-18)", () => {
+  const withMeta = (over: Partial<VideoRenderMetadataJson>) => buildMetricoolPackage({ ...input, metadata: { ...META, ...over } });
+  const claimCheck = (p: ReturnType<typeof buildMetricoolPackage>) => p.checks.find((c) => c.check.includes("claims Fillbook cannot support"))!;
+
+  it("passes clean stored copy", () => {
+    expect(claimCheck(buildMetricoolPackage(input)).ok).toBe(true);
+  });
+
+  it("blocks a real-time, funded, risk-free or partnership claim and names the field, so the package says CHECKS FAILED", () => {
+    const cases: Array<[Partial<VideoRenderMetadataJson>, string]> = [
+      [{ tiktokCaption: "Real-time sync of every trade. Demo data." }, "TikTok caption"],
+      [{ youtubeTitle: "Get funded faster with Fillbook" }, "YouTube title"],
+      [{ youtubeDescription: "A risk-free journal. Demo data from a sample Fillbook account." }, "YouTube description"],
+      [{ instagramCaption: "Official partner of every prop firm" }, "Instagram caption"],
+      [{ pinnedComment: "Fillbook is endorsed by traders." }, "pinned comment"],
+    ];
+    for (const [over, field] of cases) {
+      const p = withMeta(over);
+      const c = claimCheck(p);
+      expect(c.ok).toBe(false);
+      expect(c.check).toContain(field);
+      expect(metricoolPackageText(p)).toContain("CHECKS FAILED, do not queue");
+    }
+  });
+
+  it("keeps a negated statement", () => {
+    expect(claimCheck(withMeta({ youtubeDescription: "Fillbook is not real-time. Demo data from a sample Fillbook account." })).ok).toBe(true);
+  });
+});

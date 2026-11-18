@@ -123,6 +123,22 @@ describe("createPublishTiktokJobHandler", () => {
     expect(uploadVideoToInbox).not.toHaveBeenCalled();
   });
 
+  it("blocks before any upload when the stored script has a claim Fillbook cannot support (publish-time check, 2026-11-18)", async () => {
+    const fake = makeFake();
+    (fake.tables.content_versions![0] as any).metadata = { videoScript: { ...VIDEO_SCRIPT, tiktokCaption: "Pass your eval with Fillbook" } };
+    const client = withStorage(fake, async () => ({ data: fakeBlob(), error: null }));
+    const uploadVideoToInbox = vi.fn().mockResolvedValue("tt-publish-id");
+    const deps: PublishTiktokJobDeps = {
+      client,
+      uploadClient: { uploadVideoToInbox } as unknown as TiktokUploadClient,
+      performanceRepo: new InMemoryVideoPerformanceRepository(),
+      auditSink: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(createPublishTiktokJobHandler(deps)(makeJob({ videoRenderId: "render-1" }))).rejects.toThrow(/claims Fillbook cannot support.*TikTok caption/);
+    expect(uploadVideoToInbox).not.toHaveBeenCalled();
+  });
+
   it("marks the publication failed and rethrows when the upload fails", async () => {
     const fake = makeFake();
     const client = withStorage(fake, async () => ({ data: fakeBlob(), error: null }));
