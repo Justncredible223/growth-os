@@ -391,9 +391,17 @@ export function videoCapitalizationProblem(video: VideoScript): { field: string;
  * Claim problems only (real-time, funded/payout, risk-free, affiliation, guarantees, unverified results) in a script package's
  * viewer-facing text. Used at publish time as well as generation: the publish paths re-check stored text rather than trust it.
  */
-export function videoClaimProblems(video: VideoScript): Array<{ field: string; reason: string }> {
+export function videoClaimProblems(video: Partial<Record<"hook" | "script" | "youtubeTitle" | "youtubeDescription" | "tiktokCaption" | "instagramCaption", unknown>>): Array<{ field: string; reason: string }> {
   const problems: Array<{ field: string; reason: string }> = [];
-  for (const [field, text] of viewerFacingFields(video)) {
+  const fields: Array<[string, unknown]> = [
+    ["hook", video.hook],
+    ["script", video.script],
+    ["YouTube title", video.youtubeTitle],
+    ["YouTube description", video.youtubeDescription],
+    ["TikTok caption", video.tiktokCaption],
+    ["Instagram caption", video.instagramCaption],
+  ];
+  for (const [field, text] of fields) {
     if (typeof text !== "string") continue;
     const problem = containsUnverifiedClaim(text);
     if (problem) problems.push({ field, reason: problem.reason });
