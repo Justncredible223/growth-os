@@ -363,7 +363,7 @@ async function computeTodayXPostViewOrThrow(client: SupabaseClient, now: Date): 
   const run = await runRepo.getRun(operatingDate);
 
   if (!run || run.status !== "ready" || !run.campaignAssetId) {
-    return deriveTodayXPostView(run, null, false, null, now);
+    return deriveTodayXPostView(run, null, false, null, now, operatingDate);
   }
 
   // Posted is a hard terminal state -- never re-derive a "dismissed"

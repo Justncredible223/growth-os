@@ -33,6 +33,24 @@ export const ATTEMPTS_PER_INVOCATION = 2;
  */
 export const X_FEED_POST_MONTHLY_BUDGET_USD = 10.0;
 
+/**
+ * 14-day X test (Nov 16-30, ChatGPT decision relayed by Marketing and Email 2026-11-18): original X posts only on Monday, Wednesday
+ * and Friday (at most 3 a week). Engagement replies are a separate feature and are not affected. Dates outside Nov 16-30 are unaffected, so it goes back to a post
+ * every day without a deploy. `operatingDate` is the Arizona date (YYYY-MM-DD), so the weekday is read from the date itself.
+ */
+export const X_POST_DAYS_LIMITED_FROM = "2026-11-16";
+export const X_POST_DAYS_LIMITED_THROUGH = "2026-11-30";
+export const X_POST_WEEKDAYS = [1, 3, 5] as const;
+export const X_POST_REST_DAY_REASON = "No X post today: during the 14-day X test (through Nov 30) the daily post is written on Monday, Wednesday and Friday only.";
+
+/** True when a daily X post is written for this Arizona date. An unreadable date fails open (the old every-day behavior). */
+export function isXPostDay(operatingDate: string): boolean {
+  if (operatingDate < X_POST_DAYS_LIMITED_FROM || operatingDate > X_POST_DAYS_LIMITED_THROUGH) return true;
+  const day = new Date(`${operatingDate}T12:00:00Z`).getUTCDay();
+  if (Number.isNaN(day)) return true;
+  return (X_POST_WEEKDAYS as readonly number[]).includes(day);
+}
+
 export interface EligibilityCheckResult {
   eligible: boolean;
   reason?: string;
@@ -823,6 +841,7 @@ export async function runDailyXFeedPostStep(
   invocationDeadlineMs: number = Date.now() + ATTEMPTS_PER_INVOCATION * ESTIMATED_ATTEMPT_DURATION_MS + 60_000,
 ): Promise<XFeedPostStepResult> {
   async function checkGates(): Promise<{ eligible: true } | { eligible: false; reason: string }> {
+    if (!isXPostDay(operatingDate)) return { eligible: false, reason: "not_an_x_post_day" };
     if (await deps.isPaused()) return { eligible: false, reason: "system_paused" };
     const monthSpend = await deps.runRepo.getMonthSpendUsd(operatingDate.slice(0, 7));
     const budgetCheck = evaluateXFeedPostBudget(monthSpend);
@@ -1194,7 +1213,12 @@ export function deriveTodayXPostView(
   previewText: string | null,
   /** When given, a 'running' run not updated for STALE_RUNNING_MS is shown as failed with Regenerate offered. Omitted = no staleness check. */
   now?: Date,
+  /** The Arizona date; when given and it is not an X post day, an empty card says so instead of "not written yet". */
+  operatingDate?: string,
 ): TodayXPostView {
+  if (run === null && operatingDate && !isXPostDay(operatingDate)) {
+    return { state: "empty", reason: X_POST_REST_DAY_REASON, canRegenerate: false };
+  }
   if (run === null) {
     // Home P1 2026-11-15: say why the card is empty instead of showing a bare "nothing queued".
     return { state: "empty", reason: "Today's post hasn't been written yet. The daily run writes it each morning (Arizona time).", canRegenerate: false };
