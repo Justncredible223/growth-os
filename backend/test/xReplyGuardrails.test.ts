@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { checkShowcaseShown, capitalizationProblem, dashProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
+import { checkShowcaseShown, capitalizationProblem, dashProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, containsUnsupportedProductClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
@@ -139,6 +139,69 @@ describe("containsUnverifiedClaim", () => {
   });
 });
 
+
+describe("containsUnsupportedProductClaim (claims the product cannot support, 2026-11-18)", () => {
+  const blocked: Array<[string, string]> = [
+    ["real-time", "Fillbook syncs your trades in real-time."],
+    ["real time", "Get real time updates on every fill."],
+    ["live sync", "Turn on live sync and forget it."],
+    ["instantly syncing", "Your trades are instantly synced from the broker."],
+    ["as they happen", "It imports fills as they happen."],
+    ["get funded", "Fillbook helps you get funded."],
+    ["funded faster", "Journal your trades and get funded faster."],
+    ["pass your eval", "Use it to pass your evaluation."],
+    ["pass the challenge", "It will help you pass the challenge."],
+    ["payout promise", "It helps you keep your payouts."],
+    ["never fail", "You will never fail an eval again."],
+    ["never lose", "Never lose a funded account."],
+    ["risk-free", "A risk-free way to track trades."],
+    ["no-risk", "It is a no-risk tool."],
+    ["official partner", "We are an official partner of the firm."],
+    ["partnered with", "Fillbook partnered with Tradovate."],
+    ["endorsed by", "Endorsed by top prop firms."],
+    ["approved by", "Approved by the prop firms."],
+    ["certified", "A certified trading journal."],
+    ["a negation in an earlier clause excuses nothing", "It is not guaranteed, but it syncs in real-time."],
+    ["a second match after an excused one", "It is not real-time. It is real-time on weekends."],
+  ];
+  for (const [name, text] of blocked) {
+    it(`flags: ${name}`, () => {
+      expect(containsUnsupportedProductClaim(text)).not.toBeNull();
+    });
+  }
+
+  const allowed: Array<[string, string]> = [
+    ["negated real-time", "It is not real-time. It syncs about every few minutes."],
+    ["never real-time", "Fillbook never claims real-time syncing."],
+    ["without live sync", "It works without live sync, using the Sync now button."],
+    ["store listing", "Fillbook is live on Google Play."],
+    ["negated funded", "It will not get you funded. It shows what happened in your trades."],
+    ["not risk-free", "Trading is not risk-free."],
+    ["not endorsed", "Fillbook is not endorsed by any prop firm."],
+    ["not affiliated phrasing", "Fillbook is not an official partner of any firm."],
+    ["plain journal advice", "Review your trades after each session to see where the plan slipped."],
+    ["imports", "It imports your fills from the broker when you tap Sync now."],
+    ["time word", "Check your trade time and session before you review."],
+    ["partner as a noun", "Find an accountability partner and review together."],
+  ];
+  for (const [name, text] of allowed) {
+    it(`allows: ${name}`, () => {
+      expect(containsUnsupportedProductClaim(text)).toBeNull();
+    });
+  }
+
+  it("containsUnverifiedClaim reaches the new checker when no old rule matches, and an old-rule hit still returns its own reason", () => {
+    const clean = "Fillbook syncs in real-time.";
+    expect(containsUnverifiedClaim(clean)?.reason).toBe(containsUnsupportedProductClaim(clean)?.reason);
+    expect(containsUnverifiedClaim("It is guaranteed to sync in real-time.")?.reason).toContain("guarantee");
+  });
+
+  it("is part of containsUnverifiedClaim and therefore checkReplyGuardrails (hard reject on generation, warning on copy)", () => {
+    expect(containsUnverifiedClaim("Syncs in real-time.")).not.toBeNull();
+    expect(checkReplyGuardrails("Fillbook syncs in real-time.", false)?.reason).toContain("real-time");
+    expect(checkReplyGuardrails("Fillbook is not real-time and says so.", false)).toBeNull();
+  });
+});
 
 describe("containsAiTell -- replies that read as bot-written", () => {
   const flagged: Array<[string, string]> = [

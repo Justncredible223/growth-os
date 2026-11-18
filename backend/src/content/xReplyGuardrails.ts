@@ -152,10 +152,63 @@ const UNVERIFIED_CLAIM_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\b(?:make|makes|making|turn|turns)\s+you\s+(?:a\s+)?(?:profitable|funded|consistent)\b|\bwill become profitable\b|\bbecome profitable\b/i, reason: "promises or implies the trader will become profitable" },
 ];
 
-/** True (with a reason) if the reply makes an unverified personal-trading, customer-result, or guarantee-style claim. Returns null for a clean reply. */
+/**
+ * Product and outcome claims Fillbook cannot support (ChatGPT decision 2026-11-18, mirroring HQ's claimscheck.mjs rules):
+ * real-time sync, funded/evaluation/payout promises, risk-free, and false partnership or endorsement. Each match is judged on
+ * its own: a negation in the SAME clause right before it ("it is not real-time", "never guaranteed") excuses that match, and an
+ * `allow` phrase overlapping the match excuses it ("live on Google Play" is a store listing, not a sync claim).
+ */
+const SUPPORT_CLAIM_RULES: Array<{ pattern: RegExp; reason: string; allow?: RegExp }> = [
+  {
+    pattern: /\breal[- ]?time\b|\blive sync\b|\b(?:instantly|as they happen)\b[^.!?]{0,40}\b(?:sync\w*|import\w*|updat\w*|pull\w*|appears?|shows?|trades?|fills?)\b|\b(?:sync\w*|import\w*|updat\w*|pull\w*|trades?|fills?)\b[^.!?]{0,40}\b(?:instantly|as they happen)\b/i,
+    allow: /\blive on (?:google play|the app store|app store|play store)\b/i,
+    reason: "claims real-time, live or instant syncing, which Fillbook does not do (it syncs on a schedule or on Sync now)",
+  },
+  {
+    pattern: /\b(?:get|gets|getting|become|becomes|stay|stays|keep|keeps)\s+(?:you\s+)?funded\b|\bfunded\s+(?:faster|sooner)\b|\b(?:pass|passes|passing)\s+(?:your|the|an?)\s+(?:eval(?:uation)?|challenge)\b|\b(?:helps?|lets?)\s+you\s+(?:pass|get paid|get\s+(?:your\s+)?payouts?|keep\s+(?:your\s+)?payouts?)\b|\bpayouts?\s+(?:faster|sooner)\b|\bnever\s+(?:fail|lose|blow|breach)\w*\b/i,
+    reason: "promises a funded, evaluation or payout outcome, or that a trader never fails or loses",
+  },
+  {
+    pattern: /\brisk[- ]?free\b|\bno[- ]risk\b|\bzero[- ]risk\b/i,
+    reason: "calls something risk-free",
+  },
+  {
+    pattern: /\bofficial(?:ly)?\s+(?:partner|integration|supports?|integrates?)\b|\bpartner(?:ed|ing|s)?\s+with\b|\bendorsed\s+by\b|\bapproved\s+by\b|\bcertified\b|\bsponsored\s+by\b/i,
+    reason: "implies a partnership, endorsement, approval or certification Fillbook does not have",
+  },
+];
+
+const CLAIM_CLAUSE_BREAK = /[,;:.!?\n]|\b(?:but|though|although|however|yet|while|and)\b/gi;
+
+/** True when a negation sits in the same clause directly before index `i`; a negation in an earlier clause excuses nothing. */
+function negatedBefore(text: string, i: number): boolean {
+  const pre = text.slice(0, i);
+  let cut = 0;
+  for (const b of pre.matchAll(CLAIM_CLAUSE_BREAK)) cut = b.index! + b[0].length;
+  return /\b(?:not|isn'?t|aren'?t|doesn'?t|don'?t|never|no|without)\b[^,;:.!?]{0,25}$/i.test(pre.slice(cut));
+}
+
+/** True (with a reason) if the text makes a real-time, funded/payout, risk-free or false-affiliation claim that is not negated. */
+export function containsUnsupportedProductClaim(text: string): GuardrailViolation | null {
+  const t = text.replace(/[\u2018\u2019]/g, "'");
+  for (const rule of SUPPORT_CLAIM_RULES) {
+    const allows = rule.allow ? [...t.matchAll(new RegExp(rule.allow.source, "gi"))] : [];
+    for (const m of t.matchAll(new RegExp(rule.pattern.source, "gi"))) {
+      const start = m.index!;
+      const end = start + m[0].length;
+      if (allows.some((a) => a.index! < end && a.index! + a[0].length > start)) continue;
+      if (negatedBefore(t, start)) continue;
+      return { reason: rule.reason };
+    }
+  }
+  return null;
+}
+
+/** True (with a reason) if the reply makes an unverified personal-trading, customer-result, guarantee-style, real-time, payout, risk-free or affiliation claim. Returns null for a clean reply. */
 export function containsUnverifiedClaim(reply: string): GuardrailViolation | null {
   const match = UNVERIFIED_CLAIM_PATTERNS.find(({ pattern }) => pattern.test(reply));
-  return match ? { reason: match.reason } : null;
+  if (match) return { reason: match.reason };
+  return containsUnsupportedProductClaim(reply);
 }
 
 /**
