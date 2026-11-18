@@ -8,7 +8,7 @@ import {
   VideoScriptTooLongError,
   VideoHookRepeatError,
   MAX_HOOK_REWRITES,
-  type VideoScript, hookOpeningProblems, videoCopyProblems, youtubeTitleProblems } from "../src/content/videoScriptWriter";
+  SYSTEM_PROMPT, type VideoScript, hookOpeningProblems, videoCopyProblems, youtubeTitleProblems } from "../src/content/videoScriptWriter";
 
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -508,5 +508,28 @@ describe("videoCopyProblems claims check (2026-11-18)", () => {
 
   it("keeps a negated statement", () => {
     expect(videoCopyProblems(pkg({ script: "Fillbook is not real-time. It syncs on a schedule." }))).toEqual([]);
+  });
+});
+
+describe("three product topics carry exact rules in the script writer prompt (2026-11-18)", () => {
+  const P = SYSTEM_PROMPT.replace(/\s+/g, " ");
+  it("CSV import: source picker first, review before saving, no login, never auto-sync or reconciles", () => {
+    expect(P).toContain("CSV IMPORT");
+    expect(P).toContain("a searchable source picker (optional");
+    expect(P).toContain("nothing is saved until the trader confirms");
+    expect(P).toContain("needs no broker login");
+    expect(P).toContain("Never call CSV import \"auto-sync\", never say Fillbook \"reconciles\" an import");
+  });
+  it("Edge Score: five named parts, uses only parts with data, never four", () => {
+    expect(P).toContain("up to FIVE parts (profitability, consistency, risk control, stop adherence and rule adherence)");
+    expect(P).toContain("uses only the parts that have data");
+    expect(P).toContain("Never say four parts");
+  });
+  it("Free trial: 14 days from the first trades, up to about 90 days open, one sync, drawdown alerts, no AI coaching", () => {
+    expect(P).toContain("14 days, no card. The 14 days start when the first trades arrive");
+    expect(P).toContain("for up to about 90 days after sign-up");
+    expect(P).toContain("one automatic sync connection, drawdown alerts");
+    expect(P).toContain("It does not include AI coaching");
+    expect(P).toContain("never \"breached\" or \"breach alerts\", never \"real-time\"");
   });
 });

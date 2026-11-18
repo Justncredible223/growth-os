@@ -128,3 +128,14 @@ describe("explainer closing cards name one Fillbook view (2026-10-24)", () => {
   });
 });
 
+
+describe("edge-score explainer wording (2026-11-18)", () => {
+  it("names all five parts and says the score uses only the parts that have data", async () => {
+    const mod: any = await import("../src/shortform/explainers");
+    const text = JSON.stringify(Object.values(mod).filter((v) => v && typeof v === "object"));
+    expect(text).toMatch(/stop adherence and rule adherence/);
+    expect(text).toMatch(/using only the parts that have data/);
+    expect(text).not.toMatch(/consistency, risk control and following your rules/);
+    expect(text).not.toMatch(/blends five areas/);
+  });
+});
