@@ -388,6 +388,20 @@ export function videoCapitalizationProblem(video: VideoScript): { field: string;
 }
 
 /**
+ * Claim problems only (real-time, funded/payout, risk-free, affiliation, guarantees, unverified results) in a script package's
+ * viewer-facing text. Used at publish time as well as generation: the publish paths re-check stored text rather than trust it.
+ */
+export function videoClaimProblems(video: VideoScript): Array<{ field: string; reason: string }> {
+  const problems: Array<{ field: string; reason: string }> = [];
+  for (const [field, text] of viewerFacingFields(video)) {
+    if (typeof text !== "string") continue;
+    const problem = containsUnverifiedClaim(text);
+    if (problem) problems.push({ field, reason: problem.reason });
+  }
+  return problems;
+}
+
+/**
  * Every copy problem in a script package's viewer-facing text: capitalization and em or en dashes. One entry
  * per field per kind of problem, so a single rewrite can be told about all of them.
  */

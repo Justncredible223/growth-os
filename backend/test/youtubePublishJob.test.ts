@@ -144,6 +144,22 @@ describe("createPublishYoutubeJobHandler", () => {
     expect(publication).toMatchObject({ status: "failed", error: "quota exceeded" });
   });
 
+  it("blocks before any upload when the stored script has a claim Fillbook cannot support (publish-time check, 2026-11-18)", async () => {
+    const fake = makeFake();
+    (fake.tables.content_versions![0] as any).metadata = { videoScript: { ...VIDEO_SCRIPT, youtubeDescription: "Syncs your trades in real-time. @fillbookhq" } };
+    const client = withStorage(fake, async () => ({ data: fakeBlob(), error: null }));
+    const uploadVideo = vi.fn().mockResolvedValue("yt-1");
+    const deps: PublishYoutubeJobDeps = {
+      client,
+      uploadClient: { uploadVideo } as unknown as YoutubeUploadClient,
+      performanceRepo: new InMemoryVideoPerformanceRepository(),
+      auditSink: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(createPublishYoutubeJobHandler(deps)(makeJob({ videoRenderId: "render-1" }))).rejects.toThrow(/claims Fillbook cannot support.*YouTube description/);
+    expect(uploadVideo).not.toHaveBeenCalled();
+  });
+
   it("throws for a render that is not ready to publish", async () => {
     const fake = makeFake();
     fake.tables.video_renders = [{ id: "render-1", campaign_asset_id: "asset-1", status: "rendering", storage_path: null, duration_seconds: null }];
