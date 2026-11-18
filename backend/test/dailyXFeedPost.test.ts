@@ -18,6 +18,8 @@ import {
   categoryUnderrepresentationBonus,
   type FeedPostContentCategory,
   deriveTodayXPostView,
+  isXPostDay,
+  X_POST_REST_DAY_REASON,
   feedPostTopicLabel,
   runDailyXFeedPostStep,
   selectFeedPostAngle,
@@ -999,5 +1001,46 @@ describe("runDailyXFeedPostStep -- image brief, posting window, weekly reference
     expect(run?.selectionReason).toMatch(/^Weekly reference post/);
     expect(run?.selectionReason).toMatch(/Image: A /);
     expect(feedPostTopicLabel(result.topicKey!)).toMatch(/^Reference: /);
+  });
+});
+
+describe("X test: original posts only on Mon, Wed, Fri through Nov 30 (2026-11-18 decision)", () => {
+  it("allows Mon, Wed and Fri and blocks the other days inside Nov 16-30", () => {
+    const allowed = ["2026-11-16", "2026-11-18", "2026-11-20", "2026-11-23", "2026-11-25", "2026-11-27", "2026-11-30"];
+    const blocked = ["2026-11-17", "2026-11-19", "2026-11-21", "2026-11-22", "2026-11-24", "2026-11-26", "2026-11-28", "2026-11-29"];
+    for (const d of allowed) expect(isXPostDay(d), d).toBe(true);
+    for (const d of blocked) expect(isXPostDay(d), d).toBe(false);
+  });
+
+  it("is unaffected outside the window: every day before Nov 16 and after Nov 30", () => {
+    for (const d of ["2026-09-05", "2026-11-15", "2026-12-01", "2026-12-02", "2026-12-05", "2026-12-06"]) expect(isXPostDay(d), d).toBe(true);
+  });
+
+  it("fails open on an unreadable date", () => {
+    expect(isXPostDay("not-a-date")).toBe(true);
+  });
+
+  it("a rest day skips with not_an_x_post_day and makes no LLM call and no attempt", async () => {
+    const fetchMock = vi.fn();
+    const { deps, campaignRepo } = buildHarness(fetchMock);
+    for (const force of [false, true]) {
+      const result = await runDailyXFeedPostStep(deps, "2026-11-19", force);
+      expect(result).toMatchObject({ status: "skipped", skipReason: "not_an_x_post_day", attempts: 0, aiCalls: 0, costUsd: 0 });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(campaignRepo.assets).toHaveLength(0);
+  });
+
+  it("a post day inside the window still generates", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(GOOD_DRAFT_A)).mockResolvedValue(verdictResponse(true));
+    const { deps } = buildHarness(fetchMock);
+    const result = await runDailyXFeedPostStep(deps, "2026-11-18", false);
+    expect(result.status).toBe("ready");
+  });
+
+  it("Home explains a rest day instead of saying the post has not been written yet", () => {
+    const rest = deriveTodayXPostView(null, null, false, null, undefined, "2026-11-19");
+    expect(rest).toEqual({ state: "empty", reason: X_POST_REST_DAY_REASON, canRegenerate: false });
+    expect(deriveTodayXPostView(null, null, false, null, undefined, "2026-11-18").reason).toMatch(/hasn.t been written yet/);
   });
 });
