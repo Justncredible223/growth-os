@@ -481,3 +481,32 @@ describe("distinctShots (a repeated headline says what is different about that s
     expect(distinctShots([{ sceneId: "only" }])).toEqual(["only"]);
   });
 });
+
+describe("videoCopyProblems claims check (2026-11-18)", () => {
+  const pkg = (over: Partial<VideoScript>): VideoScript => ({
+    hook: "Trailing drawdown never resets after a peak.",
+    script: "Check the buffer first. Fillbook shows it per account.",
+    shotList: ["Fillbook UI: example rule alert (demo data)"],
+    youtubeTitle: "How Trailing Drawdown Works", youtubeDescription: "Demo data.", tiktokCaption: "Demo data.", instagramCaption: "Demo data.",
+    hashtags: [], disclosureCta: null, youtubeThumbnailConcept: "x",
+    ...over,
+  });
+
+  it("passes a clean package", () => {
+    expect(videoCopyProblems(pkg({}))).toEqual([]);
+  });
+
+  it("flags a real-time sync claim in the script", () => {
+    const p = videoCopyProblems(pkg({ script: "Fillbook syncs your trades in real-time. Check the buffer first." }));
+    expect(p.some((x) => x.field === "script" && x.reason.includes("real-time"))).toBe(true);
+  });
+
+  it("flags a funded promise in a caption and risk-free in the description", () => {
+    expect(videoCopyProblems(pkg({ tiktokCaption: "Get funded faster with Fillbook." })).some((x) => x.field === "TikTok caption")).toBe(true);
+    expect(videoCopyProblems(pkg({ youtubeDescription: "A risk-free journal. Demo data." })).some((x) => x.field === "YouTube description")).toBe(true);
+  });
+
+  it("keeps a negated statement", () => {
+    expect(videoCopyProblems(pkg({ script: "Fillbook is not real-time. It syncs on a schedule." }))).toEqual([]);
+  });
+});

@@ -1,6 +1,6 @@
 import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
-import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
+import { capitalizationProblem, containsUnverifiedClaim, dashProblem } from "./xReplyGuardrails.js";
 import { computeScenePlanHash } from "../shortform/scenePlan.js";
 import { OFFICIAL_HANDLE, type ScenePlan } from "../shortform/types.js";
 import { strategyHashtags, videoHashtags, youtubeSearchDescription, youtubeSearchTitle } from "../shortform/youtubeSearchTitles.js";
@@ -300,7 +300,7 @@ export async function draftVideoScript(
         "",
         "COPY FIX REQUIRED: your previous package had these problems:",
         ...copyProblems.map((problem) => `- The ${problem.field} ${problem.reason}.`),
-        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), and no em or en dashes anywhere (use a period or a comma). Where the problem is the hook's opening or the first shot, follow the FIRST SECOND rules: a first sentence of 10 words or fewer whose first three words are the specific rule or consequence, the reason held back for the second sentence, and shot 1 a concrete on-screen visual. Keep the content, the loop ending and the script within the length limit.",
+        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), no em or en dashes anywhere (use a period or a comma), and no claims Fillbook cannot support (no real-time or instant syncing, no funded, evaluation or payout promises, no risk-free, no partnership or endorsement, no guarantees). Where the problem is the hook's opening or the first shot, follow the FIRST SECOND rules: a first sentence of 10 words or fewer whose first three words are the specific rule or consequence, the reason held back for the second sentence, and shot 1 a concrete on-screen visual. Keep the content, the loop ending and the script within the length limit.",
       ].join("\n"),
     );
     words = countSpokenWords(result.script);
@@ -395,7 +395,9 @@ export function videoCopyProblems(video: VideoScript): Array<{ field: string; re
   const problems: Array<{ field: string; reason: string }> = [];
   for (const [field, text] of viewerFacingFields(video)) {
     if (typeof text !== "string") continue;
-    for (const problem of [capitalizationProblem(text), dashProblem(text)]) {
+    // Claims too (2026-11-18): the script writer had only capitalization and dash checks. A hit goes back for the same single rewrite and
+    // never blocks publishing, so the owner-reviewed flow is unchanged.
+    for (const problem of [capitalizationProblem(text), dashProblem(text), containsUnverifiedClaim(text)]) {
       if (problem) problems.push({ field, reason: problem.reason });
     }
   }
