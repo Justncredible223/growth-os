@@ -392,7 +392,7 @@ describe("runDailyXFeedPostStep -- pause and budget gates", () => {
     const runRepo = new InMemoryXFeedPostRunRepository();
     // Seed prior spend this month via a completed run on an earlier date.
     const priorId = await runRepo.claimRun("2026-09-01");
-    await runRepo.completeRun(priorId!, { status: "ready", campaignAssetId: "prior-asset", topicKey: "k", triedTopicKeys: ["k"], attempts: 1, aiCalls: 10, costUsd: 6.5 });
+    await runRepo.completeRun(priorId!, { status: "ready", campaignAssetId: "prior-asset", topicKey: "k", triedTopicKeys: ["k"], attempts: 1, aiCalls: 10, costUsd: 10.5 });
 
     const { deps } = buildHarness(fetchMock);
     (deps as any).runRepo = runRepo;
