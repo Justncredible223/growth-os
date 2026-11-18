@@ -31,7 +31,7 @@ export const ATTEMPTS_PER_INVOCATION = 2;
  * days at 1) and shouldn't compete with or be silently starved by
  * auto-draft's own opportunistic spend.
  */
-export const X_FEED_POST_MONTHLY_BUDGET_USD = 6.0;
+export const X_FEED_POST_MONTHLY_BUDGET_USD = 10.0;
 
 export interface EligibilityCheckResult {
   eligible: boolean;
