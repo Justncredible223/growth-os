@@ -190,6 +190,12 @@ describe("containsUnsupportedProductClaim (claims the product cannot support, 20
     });
   }
 
+  it("containsUnverifiedClaim reaches the new checker when no old rule matches, and an old-rule hit still returns its own reason", () => {
+    const clean = "Fillbook syncs in real-time.";
+    expect(containsUnverifiedClaim(clean)?.reason).toBe(containsUnsupportedProductClaim(clean)?.reason);
+    expect(containsUnverifiedClaim("It is guaranteed to sync in real-time.")?.reason).toContain("guarantee");
+  });
+
   it("is part of containsUnverifiedClaim and therefore checkReplyGuardrails (hard reject on generation, warning on copy)", () => {
     expect(containsUnverifiedClaim("Syncs in real-time.")).not.toBeNull();
     expect(checkReplyGuardrails("Fillbook syncs in real-time.", false)?.reason).toContain("real-time");
