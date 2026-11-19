@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildPostReceipt, wordOverlap } from "../src/content/xPostReceipt";
+import { buildPostReceipt, hookLineOf, hookLineProblem, wordOverlap } from "../src/content/xPostReceipt";
 import { buildXPostImageCard } from "../src/content/xPostImageCard";
 
-const POST = "Up $1,500 by 11am on a trailing drawdown account? Check whether your floor trails intraday or locks at the close. Same day, very different floor.\n\nIntraday trailing follows your unrealized peak. Give back $900 of open profit and the floor still moved up the full $1,500.";
+const POST = "Up $1,500 by 11am on a trailing drawdown account?\n\nCheck whether your floor trails intraday or locks at the close. Same day, very different floor.\n\nIntraday trailing follows your unrealized peak. Give back $900 of open profit and the floor still moved up the full $1,500.";
 const card = buildXPostImageCard(null, POST, {});
 
 describe("the post receipt lists only what was actually checked", () => {
@@ -32,5 +32,27 @@ describe("the post receipt lists only what was actually checked", () => {
   it("measures overlap ignoring case and links", () => {
     expect(wordOverlap("Hello world https://t.co/x", "HELLO WORLD")).toBe(1);
     expect(wordOverlap("alpha beta", "gamma delta")).toBe(0);
+  });
+});
+
+describe("hook line (first line of the post, 2026-11-18 decision)", () => {
+  it("takes the first non-empty line", () => {
+    expect(hookLineOf("\n\nA trailing floor moves with every new high.\n\nMore.")).toBe("A trailing floor moves with every new high.");
+  });
+  it("accepts a short, specific first line", () => {
+    expect(hookLineProblem("A trailing floor moves with every new high.\n\nWhy it matters.")).toBeNull();
+  });
+  it("flags a first line that is a whole paragraph", () => {
+    expect(hookLineProblem("Up $1,500 by 11am on a trailing drawdown account? Check whether your floor trails intraday or locks at the close. Same day, very different floor.")).toMatch(/characters/);
+  });
+  it("flags thread wording and an empty post", () => {
+    for (const t of ["1/ Three personal rules for funded traders", "A thread on drawdown rules", "Part 1 of the rules", "\u{1F9F5} Drawdown rules"]) expect(hookLineProblem(t), t).toMatch(/thread/);
+    expect(hookLineProblem("   ")).toMatch(/no first line/);
+  });
+  it("shows up in the receipt, green for a hook and red for a paragraph", () => {
+    const ok = buildPostReceipt({ text: POST, reviewersPassed: 9, reviewersTotal: 9, recentPostedTexts: [], imageCard: null });
+    expect(ok.find((i) => /First line/.test(i.label))).toEqual({ label: "First line is a short hook", ok: true });
+    const bad = buildPostReceipt({ text: "x ".repeat(60) + "\n\nMore.", reviewersPassed: 9, reviewersTotal: 9, recentPostedTexts: [], imageCard: null });
+    expect(bad.find((i) => /First line/.test(i.label))!.ok).toBe(false);
   });
 });

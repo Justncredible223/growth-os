@@ -50,6 +50,13 @@ part on its own short paragraph, separated by one blank line: the hook on its ow
 then the explanation or example, then the Fillbook line last if the post mentions Fillbook at all.
 Two to four short paragraphs; no bullet characters, no emojis, no hashtags.
 
+HOOK LINE (owner and ChatGPT decision 2026-11-18): the first line of every X post is ONE short, specific hook on its own line, under about 70
+characters, that names the exact rule, number or situation the post is about (for example "A trailing floor moves with every new high."). It is
+not a vague tease ("Here is why", "You will not believe"), not a question that only baits a reply, and never thread wording ("1/", "a thread",
+"part 1"). It states no statistic or result that is not in the verified knowledge. If it mentions the Edge Score, the Edge Score always has five
+parts (profitability, consistency, risk control, stop adherence and rule adherence) and uses only the parts that have data. Blank line, then the
+explanation.
+
 The first two lines of an X post must stand on their own (owner question 2026-10-25). The timeline cuts a post after a few
 lines and shows "Show more", and short paragraphs make the cut come sooner, so most of our posts get cut. That is fine, as long
 as what a reader sees before the cut is a complete thought: the hook AND the one specific that makes it worth reading (the

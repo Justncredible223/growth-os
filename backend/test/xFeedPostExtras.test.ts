@@ -91,3 +91,12 @@ describe("image spec and posting window", () => {
     expect(composeOwnerNote("why", REFERENCE_TOPICS[1]!, "caption")).toMatch(/^Weekly reference post/);
   });
 });
+
+describe("hook line rule in the reference post brief (2026-11-18)", () => {
+  it("every reference topic asks for a short, specific first-line hook and no thread wording", () => {
+    for (const t of REFERENCE_TOPICS) {
+      expect(t.rationale, t.key).toContain("The FIRST LINE is a single short, specific hook");
+      expect(t.rationale, t.key).toContain("Never thread wording");
+    }
+  });
+});

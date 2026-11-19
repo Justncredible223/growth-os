@@ -44,6 +44,23 @@ export interface ReceiptInput {
   imageCard: XPostImageCard | null;
 }
 
+/** Longest first line that still reads as a hook (the writer is asked for under about 70; the slack avoids flagging a good 75-character line). */
+export const HOOK_LINE_MAX = 80;
+
+/** The first non-empty line of a post: its hook line. */
+export function hookLineOf(text: string): string {
+  return (text.split(/\n/).find((l) => l.trim().length > 0) ?? "").trim();
+}
+
+/** Null when the first line works as a short, specific hook; otherwise why not. Thread wording is never a hook. */
+export function hookLineProblem(text: string): string | null {
+  const line = hookLineOf(text);
+  if (line.length === 0) return "has no first line";
+  if (line.length > HOOK_LINE_MAX) return `is ${line.length} characters (keep it under about 70)`;
+  if (/^\s*\d+\s*\/|\bthread\b|\bpart \d\b|\u{1F9F5}/iu.test(line)) return "reads like the start of a thread";
+  return null;
+}
+
 export function buildPostReceipt(input: ReceiptInput): ReceiptItem[] {
   const { text } = input;
   const items: ReceiptItem[] = [];
@@ -55,6 +72,8 @@ export function buildPostReceipt(input: ReceiptInput): ReceiptItem[] {
   items.push({ label: containsLink(text) ? "Contains a link" : "No links", ok: !containsLink(text) });
   const wording = containsBannedGenericPhrase(text) ?? containsUnverifiedClaim(text) ?? containsFalseGiveawayClaim(text) ?? dashProblem(text);
   items.push({ label: wording ? `Wording: ${wording.reason}` : "No dashes, no banned wording, no unverified claims", ok: wording === null });
+  const hookProblem = hookLineProblem(text);
+  items.push({ label: hookProblem ? `First line (the hook) ${hookProblem}` : "First line is a short hook", ok: hookProblem === null });
   const card = input.imageCard;
   if (card && card.numbers.length > 0) {
     const traced = cardNumbersTraceToPost(card, text);
