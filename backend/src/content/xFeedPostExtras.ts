@@ -20,6 +20,7 @@ export function isReferencePostDay(operatingDate: string): boolean {
 
 const REFERENCE_RULES =
   "This is the week's reference post: one image the reader would save or send to a trading friend, with SHORT copy (two or three lines) that says what the picture is and why to save it. " +
+  "The FIRST LINE is a single short, specific hook (under about 70 characters) that names the exact rule or number the picture is about, then a blank line, then one or two lines on why to save it. Never thread wording, never an invented statistic. " +
   "Put NO link in the post body (the owner adds the link in the first reply). Do not state any dollar amount, percentage or day count as a rule of any firm: say 'check your firm's rulebook' for every firm-specific number. " +
   "No profit promises, no claim that Fillbook monitors an account live, and never say DXtrade auto-syncs. If sync is mentioned at all, it is a Core or Elite feature.";
 
