@@ -240,7 +240,7 @@ const FRESH2: Daily[] = [
   // 21
   {
     slug: "edge-score-67", title: "Edge Score: only 67", topic: "A sample account's Edge Score: the factors behind one score",
-    assetId: EDGE_SCORE, expectedTopic: "edge_score", accent: "bad", lines: ["Edge Score: only 67.", "Trend: minus 20."],
+    assetId: EDGE_SCORE, expectedTopic: "edge_score", accent: "bad", lines: ["Edge Score: only 67.", "Profitability: only 59."],
     opening: [h("Edge Score · Developing", "67", "bad"), h("Rule adherence", "87", "good")],
     windows: [w("Edge map", [r("Rule adherence", "", "87", "good"), r("Profitability", "", "59", "bad")])],
     focus: [f(h("Rule adherence", "87", "good"), 0, 0), f(h("Profitability", "59", "bad"), 0, 1)],
