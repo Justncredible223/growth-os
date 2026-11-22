@@ -7,7 +7,7 @@ import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   DAILY_SEARCH_BUDGET_USD,
   DAILY_SEARCH_CAP,
-  RESULTS_PER_QUERY,
+  resultsPerQueryFor,
   VET_MAX_PER_RUN,
   currentRunSlot,
   evaluateMonthlyBudget,
@@ -345,7 +345,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     const groupQuery = request.kind === "creators" ? watchlistQuery(request.handles) : grouped!.query;
     // A creator request reads the people, so the crypto and options exclusions and the futures anchor are left off (the same free and model
     // gates below still decide every post); a topic request carries them.
-    const results = await deps.adapter.searchRecentPosts(request.kind === "creators" ? groupQuery : withCryptoExclusions(groupQuery, { futuresAnchor: request.anchored }), RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+    const results = await deps.adapter.searchRecentPosts(request.kind === "creators" ? groupQuery : withCryptoExclusions(groupQuery, { futuresAnchor: request.anchored }), resultsPerQueryFor(now), now, MAX_AGE_FOR_DAILY_SELECTION_MS);
     searchRequests++;
     if (fromWatchlist) creatorRequests++;
     searchedToday++;

@@ -39,6 +39,28 @@ export const TOPICS_PER_SEARCH_RUN = 2;
 export const RESULTS_PER_QUERY = 10;
 
 /**
+ * Expanded-reads experiment (ChatGPT decision 2026-11-21, P3). OFF unless PROSPECTING_EXPANDED_READS_FROM is set to a start date
+ * (YYYY-MM-DD, Arizona calendar day is close enough: the window is compared in UTC). From that day for EXPANDED_READS_WINDOW_DAYS
+ * days each search reads up to EXPANDED_READS_MULTIPLIER times as many posts per query, then it reverts by itself: no second job
+ * and no second deploy. Scoring, quality bar, query mix, run frequency, buffer, the daily reply cap and the daily search budget do
+ * not change. Env changes reach production on the next deployment.
+ */
+export const EXPANDED_READS_MULTIPLIER = 2;
+export const EXPANDED_READS_WINDOW_DAYS = 7;
+
+export function expandedReadsActive(now: Date, startDate: string | undefined): boolean {
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate.trim())) return false;
+  const start = Date.parse(`${startDate.trim()}T00:00:00Z`);
+  if (Number.isNaN(start)) return false;
+  return now.getTime() >= start && now.getTime() < start + EXPANDED_READS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** Posts read per query right now: the normal 10, or double inside the experiment window. */
+export function resultsPerQueryFor(now: Date, startDate: string | undefined = process.env.PROSPECTING_EXPANDED_READS_FROM): number {
+  return expandedReadsActive(now, startDate) ? RESULTS_PER_QUERY * EXPANDED_READS_MULTIPLIER : RESULTS_PER_QUERY;
+}
+
+/**
  * The three daily X-prospecting-and-inbound growth-pulse invocations -- approved final
  * schedule is 08:00/13:00/18:00 America/Phoenix (configurable via
  * X_PROSPECTING_TIMES/SCHEDULE_TIMEZONE, see
