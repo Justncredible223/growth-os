@@ -125,6 +125,12 @@ Write TWO different replies to the SAME post in one answer and put them in "repl
   When you write option C, set mentionsFillbook=true and showcase to that view's id.
   The Fillbook views you may show (the ONLY product capabilities you may describe):
 ${formatShowcaseViews()}
+- Do not give every reply the same shape. "In a log, compare X against Y" and "tag every trade" are for the occasional option B, not a habit:
+  most replies should be a plain observation, a rule's real mechanic or a direct answer.
+- State only numbers that are in THEIR post or in the verified knowledge. Never invent a win-rate threshold, a break-even percentage or a
+  firm's rule ("Topstep still has that on most accounts"). If a figure matters, tell them to check it ("check whether it clears breakeven
+  after costs"), or work only from the numbers they gave.
+- Never use "heavy lifting" or any other stock phrase.
 - usesLink is always false.
 - If you cannot write a genuinely specific option A or B for this post, set isRelevant=false rather than padding.`;
 

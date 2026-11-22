@@ -12,6 +12,8 @@ import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWit
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { paragraphizeReply } from "../content/replySpacing.js";
 import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance.js";
+import { logLensProblem, unsupportedFactProblem } from "./prospectingReplyChecks.js";
+import { LOG_LENS_RECENT_WINDOW } from "./prospectingReplyChecks.js";
 import { isSeedCreator } from "./prospectingWatchlist.js";
 import { matchPostedStyle, optionSoftProblem, postMentionsFillbook, type DraftOption } from "./prospectingDraftOptions.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
@@ -374,7 +376,13 @@ async function draftCandidateCore(
   // P2 2026-11-15: no "treat as relevant" note for watchlist creators any more; the drafter judges their posts like any other.
   if (recovery.active) draftContext.recoveryNote = RECOVERY_DRAFT_NOTE;
   // Mention budget: once recent posted replies name Fillbook too often, this one must leave it out (same effect as recovery mode).
-  const mentionBudget = computeMentionBudget(await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+  const repliedThisWeek = await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  const mentionBudget = computeMentionBudget(repliedThisWeek);
+  // F1 (2026-11-21 audit): the most recent posted replies, newest first, so a new draft can be steered off a shape they all share.
+  const recentReplyTexts = [...repliedThisWeek]
+    .sort((a, b) => String(b.repliedAt ?? "").localeCompare(String(a.repliedAt ?? "")))
+    .slice(0, LOG_LENS_RECENT_WINDOW)
+    .map((c) => c.finalReply ?? c.draftReply ?? "");
   if (!recovery.active && mentionBudget.exhausted) draftContext.recoveryNote = MENTION_BUDGET_DRAFT_NOTE;
   const mustOmitFillbook = recovery.active || mentionBudget.exhausted;
   // Option C (the Fillbook option) is offered unless recovery mode or the mention budget says to leave Fillbook out.
@@ -410,6 +418,7 @@ async function draftCandidateCore(
         ];
         const hardFor = (option: DraftOption): string | null =>
           checkReplyGuardrails(option.text, false)?.reason ??
+          unsupportedFactProblem(option.text, row.postText) ??
           replyTagProblem(option.text, allowedTags) ??
           (candidate.usesLink ? "declares a link; cold replies never include one" : null) ??
           (mustOmitFillbook && namesFillbook(option.text)
@@ -418,7 +427,11 @@ async function draftCandidateCore(
               : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
             : null) ??
           (!postInvitesFillbook && namesFillbook(option.text) ? "names Fillbook in a cold reply -- the post did not ask about it, so leave the product out" : null);
-        const verdicts = options.map((o) => ({ option: o, hard: hardFor(o), soft: optionSoftProblem(o.style, o.text) }));
+        const verdicts = options.map((o) => ({
+          option: o,
+          hard: hardFor(o),
+          soft: optionSoftProblem(o.style, o.text) ?? (o.style === "helpful" ? logLensProblem(o.text, recentReplyTexts) : null),
+        }));
         const label = (o: DraftOption) => (o.style === "sharp" ? "The sharp option" : "The helpful option");
         const badHard = verdicts.find((v) => v.hard);
         if (badHard) {
@@ -436,6 +449,7 @@ async function draftCandidateCore(
       return {
         hard:
           checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ??
+          unsupportedFactProblem(candidate.reply, row.postText) ??
           replyTagProblem(candidate.reply, allowedTags) ??
           (mustOmitFillbook && namesFillbook(candidate.reply)
             ? recovery.active
@@ -487,7 +501,7 @@ async function draftCandidateCore(
   await repo.updateStatus(id, "ready", {
     draftReply: options ? options[0]!.text : finalReply,
     ...(options ? { draftOptions: options } : {}),
-    replyMentionsFillbook: options ? options.some((o) => o.style === "fillbook") || draft.mentionsFillbook : draft.mentionsFillbook,
+    replyMentionsFillbook: options ? options.some((o) => namesFillbook(o.text)) : namesFillbook(finalReply),
     replyUsedLink: draft.usesLink,
     ...(ownerOverride ? { breakdownPatch: { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } } : {}),
   });
@@ -571,7 +585,8 @@ export async function markProspectingRepliedOnce(
     repliedAt: now,
     postedStyle: matchPostedStyle(postedText, row.draftOptions, row.draftReply),
     finalReply: finalReply && finalReply !== row.draftReply ? finalReply : undefined,
-    replyMentionsFillbook: mentionsFillbook ?? row.replyMentionsFillbook ?? undefined,
+    // F5 (2026-11-21 audit): the flag follows the text that was actually posted, after any edit, never a stale or model-set flag.
+    replyMentionsFillbook: postedText ? namesFillbook(postedText) : (mentionsFillbook ?? row.replyMentionsFillbook ?? undefined),
     replyUsedLink: usedLink ?? row.replyUsedLink ?? undefined,
     onlyFrom: REPLIABLE_STATUSES,
   });
