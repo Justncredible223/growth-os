@@ -62,3 +62,10 @@ describe("reply wording for retention", () => {
     });
   }
 });
+
+describe("the team voice invents no origin story (ChatGPT decision 2026-11-21)", () => {
+  it("no longer carries the unverified origin example and forbids invented origins and outcomes", () => {
+    expect(HUMAN_REPLY_VOICE_RULES).not.toMatch(/spreadsheets lied/);
+    expect(HUMAN_REPLY_VOICE_RULES).toMatch(/Never state an origin story, a founder\s+motive/);
+  });
+});
