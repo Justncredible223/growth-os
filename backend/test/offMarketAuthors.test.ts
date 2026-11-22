@@ -12,8 +12,12 @@ describe("off-market authors (crypto and forex brands)", () => {
     expect(isReplyWorthyBase(COINPROP_POST, COIN)).toBe(false);
     expect(isReplyWorthyBase(FUNDYOURFX_POST, FX)).toBe(false);
   });
-  it("gives the forex account its own reason, because its post is otherwise clean", () => {
-    expect(whyNotReplyWorthy(FUNDYOURFX_POST, FX)).toBe("off_market_author");
+  it("closes the remaining gap: a prop signal with no futures evidence from a forex or crypto brand gets its own reason", () => {
+    // The two audit replies were Oct 12 and Oct 23, before the Oct 24 futures-only gate (#235), which now rejects both posts on its own.
+    // What it could still pass is a brand posting a prop signal (a funded account, drawdown) with no market named.
+    const post = "Trailing drawdown or static drawdown on a $100K funded account? Which one would you choose?";
+    expect(whyNotReplyWorthy(post, FX)).toBe("off_market_author");
+    expect(isReplyWorthyBase(post, FX)).toBe(false);
   });
   it("the crypto journal brand's post is also recognised as the company advertising itself", () => {
     expect(isPromoContent(COINPROP_POST)).toBe(true);
