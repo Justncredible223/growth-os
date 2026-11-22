@@ -323,11 +323,12 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
     expect(await repo.hasPriorOutreach("youtube", "9001")).toBe(false);
   });
 
-  it("stores an edited final reply only when it differs from the draft, and keeps the model's flags when the caller passes none", async () => {
+  it("stores an edited final reply only when it differs from the draft, and derives the Fillbook flag from the text actually posted", async () => {
     const repo = new InMemoryProspectingRepository();
-    repo.seed(candidate({ id: "x-2", draftReply: "draft", replyMentionsFillbook: true, replyUsedLink: false }));
+    // The stored flag is stale on purpose (false): the posted text names Fillbook, so the recorded flag follows the text (2026-11-21 audit, F5).
+    repo.seed(candidate({ id: "x-2", draftReply: "Fillbook's Insights flags sizing that jumps after a loss.", replyMentionsFillbook: false, replyUsedLink: false }));
 
-    const same = await markProspectingReplied(fakeClient, "x-2", "draft", undefined, undefined, { repo });
+    const same = await markProspectingReplied(fakeClient, "x-2", "Fillbook's Insights flags sizing that jumps after a loss.", undefined, undefined, { repo });
     expect(same.finalReply).toBeNull();
     expect(same.replyMentionsFillbook).toBe(true);
 
@@ -336,6 +337,7 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
     repo2.seed(candidate({ id: "x-3", draftReply: "draft" }));
     const edited = await markProspectingReplied(fakeClient, "x-3", "edited by hand", undefined, undefined, { repo: repo2 });
     expect(edited.finalReply).toBe("edited by hand");
+    expect(edited.replyMentionsFillbook).toBe(false);
   });
 
   it("does not record outreach when the author has no stable external id", async () => {

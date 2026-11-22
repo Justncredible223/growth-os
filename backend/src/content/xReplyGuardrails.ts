@@ -229,7 +229,7 @@ const AI_TELL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bless about [^.!?\n]{1,40},?\s*more about\b/i, reason: 'uses the "less about X, more about Y" construction' },
   {
     pattern:
-      /\b(?:delve|tapestry|landscape|at its core|here'?s the thing|let that sink in|deep dive|unpack|leverage|resonates?|mindset shift|the real question is|the key is|the truth is)\b/i,
+      /\b(?:delve|tapestry|landscape|at its core|here'?s the thing|let that sink in|deep dive|unpack|leverage|resonates?|mindset shift|the real question is|the key is|the truth is|heavy lifting)\b/i,
     reason: "uses stock AI vocabulary",
   },
   { pattern: /(?:\bthoughts\?|\bwhat do you think\?|\bdoes that (?:make sense|resonate)\?)\s*$/i, reason: "ends on a generic solicitation question" },

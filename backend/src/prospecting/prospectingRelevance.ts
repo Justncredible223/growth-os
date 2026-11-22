@@ -1,3 +1,4 @@
+import { isAddressedToGrok, sensitivePersonalReason } from "./prospectingReplyChecks.js";
 /**
  * Zero-cost, deterministic relevance gate -- a real, confirmed bug this
  * closes: Prospecting surfaced posts with zero connection to futures/
@@ -470,7 +471,14 @@ export function invitesReplies(postText: string): boolean {
 /** The original gate: about futures / prop-firm trading, and a post a person can actually reply to (not a newsletter or an ad). */
 export function isReplyWorthyBase(postText: string, opts: RelevanceOptions = {}): boolean {
   postText = postText.normalize("NFKC");
-  return isPlausiblyTradingRelated(postText, opts) && !isAiAgentHype(postText) && !isBroadcastContent(postText) && !isPromoContent(postText);
+  return (
+    isPlausiblyTradingRelated(postText, opts) &&
+    !isAiAgentHype(postText) &&
+    !isBroadcastContent(postText) &&
+    !isPromoContent(postText) &&
+    !isAddressedToGrok(postText) &&
+    sensitivePersonalReason(postText) === null
+  );
 }
 
 /** Prospecting's gate: the original gate plus no sales funnel, CFD-broker promo or hashtag/link-only post (reply-style experiment, 2026-10-16). */
@@ -503,6 +511,8 @@ export function whyNotReplyWorthy(postText: string, opts: RelevanceOptions = {})
   if (isAiAgentHype(postText)) return "ai_hype";
   if (isBroadcastContent(postText)) return "broadcast";
   if (isPromoContent(postText)) return "promo";
+  if (isAddressedToGrok(postText)) return "addressed_to_grok";
+  if (sensitivePersonalReason(postText)) return "sensitive_personal";
   if (isSalesFunnelOrEmptyPost(postText)) return "sales_funnel";
   return null;
 }
