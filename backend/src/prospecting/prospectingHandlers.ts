@@ -177,7 +177,7 @@ export async function listProspectingQueue(
   // Owner-chosen cards (Draft anyway on a Maybe post) skip the free spam gates, the freshness window and the score floor for 24 hours.
   const overridden = nonTerminal.filter((row) => isOwnerOverrideActive(row, now));
   const overriddenIds = new Set(overridden.map((row) => row.id));
-  const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle) }) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
+  const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle), authorHandle: row.authorHandle, authorName: row.authorName }) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
   if (irrelevantIds.length > 0) {
     // One failed update must not fail the whole queue read (P1 2026-11-15); the next read retries it.
     await Promise.allSettled(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON })));
@@ -329,7 +329,7 @@ async function draftCandidateCore(
     throw new ProspectingActionError(`Not drafting -- this candidate is already ${row.status.replace("_", " ")}.`);
   }
 
-  if (!ownerOverride && !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle) })) {
+  if (!ownerOverride && !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle), authorHandle: row.authorHandle, authorName: row.authorName })) {
     await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON });
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",
