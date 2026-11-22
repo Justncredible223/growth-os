@@ -69,3 +69,12 @@ describe("the team voice invents no origin story (ChatGPT decision 2026-11-21)",
     expect(HUMAN_REPLY_VOICE_RULES).toMatch(/Never state an origin story, a founder\s+motive/);
   });
 });
+
+describe("Option C and showcase wording stays narrow (ChatGPT decision 2026-11-21, P2)", () => {
+  it("never fits a view to an unrelated post, never uses the slogan, and never implies timing", () => {
+    expect(SHOWCASE_REPLY_GUIDANCE).toMatch(/Never fit a view to a post that is not about it/);
+    expect(SHOWCASE_REPLY_GUIDANCE).toMatch(/Do not use the\s+brand slogan/);
+    expect(SHOWCASE_REPLY_GUIDANCE).toMatch(/Never say or imply when Fillbook\s+knows it/);
+    expect(SHOWCASE_REPLY_GUIDANCE).not.toMatch(/before you ever hit request/);
+  });
+});

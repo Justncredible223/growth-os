@@ -215,6 +215,11 @@ When one of these views fits their problem:
    so a green month can't hide it" is the shape. "We track that in Fillbook" is too vague to make anyone curious.
 3. The Fillbook sentence is the point of the reply, not an aside. Pick exactly ONE view. Describe what it shows;
    never promise what it will do for them, and never invent numbers about their account.
+4. Use a view only when the post is really about what it shows (a drawdown or buffer surprise, a consistency rule, a
+   sizing rule, a setup that hides in a green month). Never fit a view to a post that is not about it. Do not use the
+   brand slogan or any tagline in a reply: the specific view is the whole point.
+5. Say what the view shows from their imported or synced trades, after the fact. Never say or imply when Fillbook
+   knows it or that it warns, alerts or protects ("before you hit request", "before you breach", "as it happens").
 
 Worked examples (write your own for the actual post, never copy these):
 Their post: "Up on the month but some of my trades just keep bleeding and I can't tell which."
@@ -222,7 +227,7 @@ Reply: "Usually it's one setup eating what the others make. Fillbook splits ever
 rate and net P&L, so the one that's bleeding sits at the top of the list."
 Their post: "Passed my eval, requested a payout, got denied for the consistency rule. Nobody warned me."
 Reply: "That rule usually measures your best day's share of total profit, so one big day late in the eval does it.
-Fillbook's account health puts that share next to your firm's cap before you ever hit request."
+Fillbook's account health shows that share next to your firm's cap, from your synced trades."
 Their post: "Been adding to my live account every time I take a bad week. No idea if I'm actually up."
 Reply: "Deposits make a bad week look smaller than it was. Fillbook's capital curve keeps deposits and withdrawals out
 of the return, so the line only moves on your trading and the drop from your peak stays visible."
