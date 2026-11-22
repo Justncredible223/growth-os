@@ -204,7 +204,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   const countSelectable = async (): Promise<number> => {
     const rows = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], BACKLOG_SCAN_LIMIT);
     return selectDailyWorkingSet(
-      rows.filter((c) => isReplyWorthyPost(c.postText, { trustedAuthor: isSeedCreator(c.authorHandle) }) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
+      rows.filter((c) => isReplyWorthyPost(c.postText, { trustedAuthor: isSeedCreator(c.authorHandle), authorHandle: c.authorHandle, authorName: c.authorName }) && !isTooSmallToBeWorthIt(c.authorFollowerCount)),
       now,
       { cooldownAuthorKeys },
     ).selected.length;
@@ -374,9 +374,9 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
         // so an obviously off-topic post (crypto, options, forex, stocks, prop-firm referral spam,
         // newsletters, AI-trading-agent hype) is never written to prospecting_candidates in the first place.
         const trusted = isSeedCreator(post.authorHandle);
-        if (!isReplyWorthyBase(post.text, { trustedAuthor: trusted }) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
+        if (!isReplyWorthyBase(post.text, { trustedAuthor: trusted, authorHandle: post.authorHandle, authorName: post.authorName }) || isTooSmallToBeWorthIt(post.authorFollowerCount)) {
           excludedAsIrrelevant++;
-          drop(isTooSmallToBeWorthIt(post.authorFollowerCount) ? "small_author" : (whyNotReplyWorthy(post.text, { trustedAuthor: trusted }) ?? "other"), post);
+          drop(isTooSmallToBeWorthIt(post.authorFollowerCount) ? "small_author" : (whyNotReplyWorthy(post.text, { trustedAuthor: trusted, authorHandle: post.authorHandle, authorName: post.authorName }) ?? "other"), post);
           continue;
         }
 

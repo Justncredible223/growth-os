@@ -322,6 +322,23 @@ const FUTURES_SPECIFIC_OVERRIDE_PATTERNS: RegExp[] = [
 /** Options for the free relevance gates. `trustedAuthor`: the author is a hand-picked futures creator, so the post needs no futures word of its own. */
 export interface RelevanceOptions {
   trustedAuthor?: boolean;
+  /** The author's handle and display name, when known: used only to tell a crypto or forex brand from a futures conversation (see isOffMarketAuthorWithoutFutures). */
+  authorHandle?: string | null;
+  authorName?: string | null;
+}
+
+/**
+ * ChatGPT B3 decision 2026-11-21. Two accounts that trade other markets reached the queue and got replies: a crypto prop firm and a
+ * forex prop firm. Their posts named no market ("A green P&L can hide a broken plan", "$100K Funded Account or $2K Personal Account?"),
+ * so the post text alone showed nothing wrong. A crypto or forex brand in the author's handle or name, with NO futures evidence in the
+ * post itself, is not a futures conversation. The account name never decides alone: a mixed-market account that posts about futures
+ * (a ticker, a futures prop firm, trailing drawdown and the like) still passes.
+ */
+const OFF_MARKET_AUTHOR_PATTERN = /(?:fx|forex|coin|crypto|bitcoin|btc|cfd|defi|nft|web3|altcoin|binance)/i;
+export function isOffMarketAuthorWithoutFutures(postText: string, opts: RelevanceOptions = {}): boolean {
+  const identity = `${opts.authorHandle ?? ""} ${opts.authorName ?? ""}`;
+  if (!OFF_MARKET_AUTHOR_PATTERN.test(identity)) return false;
+  return !explicitFutures(postText.normalize("NFKC"));
 }
 
 export function isPlausiblyTradingRelated(postText: string, opts: RelevanceOptions = {}): boolean {
@@ -376,6 +393,8 @@ export function isBroadcastContent(postText: string): boolean {
  */
 const PROMO_STRONG: RegExp[] = [
   /\blink in (my )?bio\b/i,
+  // A journal or tool maker advertising itself ("With CoinProp Trading Journal, review your execution"): a company post, not a trader's.
+  /\b(?:[Ww]ith|[Uu]sing|[Tt]ry|[Uu]se) [A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+)? (?:Trading )?Journal\b/,
   /\b(instant|direct|fast) funding\b/i,
   /\b(use|with) (code|promo)\b|\bpromo code\b|\bdiscount\b|\b\d+% off\b/i,
   /\bget (funded|paid) (today|now|instantly|fast)\b|\bgets? paid\b/i,
@@ -477,6 +496,7 @@ export function isReplyWorthyBase(postText: string, opts: RelevanceOptions = {})
     !isBroadcastContent(postText) &&
     !isPromoContent(postText) &&
     !isAddressedToGrok(postText) &&
+    !isOffMarketAuthorWithoutFutures(postText, opts) &&
     sensitivePersonalReason(postText) === null
   );
 }
@@ -511,6 +531,7 @@ export function whyNotReplyWorthy(postText: string, opts: RelevanceOptions = {})
   if (isAiAgentHype(postText)) return "ai_hype";
   if (isBroadcastContent(postText)) return "broadcast";
   if (isPromoContent(postText)) return "promo";
+  if (isOffMarketAuthorWithoutFutures(postText, opts)) return "off_market_author";
   if (isAddressedToGrok(postText)) return "addressed_to_grok";
   if (sensitivePersonalReason(postText)) return "sensitive_personal";
   if (isSalesFunnelOrEmptyPost(postText)) return "sales_funnel";
