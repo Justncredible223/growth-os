@@ -23,6 +23,9 @@ import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/v
 import { runDailyChartCardRequests } from "../src/video/dailyChartCardRequests.js";
 import { expireStuckCampaignRuns } from "../src/video/campaignRunSweep.js";
 import { motionRequestedToday } from "../src/video/dailyLimit.js";
+import { loadReviewHolds } from "../src/video/reviewHeldConcepts.js";
+import { withRefillLock } from "../src/video/refillLock.js";
+import { linkRefillAttempt, reserveRefillAttempt } from "../src/video/refillAttempts.js";
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 import { motionConceptStates } from "./run-campaign.js";
@@ -319,7 +322,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // after 25 minutes with no update it is marked failed so the refill below can try again. See campaignRunSweep.ts.
     results.push(await runStep("campaign_run_sweep", () => expireStuckCampaignRuns(client)));
     // Keeps a few chart cards waiting in Approvals (owner request 2026-10-01). It only queues drafts; approving, and so
-    // rendering, stays the owner's action. Bounded: Tuesdays and Fridays only (two a week), one request a day, at most 1 waiting at once, each concept requested once.
+    // rendering, stays the owner's action. Bounded: Tuesdays and Fridays only (two a week), one request a day, at most 1 waiting at once, each concept requested once, a blocked script not requested again, at most three automatic attempts a day.
     results.push(
       await runStep("chart_card_requests", () =>
         runDailyChartCardRequests({
@@ -330,10 +333,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           now: () => now,
           states: () => motionConceptStates(client),
           requestedToday: () => motionRequestedToday(client),
-          request: async (conceptId) => {
+          reviewHolds: () => loadReviewHolds(client, now),
+          withLock: (work) => withRefillLock(client, work),
+          reserveAttempt: (conceptId) => reserveRefillAttempt(client, conceptId, now),
+          request: async (conceptId, attemptId) => {
             const concept = listMotionConcepts().find((c) => c.id === conceptId);
             if (!concept) throw new Error(`unknown concept ${conceptId}`);
-            return enqueueMotionConceptRequest(client, concept);
+            const queued = await enqueueMotionConceptRequest(client, concept, (opportunityId) => linkRefillAttempt(client, attemptId, { opportunityId }));
+            // Best-effort: the run is already queued, and the opportunity link above still marks it as automatic.
+            await linkRefillAttempt(client, attemptId, { opportunityId: queued.opportunityId, campaignRunRequestId: queued.campaignRunRequestId }).catch(() => {});
+            return queued;
           },
         }),
       ),

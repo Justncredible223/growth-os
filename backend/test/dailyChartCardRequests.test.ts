@@ -23,6 +23,9 @@ function deps(opts: { now?: Date; paused?: boolean; today?: string | null; state
     isPaused: async () => opts.paused ?? false,
     states: async () => new Map((opts.states ?? []).map(([i, s]) => [titleOf(i), s] as const)),
     requestedToday: async () => opts.today ?? null,
+    reviewHolds: async () => ({ heldTitles: new Set<string>(), rejectedToday: null }),
+    withLock: (work) => work(),
+    reserveAttempt: async () => ({ ok: true as const, attemptId: "attempt", attempt: 1 }),
     request: vi.fn(async (id: string) => {
       if (opts.fail?.(id)) throw new Error(`boom ${id}`);
       requested.push(id);

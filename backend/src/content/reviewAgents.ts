@@ -1,5 +1,5 @@
 import type { LlmClient } from "./llmClient.js";
-import { MODEL_OPUS } from "./llmClient.js";
+import { LlmClientError, MODEL_OPUS } from "./llmClient.js";
 
 export type ReviewAgentName =
   | "trader"
@@ -182,6 +182,10 @@ export async function runReviewAgent(
   ].join("\n");
 
   const input = await client.callTool<VerdictToolInput>(systemPrompt, userMessage, VERDICT_TOOL_NAME, VERDICT_SCHEMA, undefined, REVIEW_VERDICT_MAX_TOKENS, MODEL_OPUS, true);
+
+  // A reply with no explicit true/false verdict is a broken reply, not a judgement: it must not be stored as a rejection
+  // (a stored rejection holds a video concept until its script is revised), and a text such as "false" must not pass.
+  if (typeof input?.pass !== "boolean") throw new LlmClientError(`${agent} reply had no explicit pass/fail verdict`);
 
   return {
     agent,

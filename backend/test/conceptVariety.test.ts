@@ -94,6 +94,9 @@ describe("the daily refill never queues two near-copies", () => {
       isPaused: async () => false,
       states: async () => states,
       requestedToday: async () => null,
+      reviewHolds: async () => ({ heldTitles: new Set<string>(), rejectedToday: null }),
+      withLock: (work: () => Promise<string>) => work(),
+      reserveAttempt: async () => ({ ok: true as const, attemptId: "attempt", attempt: 1 }),
       request: async (id: string) => {
         requested.push(id);
         const c = offered.find((x) => x.id === id)!;

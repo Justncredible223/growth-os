@@ -26,6 +26,7 @@ import { recordResearchCost } from "../../src/research/researchHandlers.js";
 import { errorMessage } from "../../src/lib/errorMessage.js";
 import { sendScriptReadyNotification } from "../video-worker/pushSender.js";
 import { notifyScriptReady } from "./notifyScriptReady.js";
+import { isAutomaticRefillRun } from "../../src/video/refillAttempts.js";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -56,7 +57,8 @@ async function main(): Promise<void> {
       throw new Error(`No open opportunity with id ${opportunityId} -- it may have already been actioned by a concurrent request.`);
     }
 
-    const source: CampaignRunSource = "manual";
+    // A run the automatic refill queued is held to the background spending limits; one the owner asked for is not.
+    const source: CampaignRunSource = (await isAutomaticRefillRun(client, campaignRunRequestId, opportunityId)) ? "auto-draft" : "manual";
     const { deps, usage } = await buildSupabaseRunCampaignDeps(client, () => opportunity.id, source);
     const result = await runCampaignForOpportunity(deps, opportunity, { assetTypeOverride });
 
