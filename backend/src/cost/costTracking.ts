@@ -290,6 +290,27 @@ export async function recordXSearchCostEvent(
   return costUsd;
 }
 
+/** Fixed wording for a failed write. Database messages can quote rejected values, so none of the message is ever passed through. */
+const WRITE_FAILURE_REASONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/json|unicode|surrogate|encoding|byte sequence/i, "invalid JSON or text encoding"],
+  [/row-level security|permission denied|not authorized|jwt|api key/i, "permission or authentication"],
+  [/violates|constraint|duplicate key/i, "constraint violation"],
+  [/relation|column|schema cache|does not exist/i, "missing table or column"],
+  [/timed? ?out|canceling statement/i, "timeout"],
+  [/fetch failed|network|ECONN|ENOTFOUND|socket/i, "network request failed"],
+  [/too large|too long|exceeds/i, "value too large"],
+  [/read-only|disk|quota|too many connections/i, "database unavailable or full"],
+];
+
+/** The error code plus a fixed reason, safe to log: no post text, request body or credential can appear in it. */
+export function safeWriteDiagnostic(err: unknown): string {
+  const e = (err && typeof err === "object" ? err : {}) as { code?: unknown; message?: unknown };
+  const code = typeof e.code === "string" && /^[A-Z0-9_]{1,12}$/.test(e.code) ? e.code : "none";
+  const message = typeof e.message === "string" ? e.message : "";
+  const reason = WRITE_FAILURE_REASONS.find(([pattern]) => pattern.test(message))?.[1] ?? "unclassified";
+  return `code=${code} reason=${reason}`;
+}
+
 /**
  * Same as recordXSearchCostEvent, but says whether the row was really saved. Prospecting's daily budget, request cap and repeat-query skip
  * all read these rows, so a search that cannot record its cost must stop instead of searching on unmetered (ChatGPT P0 2026-11-15: fail closed).
@@ -310,8 +331,10 @@ export async function recordXSearchCostEventChecked(
       cost_usd: costUsd,
       context,
     });
+    if (error) console.warn(`[cost] x_search_read not saved: ${safeWriteDiagnostic(error)}`);
     return { costUsd, recorded: !error };
-  } catch {
+  } catch (err) {
+    console.warn(`[cost] x_search_read not saved: ${safeWriteDiagnostic(err)}`);
     return { costUsd, recorded: false };
   }
 }
