@@ -21,6 +21,17 @@ import { AUTHOR_COOLDOWN_DAYS, MIN_DAILY_SET_SCORE, authorKeyOf, selectDailyWork
 import { MIN_WATCHLIST_SIZE, PROSPECTING_SEED_CREATORS, isSeedCreator, WATCHLIST_LOOKBACK_DAYS, buildWatchlist, chunkWatchlist, parseHandleList, watchlistQuery } from "./prospectingWatchlist.js";
 import type { ProspectingRepository } from "./types.js";
 
+/**
+ * A short one-line sample of a post for the search funnel. Cuts on whole code points, so an emoji or styled letter is never split in half,
+ * and replaces any unpaired surrogate: the funnel is stored as jsonb, which rejects them.
+ */
+export function briefSample(text: string, max = 110): string {
+  return Array.from(text.replace(/\s+/g, " "))
+    .slice(0, max)
+    .map((ch) => (/^[\uD800-\uDFFF]$/.test(ch) ? "\uFFFD" : ch))
+    .join("");
+}
+
 export interface ProspectingRunResult {
   skipped: boolean;
   skipReason?: string;
@@ -358,10 +369,9 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     // What happened to each post of this request (2026-10-25): recorded on the same cost event, so it can be read back with
     // GET /api/summary?view=prospecting-runs and nobody has to guess where posts die.
     const funnel = { gate: {} as Record<string, number>, inserted: 0, duplicates: 0, screened: 0, screenedOut: 0, samples: [] as Array<{ t: string; why: string; a: string | null }>, kept: [] as string[] };
-    const brief = (text: string) => text.replace(/\s+/g, " ").slice(0, 110);
     const drop = (why: string, post: { text: string; authorHandle?: string | null }) => {
       funnel.gate[why] = (funnel.gate[why] ?? 0) + 1;
-      if (funnel.samples.length < 10) funnel.samples.push({ t: brief(post.text), why, a: post.authorHandle ?? null });
+      if (funnel.samples.length < 10) funnel.samples.push({ t: briefSample(post.text), why, a: post.authorHandle ?? null });
     };
     try {
 
@@ -436,7 +446,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
         if (!isNew) funnel.duplicates++;
         if (isNew) {
           funnel.inserted++;
-          if (funnel.kept.length < 4) funnel.kept.push(brief(post.text));
+          if (funnel.kept.length < 4) funnel.kept.push(briefSample(post.text));
           newCandidates++;
           created.push({ id, postText: post.text, discoveryQuery: topic.key, authorHandle: post.authorHandle, score: scoreResult.score });
         }
