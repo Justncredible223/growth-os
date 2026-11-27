@@ -13,7 +13,12 @@ type Client = ReturnType<typeof getServiceClient>;
  * identically. It does NOT check whether the concept is offered, passes the bar, or is already used up: callers do that
  * first, because they report those refusals in their own way (an HTTP status; a line in a step report).
  */
-export async function enqueueMotionConceptRequest(client: Client, concept: MotionConceptSummary): Promise<{ campaignRunRequestId: string; opportunityId: string }> {
+export async function enqueueMotionConceptRequest(
+  client: Client,
+  concept: MotionConceptSummary,
+  /** Runs after the opportunity is known and before the run is queued (the automatic refill records it there). */
+  beforeEnqueue?: (opportunityId: string) => Promise<void>,
+): Promise<{ campaignRunRequestId: string; opportunityId: string }> {
   const opportunityRepo: OpportunityRepository = new SupabaseOpportunityRepository(client);
   const canonicalTitle = manualMotionConceptTitle(concept);
   const { data: existingDup, error: dupError } = await client
@@ -34,6 +39,8 @@ export async function enqueueMotionConceptRequest(client: Client, concept: Motio
   if (!motionOpportunity) {
     motionOpportunity = await opportunityRepo.insert(manualMotionConceptOpportunityInput(concept));
   }
+
+  if (beforeEnqueue) await beforeEnqueue(motionOpportunity.id);
 
   const { data: enqueueRows, error: enqueueError } = await client.rpc("enqueue_campaign_run", {
     p_opportunity_id: motionOpportunity.id,

@@ -83,6 +83,23 @@ describe("runReviewAgent", () => {
   });
 });
 
+describe("runReviewAgent -- a reply without an explicit verdict", () => {
+  const reply = (input: unknown) => new LlmClient("test-key", vi.fn().mockResolvedValue(jsonResponse({ content: [{ type: "tool_use", name: "submit_verdict", input }] })));
+
+  it.each([
+    ["an empty reply", {}],
+    ["a score with no verdict", { score: 0.9, reasoning: "good", issues: [] }],
+    ["a text verdict", { pass: "false", score: 0.2, reasoning: "no", issues: [] }],
+    ["a null verdict", { pass: null, score: 0.2, reasoning: "no", issues: [] }],
+  ])("is an error, never a stored pass or fail: %s", async (_name, input) => {
+    await expect(runReviewAgent(reply(input), "trader", "text", context)).rejects.toThrow(/no explicit pass\/fail verdict/);
+  });
+
+  it("keeps an explicit verdict that has no score", async () => {
+    expect((await runReviewAgent(reply({ pass: false, reasoning: "no", issues: [] }), "trader", "text", context)).pass).toBe(false);
+  });
+});
+
 describe("runReviewAgent -- partnership pitch context", () => {
   const pitchContext = {
     ...context,

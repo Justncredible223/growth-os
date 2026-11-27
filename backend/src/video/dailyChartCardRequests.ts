@@ -6,13 +6,18 @@ import { renderBar } from "../shortform/storyScore.js";
 import { distinctConcepts } from "../shortform/conceptVariety.js";
 import type { ScenePlan } from "../shortform/types.js";
 import { ONE_PER_DAY_ZONE } from "./dailyLimit.js";
+import type { ReviewHolds } from "./reviewHeldConcepts.js";
+import type { AttemptReservation } from "./refillAttempts.js";
 
 /**
  * The daily chart-card refill: keeps a few chart cards waiting in Approvals so there is always something fresh to
  * approve, without the owner requesting each one. It only REQUESTS (queues a draft); approving, and so rendering,
  * stays the owner's action in the app. It is bounded five ways: only on VIDEO_REQUEST_WEEKDAYS (two a week, owner 2026-10-24), one request per calendar day in total (owner rule,
  * 2026-10-03, shared with the app's Motion render button), never more than MAX_CHART_CARDS_WAITING waiting at once (so a few days of not approving never piles up drafts or review spend), only concepts that are offered and clear
- * the render bar, and each concept only once (a used-up concept is never requested again).
+ * the render bar, and each concept only once (a used-up concept is never requested again). A script the mechanical gate or
+ * the AI review blocked is not requested again either (reviewHeldConcepts.ts): that attempt uses the day's automatic
+ * request, and the next request day moves on to the next concept. A run that broke is retried, at most
+ * MAX_AUTOMATIC_ATTEMPTS_PER_DAY times in a day with a pause between (refillAttempts.ts).
  */
 export const MAX_CHART_CARDS_WAITING = 1;
 /** When fewer than this many unused chart concepts remain, the step report says so, so the supply is topped up in time. */
@@ -80,7 +85,13 @@ export interface DailyChartCardDeps {
   states(): Promise<Map<string, ConceptState>>;
   /** The title of the concept already requested today (by this refill or by hand), or null when today's one request is still free. */
   requestedToday(): Promise<string | null>;
-  request(conceptId: string): Promise<{ campaignRunRequestId: string; opportunityId: string }>;
+  /** Concepts whose current script was already blocked, and any block from today (see loadReviewHolds). */
+  reviewHolds(): Promise<ReviewHolds>;
+  /** Runs the refill's decide-and-request part alone; resolves to null when another run is already doing it. */
+  withLock(work: () => Promise<string>): Promise<string | null>;
+  /** Takes one of the day's automatic attempts before anything is queued (see reserveRefillAttempt). */
+  reserveAttempt(conceptId: string): Promise<AttemptReservation>;
+  request(conceptId: string, attemptId: string): Promise<{ campaignRunRequestId: string; opportunityId: string }>;
   /** The run's clock, for the weekday gate. Defaults to the real time. */
   now?: () => Date;
 }
@@ -107,8 +118,16 @@ export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promi
     const days = VIDEO_REQUEST_WEEKDAYS.map((d) => WEEKDAY_NAMES[d]).join(" and ");
     return `skipped -- two videos a week: requests go out on ${days} only (today is ${WEEKDAY_NAMES[today] ?? "unknown"})`;
   }
+  // Everything is read inside the lock, so a second run sees what the first one requested.
+  const report = await deps.withLock(() => requestOneConcept(deps));
+  return report ?? "skipped -- another chart card refill is running";
+}
+
+async function requestOneConcept(deps: DailyChartCardDeps): Promise<string> {
   const alreadyToday = await deps.requestedToday();
   if (alreadyToday) return `skipped -- one video a day: "${alreadyToday}" was already requested today`;
+  const holds = await deps.reviewHolds();
+  if (holds.rejectedToday) return `skipped -- today's automatic request was used: "${holds.rejectedToday}" was blocked today`;
   const states = await deps.states();
   const concepts = offeredChartConcepts();
   const stateOf = (c: MotionConceptSummary) => states.get(manualMotionConceptTitle(c));
@@ -118,18 +137,23 @@ export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promi
   const planOf = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
   // Every concept made or waiting counts, offered or not: a cut of an explainer that was already made is a near-copy of it.
   const used = listMotionConcepts().filter((c) => stateOf(c) === "made" || stateOf(c) === "waiting").map((c) => c.id);
-  const unused = distinctConcepts(concepts.filter((c) => stateOf(c) === undefined), used, planOf);
+  const free = concepts.filter((c) => stateOf(c) === undefined);
+  const held = free.filter((c) => holds.heldTitles.has(manualMotionConceptTitle(c)));
+  const unused = distinctConcepts(free.filter((c) => !held.includes(c)), used, planOf);
+  const heldNote = held.length > 0 ? `held after being blocked (needs a revised script): ${held.map((c) => c.id).join(", ")}` : null;
 
   const ordered = requestOrder(unused, used);
-  if (unused.length === 0) return "no unused chart concepts left -- add more";
+  if (unused.length === 0) return ["no unused chart concepts left -- add more", heldNote].filter(Boolean).join("; ");
   const room = MAX_CHART_CARDS_WAITING - waiting;
   if (room <= 0) return `skipped -- ${waiting} chart cards already waiting (limit ${MAX_CHART_CARDS_WAITING})`;
 
   const requested: string[] = [];
   const failed: string[] = [];
   for (const concept of ordered.slice(0, Math.min(room, 1))) {
+    const attempt = await deps.reserveAttempt(concept.id);
+    if (!attempt.ok) return `skipped -- ${attempt.reason}`;
     try {
-      await deps.request(concept.id);
+      await deps.request(concept.id, attempt.attemptId);
       requested.push(concept.id);
     } catch (err) {
       failed.push(`${concept.id}: ${err instanceof Error ? err.message : String(err)}`);
@@ -140,6 +164,7 @@ export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promi
   const left = unused.length - requested.length;
   const parts = [`requested ${requested.length} (${requested.join(", ")})`, `${waiting + requested.length} waiting`, `${left} unused left`];
   if (failed.length > 0) parts.push(`failed: ${failed.join("; ")}`);
+  if (heldNote) parts.push(heldNote);
   if (left < LOW_SUPPLY_AT) parts.push(`LOW SUPPLY: only ${left} unused chart concepts left -- add more`);
   return parts.join("; ");
 }
