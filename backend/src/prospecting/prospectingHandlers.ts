@@ -181,7 +181,7 @@ export async function listProspectingQueue(
   const irrelevantIds = nonTerminal.filter((row) => !overriddenIds.has(row.id)).filter((row) => !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle), authorHandle: row.authorHandle, authorName: row.authorName }) || isTooSmallToBeWorthIt(row.authorFollowerCount)).map((row) => row.id);
   if (irrelevantIds.length > 0) {
     // One failed update must not fail the whole queue read (P1 2026-11-15); the next read retries it.
-    await Promise.allSettled(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON })));
+    await Promise.allSettled(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON, onlyFrom: [...NON_TERMINAL_STATUSES] })));
   }
   const eligible = irrelevantIds.length > 0 ? nonTerminal.filter((row) => !irrelevantIds.includes(row.id)) : nonTerminal;
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, now);
@@ -211,7 +211,7 @@ export async function listProspectingQueue(
   const pastWindowIds = tooOldForToday.filter((c) => !overriddenIds.has(c.id)).map((c) => c.id);
   if (pastWindowIds.length > 0) {
     try {
-      await Promise.all(pastWindowIds.map((id) => repo.updateStatus(id, "expired")));
+      await Promise.all(pastWindowIds.map((id) => repo.updateStatus(id, "expired", { onlyFrom: [...NON_TERMINAL_STATUSES] })));
     } catch {
       // Never block the queue on cleanup; the next load tries again.
     }
@@ -330,6 +330,9 @@ async function draftCandidateCore(
     throw new ProspectingActionError(`Not drafting -- this candidate is already ${row.status.replace("_", " ")}.`);
   }
 
+  // APP-PR364-CONCURRENCY-1128: every write that ends a draft only lands while the row is still in a status a draft may start from, so a
+  // draft still running can never undo a reply, skip or expiry the owner made meanwhile (or, for Draft anyway, a change to the Maybe row).
+  const draftFrom: ProspectingStatus[] = ownerOverride ? ["not_relevant"] : [...NON_TERMINAL_STATUSES];
   const gateOpts = { trustedAuthor: isSeedCreator(row.authorHandle), authorHandle: row.authorHandle, authorName: row.authorName };
   // APP-DEFECT-1128: F1 to F5 outcomes are recorded (codes only) so the reply checks can be measured.
   const postChecks = postCheckResults(row.postText, gateOpts, ownerOverride);
@@ -337,7 +340,7 @@ async function draftCandidateCore(
   if (!ownerOverride && !isReplyWorthyPost(row.postText, gateOpts)) {
     const record = checkLog.build("gate_at_draft");
     logReplyChecks(record, id);
-    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON, breakdownPatch: replyChecksPatch(record) });
+    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom });
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",
     );
@@ -366,7 +369,7 @@ async function draftCandidateCore(
     // Kept reachable from Maybe: an AI judgement the owner can overrule with Draft anyway.
     const record = checkLog.build("irrelevant_at_draft");
     logReplyChecks(record, id);
-    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record) });
+    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom });
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
   }
 
@@ -502,7 +505,7 @@ async function draftCandidateCore(
     if (err instanceof ProspectingIrrelevantSignal) {
       const record = checkLog.build("irrelevant_at_draft");
       logReplyChecks(record, id);
-      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record) });
+      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom });
       throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");
     }
     throw err;
@@ -545,9 +548,8 @@ async function draftCandidateCore(
     : checkLog.build("shown_one_option", bestPartial!.candidate, [bestPartial!.option.style === "sharp" ? "sharp" : "helpful"]);
   const checkRecord = accepted && shownRecord.shownWithSoft ? { ...shownRecord, disposition: "shown_soft_flag" as const } : shownRecord;
   logReplyChecks(checkRecord, id);
-
   // draftReply is always the first option's text so older app builds (which only know draftReply) keep working.
-  await repo.updateStatus(id, "ready", {
+  const saved = await repo.updateStatus(id, "ready", {
     draftReply: options ? options[0]!.text : finalReply,
     ...(options ? { draftOptions: options } : {}),
     replyMentionsFillbook: options ? options.some((o) => namesFillbook(o.text)) : namesFillbook(finalReply),
@@ -556,7 +558,19 @@ async function draftCandidateCore(
       ...replyChecksPatch(checkRecord),
       ...(ownerOverride ? { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } : {}),
     },
+    onlyFrom: draftFrom,
   });
+  if (saved === false) {
+    // The row moved on while this draft was being written (replied, skipped, handled, filtered out, expired, or another draft finished
+    // first): keep that change. A card another draft already filled (a double tap) is handed back as it is.
+    logReplyChecks({ ...checkRecord, disposition: "discarded_row_changed" }, id);
+    const current = await repo.getById(id);
+    if (current && current.status === "ready" && current.draftReply) return current;
+    // ProspectingActionError (HTTP 404), like the other "Not drafting" refusals, so the app shows this message.
+    throw new ProspectingActionError(
+      `Not drafting -- this post changed while the draft was being written (it is now ${(current?.status ?? "gone").replace("_", " ")}), so the draft was not saved.`,
+    );
+  }
 
   const updated = await repo.getById(id);
   if (!updated) throw new ProspectingActionError(`Row "${id}" vanished after drafting`);
@@ -568,7 +582,8 @@ export async function markProspectingOpened(client: SupabaseClient, id: string, 
   const repo = repoFor(client, deps);
   const row = await repo.getById(id);
   if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
-  await repo.updateStatus(id, row.status, { openedAt: new Date().toISOString() });
+  // Only while the status is still the one read, so this timestamp can never undo a reply or a fresh draft made meanwhile.
+  await repo.updateStatus(id, row.status, { openedAt: new Date().toISOString(), onlyFrom: [row.status] });
 }
 
 /**

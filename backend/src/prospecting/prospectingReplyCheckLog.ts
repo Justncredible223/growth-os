@@ -48,7 +48,9 @@ export type Disposition =
   /** The free gate turned the post away at draft time. */
   | "gate_at_draft"
   /** A model relevance check (cheap check or the drafter) turned the post away. */
-  | "irrelevant_at_draft";
+  | "irrelevant_at_draft"
+  /** A clean draft was ready but the row had moved on meanwhile (replied, skipped, expired), so it was not saved. Logged only. */
+  | "discarded_row_changed";
 
 export interface ReplyCheckRecord {
   v: 1;
