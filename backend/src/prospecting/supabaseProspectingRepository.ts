@@ -1,7 +1,11 @@
 import type { WatchlistRow } from "./prospectingWatchlist.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFT_OPTIONS_KEY, POSTED_STYLE_KEY, parseDraftOptions, type PostedStyle } from "./prospectingDraftOptions.js";
-import { MAYBE_REASONS, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
+import { REPLY_CHECKS_KEY, REPLY_CHECK_F5_KEY } from "./prospectingReplyCheckLog.js";
+import { MAYBE_REASONS, ProspectingWriteConflictError, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
+
+/** Guarded read-merge-write attempts before the write is refused (see updateWithBreakdownMerge). */
+export const MAX_MERGE_ATTEMPTS = 3;
 
 /** The experiment's two fields live inside the existing score_breakdown JSON (no migration); this splits them back out. */
 function splitBreakdown(raw: unknown): { scoreBreakdown: Record<string, string>; draftOptions: ProspectingCandidate["draftOptions"]; postedStyle: PostedStyle | null } {
@@ -10,6 +14,9 @@ function splitBreakdown(raw: unknown): { scoreBreakdown: Record<string, string>;
   const posted = all[POSTED_STYLE_KEY];
   delete all[DRAFT_OPTIONS_KEY];
   delete all[POSTED_STYLE_KEY];
+  // Reply-check outcomes (APP-DEFECT-1128) are for read-only queries, not the app: kept in the row, left out of the API object.
+  delete all[REPLY_CHECKS_KEY];
+  delete all[REPLY_CHECK_F5_KEY];
   const postedStyle = posted === "sharp" || posted === "helpful" || posted === "edited" || posted === "legacy" ? posted : null;
   return { scoreBreakdown: all as Record<string, string>, draftOptions, postedStyle };
 }
@@ -188,14 +195,7 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     if (fields?.repliedAt !== undefined) update.replied_at = fields.repliedAt;
     if (fields?.skipReason !== undefined) update.skip_reason = fields.skipReason;
     if (fields?.draftOptions !== undefined || fields?.postedStyle !== undefined || fields?.breakdownPatch !== undefined) {
-      // Merge into the existing score_breakdown JSON so the scoring keys survive.
-      const { data: current, error: readError } = await this.client.from("prospecting_candidates").select("score_breakdown").eq("id", id).maybeSingle();
-      if (readError) throw new Error(`updateStatus breakdown read failed: ${readError.message}`);
-      const merged: Record<string, unknown> = { ...((current?.score_breakdown as Record<string, unknown> | null) ?? {}) };
-      if (fields.draftOptions !== undefined) merged[DRAFT_OPTIONS_KEY] = fields.draftOptions === null ? undefined : JSON.stringify(fields.draftOptions);
-      if (fields.postedStyle !== undefined) merged[POSTED_STYLE_KEY] = fields.postedStyle === null ? undefined : fields.postedStyle;
-      if (fields.breakdownPatch !== undefined) Object.assign(merged, fields.breakdownPatch);
-      update.score_breakdown = merged;
+      return this.updateWithBreakdownMerge(id, update, fields);
     }
     if (fields?.onlyFrom) {
       // Conditional: two taps (or a retry) racing on the same row can only move it once.
@@ -206,6 +206,39 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     const { error } = await this.client.from("prospecting_candidates").update(update).eq("id", id);
     if (error) throw new Error(`updateStatus failed: ${error.message}`);
     return true;
+  }
+
+  /**
+   * Merges into the existing score_breakdown JSON so the scoring keys survive, without losing a key another request wrote between the
+   * read and the write (APP-PR364-CONCURRENCY-1128). Optimistic: the UPDATE only lands while updated_at is still the value that was read
+   * (every write to this table sets updated_at), and on a miss the row is read again and merged again. No SQL change is needed.
+   * After MAX_MERGE_ATTEMPTS misses it never writes unguarded (APP-PR364-RACEFIX-1128): it leaves the stored row as it is and throws
+   * ProspectingWriteConflictError, which the handlers turn into a refusal the owner can retry. Nothing is regenerated automatically.
+   */
+  private async updateWithBreakdownMerge(
+    id: string,
+    update: Record<string, unknown>,
+    fields: { draftOptions?: ProspectingCandidate["draftOptions"]; postedStyle?: PostedStyle | null; breakdownPatch?: Record<string, string>; onlyFrom?: ProspectingStatus[] },
+  ): Promise<boolean> {
+    for (let attempt = 1; attempt <= MAX_MERGE_ATTEMPTS; attempt++) {
+      const { data: current, error: readError } = await this.client.from("prospecting_candidates").select("score_breakdown, updated_at, status").eq("id", id).maybeSingle();
+      if (readError) throw new Error(`updateStatus breakdown read failed: ${readError.message}`);
+      if (!current) return false;
+      // The status already moved on: a conditional write would not land, so do not write at all.
+      if (fields.onlyFrom && !fields.onlyFrom.includes(current.status as ProspectingStatus)) return false;
+      const merged: Record<string, unknown> = { ...((current.score_breakdown as Record<string, unknown> | null) ?? {}) };
+      if (fields.draftOptions !== undefined) merged[DRAFT_OPTIONS_KEY] = fields.draftOptions === null ? undefined : JSON.stringify(fields.draftOptions);
+      if (fields.postedStyle !== undefined) merged[POSTED_STYLE_KEY] = fields.postedStyle === null ? undefined : fields.postedStyle;
+      if (fields.breakdownPatch !== undefined) Object.assign(merged, fields.breakdownPatch);
+      let query = this.client.from("prospecting_candidates").update({ ...update, score_breakdown: merged }).eq("id", id);
+      if (fields.onlyFrom) query = query.in("status", fields.onlyFrom);
+      query = query.eq("updated_at", current.updated_at);
+      const { data, error } = await query.select("id");
+      if (error) throw new Error(`updateStatus failed: ${error.message}`);
+      if ((data ?? []).length > 0) return true;
+    }
+    console.warn(`[prospecting] score_breakdown merge for ${id} missed a concurrent write ${MAX_MERGE_ATTEMPTS} times; nothing written`);
+    throw new ProspectingWriteConflictError(`score_breakdown merge for ${id} kept missing a concurrent write`);
   }
 
   async hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean> {
