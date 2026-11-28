@@ -4,7 +4,7 @@ import type { ProspectingDraftResult } from "../src/prospecting/prospectingReply
 import { draftProspectingCandidateReply, draftScreenedOutPost, listProspectingQueue, markProspectingAlreadyHandled, markProspectingOpened, markProspectingReplied, markProspectingSkipped } from "../src/prospecting/prospectingHandlers";
 import { REPLY_CHECKS_KEY, REPLY_CHECK_F5_KEY } from "../src/prospecting/prospectingReplyCheckLog";
 import { MAX_MERGE_ATTEMPTS, SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository";
-import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
+import { ProspectingWriteConflictError, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "../src/prospecting/types";
 
 /** APP-PR364-CONCURRENCY-1128: a draft (or the queue's cleanup) still running can never undo a reply, and merges keep each other's keys. */
 
@@ -320,18 +320,60 @@ describe("score_breakdown merges keep each other's keys (optimistic, no SQL)", (
     expect(updates).toHaveLength(0);
   });
 
-  it(`after ${MAX_MERGE_ATTEMPTS} misses it writes once without the guard, as before`, async () => {
+  it(`after ${MAX_MERGE_ATTEMPTS} misses it refuses: never an unguarded write, and posted_style, reply_checks and reply_check_f5 survive`, async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stored = { freshness: "10", posted_style: "sharp", [REPLY_CHECKS_KEY]: '{"v":1}', [REPLY_CHECK_F5_KEY]: "pass" };
     let stamp = 0;
-    const { client, ref, updates } = fakeClient(base, (_n, r) => {
+    const { client, ref, updates } = fakeClient({ ...base, score_breakdown: stored }, (_n, r) => {
+      // Another writer bumps updated_at after every read, so each guarded write misses.
       r.row = { ...r.row, updated_at: `2026-11-28T10:00:0${++stamp}.000001+00:00` };
     });
-    const ok = await new SupabaseProspectingRepository(client).updateStatus("c1", "ready", { breakdownPatch: { [REPLY_CHECKS_KEY]: "{}" } });
-    expect(ok).toBe(true);
-    expect(updates).toHaveLength(MAX_MERGE_ATTEMPTS + 1);
-    expect(updates.slice(0, MAX_MERGE_ATTEMPTS).every((u) => !u.landed)).toBe(true);
-    expect(updates[MAX_MERGE_ATTEMPTS]!.filters.some(([, col]) => col === "updated_at")).toBe(false);
-    expect((ref.row.score_breakdown as Record<string, string>)[REPLY_CHECKS_KEY]).toBe("{}");
+    await expect(
+      new SupabaseProspectingRepository(client).updateStatus("c1", "ready", { postedStyle: null, breakdownPatch: { [REPLY_CHECKS_KEY]: "{}", [REPLY_CHECK_F5_KEY]: "hit" } }),
+    ).rejects.toThrow(ProspectingWriteConflictError);
+    expect(updates).toHaveLength(MAX_MERGE_ATTEMPTS);
+    expect(updates.every((u) => !u.landed && u.filters.some(([, col]) => col === "updated_at"))).toBe(true);
+    expect(ref.row.score_breakdown).toEqual(stored);
+  });
+});
+
+describe("an exhausted merge never loses data at the handler level and triggers no new model call", () => {
+  class ConflictingRepo extends Repo {
+    failOn: ProspectingStatus | null = null;
+    override async updateStatus(id: string, status: ProspectingStatus, fields: Record<string, any> = {}) {
+      if (status === this.failOn) throw new ProspectingWriteConflictError("busy");
+      return super.updateStatus(id, status, fields);
+    }
+  }
+
+  it("a draft whose save keeps conflicting is refused with a retryable message and the row is unchanged", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const repo = new ConflictingRepo();
+    repo.failOn = "ready";
+    repo.seed(row());
+    const drafter = vi.fn(async () => two());
+    await expect(
+      draftProspectingCandidateReply(client, "c1", { repo, drafter, loadGrounding: async () => ({ brandRulesSummary: "r", verifiedKnowledgeSummary: "k" }), cheapRelevanceCheck: async () => true, loadStyleExamples: async () => [], loadRecovery: off, fillbookOptionEnabled: false }),
+    ).rejects.toThrow(/saved at the same moment.*Try drafting again/);
+    expect(drafter).toHaveBeenCalledTimes(1);
+    expect(repo.rows.get("c1")).toMatchObject({ status: "shown", draftReply: null, scoreBreakdown: { freshness: "10" } });
+  });
+
+  it("marking replied that keeps conflicting is refused, counts nothing and keeps the stored keys", async () => {
+    const repo = new ConflictingRepo();
+    repo.failOn = "replied";
+    repo.seed(row({ status: "ready", draftReply: SHARP, replyMentionsFillbook: false, scoreBreakdown: { freshness: "10", [REPLY_CHECKS_KEY]: '{"v":1}' } }));
+    await expect(markProspectingReplied(client, "c1", undefined, undefined, undefined, { repo, loadRecovery: off })).rejects.toThrow(/saved at the same moment/);
+    expect(repo.rows.get("c1")).toMatchObject({ status: "ready", repliedAt: null, scoreBreakdown: { freshness: "10", [REPLY_CHECKS_KEY]: '{"v":1}' } });
+  });
+
+  it("a not_relevant write at draft time that keeps conflicting is skipped: the usual refusal, row unchanged", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const repo = new ConflictingRepo();
+    repo.failOn = "not_relevant";
+    repo.seed(row());
+    await expect(draftProspectingCandidateReply(client, "c1", { repo, drafter: vi.fn(), cheapRelevanceCheck: async () => false, loadRecovery: off })).rejects.toThrow(/Not eligible/);
+    expect(repo.rows.get("c1")!.status).toBe("shown");
   });
 });
 

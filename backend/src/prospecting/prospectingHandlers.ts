@@ -21,7 +21,7 @@ import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SHOWCASE_IDS, SHOWCASE_NONE } from "../content/fillbookShowcase.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
-import { FREE_FILTER_REASON, MAYBE_REASONS, OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, SCREENED_OUT_AT_DRAFT_REASON, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
+import { FREE_FILTER_REASON, MAYBE_REASONS, OWNER_OVERRIDE_AT_KEY, OWNER_OVERRIDE_KEY, OWNER_OVERRIDE_VISIBLE_MS, ProspectingWriteConflictError, SCREENED_OUT_AT_DRAFT_REASON, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
 
 /** Thrown from inside the draft-retry loop when the model says the post is irrelevant, so the loop stops without retrying. */
 class ProspectingIrrelevantSignal extends Error {}
@@ -340,7 +340,7 @@ async function draftCandidateCore(
   if (!ownerOverride && !isReplyWorthyPost(row.postText, gateOpts)) {
     const record = checkLog.build("gate_at_draft");
     logReplyChecks(record, id);
-    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom });
+    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom }).catch(ignoreWriteConflict);
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",
     );
@@ -369,7 +369,7 @@ async function draftCandidateCore(
     // Kept reachable from Maybe: an AI judgement the owner can overrule with Draft anyway.
     const record = checkLog.build("irrelevant_at_draft");
     logReplyChecks(record, id);
-    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom });
+    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom }).catch(ignoreWriteConflict);
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
   }
 
@@ -505,7 +505,7 @@ async function draftCandidateCore(
     if (err instanceof ProspectingIrrelevantSignal) {
       const record = checkLog.build("irrelevant_at_draft");
       logReplyChecks(record, id);
-      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom });
+      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record), onlyFrom: draftFrom }).catch(ignoreWriteConflict);
       throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");
     }
     throw err;
@@ -549,24 +549,34 @@ async function draftCandidateCore(
   const checkRecord = accepted && shownRecord.shownWithSoft ? { ...shownRecord, disposition: "shown_soft_flag" as const } : shownRecord;
   logReplyChecks(checkRecord, id);
   // draftReply is always the first option's text so older app builds (which only know draftReply) keep working.
-  const saved = await repo.updateStatus(id, "ready", {
-    draftReply: options ? options[0]!.text : finalReply,
-    ...(options ? { draftOptions: options } : {}),
-    replyMentionsFillbook: options ? options.some((o) => namesFillbook(o.text)) : namesFillbook(finalReply),
-    replyUsedLink: draft.usesLink,
-    breakdownPatch: {
-      ...replyChecksPatch(checkRecord),
-      ...(ownerOverride ? { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } : {}),
-    },
-    onlyFrom: draftFrom,
-  });
+  const saved = await repo
+    .updateStatus(id, "ready", {
+      draftReply: options ? options[0]!.text : finalReply,
+      ...(options ? { draftOptions: options } : {}),
+      replyMentionsFillbook: options ? options.some((o) => namesFillbook(o.text)) : namesFillbook(finalReply),
+      replyUsedLink: draft.usesLink,
+      breakdownPatch: {
+        ...replyChecksPatch(checkRecord),
+        ...(ownerOverride ? { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } : {}),
+      },
+      onlyFrom: draftFrom,
+    })
+    .catch((err) => {
+      if (!(err instanceof ProspectingWriteConflictError)) throw err;
+      // Nothing was written and nothing is redrafted automatically; handled below exactly like a write that did not land.
+      return false;
+    });
   if (saved === false) {
-    // The row moved on while this draft was being written (replied, skipped, handled, filtered out, expired, or another draft finished
-    // first): keep that change. A card another draft already filled (a double tap) is handed back as it is.
+    // The row moved on while this draft was being written (replied, skipped, handled, filtered out, expired, another draft finished
+    // first, or other writes kept landing at the same moment): keep what is stored. A card another draft already filled (a double tap)
+    // is handed back as it is.
     logReplyChecks({ ...checkRecord, disposition: "discarded_row_changed" }, id);
     const current = await repo.getById(id);
     if (current && current.status === "ready" && current.draftReply) return current;
     // ProspectingActionError (HTTP 404), like the other "Not drafting" refusals, so the app shows this message.
+    if (current && draftFrom.includes(current.status)) {
+      throw new ProspectingActionError("Not drafting -- another change to this post was being saved at the same moment, so the draft was not saved. Try drafting again.");
+    }
     throw new ProspectingActionError(
       `Not drafting -- this post changed while the draft was being written (it is now ${(current?.status ?? "gone").replace("_", " ")}), so the draft was not saved.`,
     );
@@ -659,6 +669,10 @@ export async function markProspectingRepliedOnce(
     // APP-DEFECT-1128: whether F5 had to change the stored flag ("hit"), kept it ("pass"), or had no text to read ("not_run").
     breakdownPatch: { [REPLY_CHECK_F5_KEY]: f5Result(postedText, row.replyMentionsFillbook, postedFlag ?? false) },
     onlyFrom: REPLIABLE_STATUSES,
+  }).catch((err) => {
+    if (!(err instanceof ProspectingWriteConflictError)) throw err;
+    // Nothing was written and nothing counted: the owner can tap Replied again.
+    throw new ProspectingConflictError("Another change to this post was being saved at the same moment, so it was not marked replied. Try again.");
   });
   if (moved === false) {
     // Another tap got there first (or the row changed): report what is stored, count nothing twice.
@@ -708,4 +722,10 @@ export async function markProspectingAlreadyHandled(client: SupabaseClient, id: 
   const row = await repo.getById(id);
   if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
   await repo.updateStatus(id, "already_handled");
+}
+
+/** A not_relevant write at draft time that kept missing a concurrent write is skipped: the row stays as it is, and the next Draft tap runs the checks again. */
+function ignoreWriteConflict(err: unknown): boolean {
+  if (err instanceof ProspectingWriteConflictError) return false;
+  throw err;
 }

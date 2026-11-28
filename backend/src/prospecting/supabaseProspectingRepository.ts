@@ -2,9 +2,9 @@ import type { WatchlistRow } from "./prospectingWatchlist.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFT_OPTIONS_KEY, POSTED_STYLE_KEY, parseDraftOptions, type PostedStyle } from "./prospectingDraftOptions.js";
 import { REPLY_CHECKS_KEY, REPLY_CHECK_F5_KEY } from "./prospectingReplyCheckLog.js";
-import { MAYBE_REASONS, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
+import { MAYBE_REASONS, ProspectingWriteConflictError, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
 
-/** Guarded read-merge-write attempts before a last unguarded write (see updateWithBreakdownMerge). */
+/** Guarded read-merge-write attempts before the write is refused (see updateWithBreakdownMerge). */
 export const MAX_MERGE_ATTEMPTS = 3;
 
 /** The experiment's two fields live inside the existing score_breakdown JSON (no migration); this splits them back out. */
@@ -212,15 +212,15 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
    * Merges into the existing score_breakdown JSON so the scoring keys survive, without losing a key another request wrote between the
    * read and the write (APP-PR364-CONCURRENCY-1128). Optimistic: the UPDATE only lands while updated_at is still the value that was read
    * (every write to this table sets updated_at), and on a miss the row is read again and merged again. No SQL change is needed.
-   * After MAX_MERGE_ATTEMPTS misses it writes without the updated_at guard, as before, so a busy row is never left unwritten.
+   * After MAX_MERGE_ATTEMPTS misses it never writes unguarded (APP-PR364-RACEFIX-1128): it leaves the stored row as it is and throws
+   * ProspectingWriteConflictError, which the handlers turn into a refusal the owner can retry. Nothing is regenerated automatically.
    */
   private async updateWithBreakdownMerge(
     id: string,
     update: Record<string, unknown>,
     fields: { draftOptions?: ProspectingCandidate["draftOptions"]; postedStyle?: PostedStyle | null; breakdownPatch?: Record<string, string>; onlyFrom?: ProspectingStatus[] },
   ): Promise<boolean> {
-    for (let attempt = 1; ; attempt++) {
-      const guarded = attempt <= MAX_MERGE_ATTEMPTS;
+    for (let attempt = 1; attempt <= MAX_MERGE_ATTEMPTS; attempt++) {
       const { data: current, error: readError } = await this.client.from("prospecting_candidates").select("score_breakdown, updated_at, status").eq("id", id).maybeSingle();
       if (readError) throw new Error(`updateStatus breakdown read failed: ${readError.message}`);
       if (!current) return false;
@@ -232,13 +232,13 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
       if (fields.breakdownPatch !== undefined) Object.assign(merged, fields.breakdownPatch);
       let query = this.client.from("prospecting_candidates").update({ ...update, score_breakdown: merged }).eq("id", id);
       if (fields.onlyFrom) query = query.in("status", fields.onlyFrom);
-      if (guarded) query = query.eq("updated_at", current.updated_at);
+      query = query.eq("updated_at", current.updated_at);
       const { data, error } = await query.select("id");
       if (error) throw new Error(`updateStatus failed: ${error.message}`);
       if ((data ?? []).length > 0) return true;
-      if (!guarded) return false;
-      if (attempt === MAX_MERGE_ATTEMPTS) console.warn(`[prospecting] score_breakdown merge for ${id} kept missing a concurrent write; writing without the guard`);
     }
+    console.warn(`[prospecting] score_breakdown merge for ${id} missed a concurrent write ${MAX_MERGE_ATTEMPTS} times; nothing written`);
+    throw new ProspectingWriteConflictError(`score_breakdown merge for ${id} kept missing a concurrent write`);
   }
 
   async hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean> {

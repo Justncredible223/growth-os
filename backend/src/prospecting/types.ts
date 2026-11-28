@@ -117,3 +117,9 @@ export const OWNER_OVERRIDE_KEY = "owner_override";
 export const OWNER_OVERRIDE_AT_KEY = "owner_override_at";
 /** An owner-chosen card stays in the queue this long regardless of the freshness window and score floor. */
 export const OWNER_OVERRIDE_VISIBLE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A score_breakdown merge kept missing a concurrent write and was refused rather than written unguarded (APP-PR364-RACEFIX-1128).
+ * The stored row is unchanged; the action can simply be retried.
+ */
+export class ProspectingWriteConflictError extends Error {}
