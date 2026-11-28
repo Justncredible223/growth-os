@@ -1,6 +1,7 @@
 import type { WatchlistRow } from "./prospectingWatchlist.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DRAFT_OPTIONS_KEY, POSTED_STYLE_KEY, parseDraftOptions, type PostedStyle } from "./prospectingDraftOptions.js";
+import { REPLY_CHECKS_KEY, REPLY_CHECK_F5_KEY } from "./prospectingReplyCheckLog.js";
 import { MAYBE_REASONS, type NewProspectingCandidate, type ProspectingCandidate, type ProspectingRepository, type ProspectingStatus } from "./types.js";
 
 /** The experiment's two fields live inside the existing score_breakdown JSON (no migration); this splits them back out. */
@@ -10,6 +11,9 @@ function splitBreakdown(raw: unknown): { scoreBreakdown: Record<string, string>;
   const posted = all[POSTED_STYLE_KEY];
   delete all[DRAFT_OPTIONS_KEY];
   delete all[POSTED_STYLE_KEY];
+  // Reply-check outcomes (APP-DEFECT-1128) are for read-only queries, not the app: kept in the row, left out of the API object.
+  delete all[REPLY_CHECKS_KEY];
+  delete all[REPLY_CHECK_F5_KEY];
   const postedStyle = posted === "sharp" || posted === "helpful" || posted === "edited" || posted === "legacy" ? posted : null;
   return { scoreBreakdown: all as Record<string, string>, draftOptions, postedStyle };
 }

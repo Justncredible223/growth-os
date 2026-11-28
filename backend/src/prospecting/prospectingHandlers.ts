@@ -14,6 +14,7 @@ import { paragraphizeReply } from "../content/replySpacing.js";
 import { isReplyWorthyPost, isTooSmallToBeWorthIt } from "./prospectingRelevance.js";
 import { logLensProblem, unsupportedFactProblem } from "./prospectingReplyChecks.js";
 import { LOG_LENS_RECENT_WINDOW } from "./prospectingReplyChecks.js";
+import { REPLY_CHECK_F5_KEY, ReplyCheckLog, f5Result, logReplyChecks, postCheckResults, replyChecksPatch, type CheckResult, type OptionCheck } from "./prospectingReplyCheckLog.js";
 import { isSeedCreator } from "./prospectingWatchlist.js";
 import { matchPostedStyle, optionSoftProblem, postMentionsFillbook, type DraftOption } from "./prospectingDraftOptions.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
@@ -329,8 +330,14 @@ async function draftCandidateCore(
     throw new ProspectingActionError(`Not drafting -- this candidate is already ${row.status.replace("_", " ")}.`);
   }
 
-  if (!ownerOverride && !isReplyWorthyPost(row.postText, { trustedAuthor: isSeedCreator(row.authorHandle), authorHandle: row.authorHandle, authorName: row.authorName })) {
-    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON });
+  const gateOpts = { trustedAuthor: isSeedCreator(row.authorHandle), authorHandle: row.authorHandle, authorName: row.authorName };
+  // APP-DEFECT-1128: F1 to F5 outcomes are recorded (codes only) so the reply checks can be measured.
+  const postChecks = postCheckResults(row.postText, gateOpts, ownerOverride);
+  const checkLog = new ReplyCheckLog(ownerOverride, postChecks.f3, postChecks.f4, postChecks.gateReason);
+  if (!ownerOverride && !isReplyWorthyPost(row.postText, gateOpts)) {
+    const record = checkLog.build("gate_at_draft");
+    logReplyChecks(record, id);
+    await repo.updateStatus(id, "not_relevant", { skipReason: FREE_FILTER_REASON, breakdownPatch: replyChecksPatch(record) });
     throw new ProspectingActionError(
       "Not eligible for drafting -- this post isn't about futures trading, prop-firm trading or trading discipline, or it's a newsletter/article rather than a conversation.",
     );
@@ -357,7 +364,9 @@ async function draftCandidateCore(
   // P2 2026-11-15: a watchlist creator gets the same checks as everyone else (trustedCreator no longer skips them).
   if (!ownerOverride && !(await cheapRelevanceCheck(draftContext))) {
     // Kept reachable from Maybe: an AI judgement the owner can overrule with Draft anyway.
-    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON });
+    const record = checkLog.build("irrelevant_at_draft");
+    logReplyChecks(record, id);
+    await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record) });
     throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
   }
 
@@ -409,29 +418,57 @@ async function draftCandidateCore(
       // but in a fundamentally different, still-irrelevant context). Same
       // terminal status and no persisted draft as the earlier gates.
       if (!ownerOverride && !candidate.isRelevant) {
+        checkLog.addAttempt(candidate, false, []);
         throw new ProspectingIrrelevantSignal();
       }
+      // Same checks in the same order as before; each step is kept apart only so F1 and F2 can be recorded as pass, hit or not run.
+      const factCheck = (text: string, guardReason: string | null): { reason: string | null; result: CheckResult } => {
+        if (guardReason) return { reason: null, result: "not_run" };
+        const reason = unsupportedFactProblem(text, row.postText);
+        return { reason, result: reason ? "hit" : "pass" };
+      };
       if (candidate.helpfulReply !== undefined) {
         const options: DraftOption[] = [
           { style: "sharp", text: candidate.reply },
           { style: "helpful", text: candidate.helpfulReply },
         ];
-        const hardFor = (option: DraftOption): string | null =>
-          checkReplyGuardrails(option.text, false)?.reason ??
-          unsupportedFactProblem(option.text, row.postText) ??
-          replyTagProblem(option.text, allowedTags) ??
-          (candidate.usesLink ? "declares a link; cold replies never include one" : null) ??
-          (mustOmitFillbook && namesFillbook(option.text)
-            ? recovery.active
-              ? "names Fillbook while recovery mode is on -- leave the product out entirely"
-              : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
-            : null) ??
-          (!postInvitesFillbook && namesFillbook(option.text) ? "names Fillbook in a cold reply -- the post did not ask about it, so leave the product out" : null);
-        const verdicts = options.map((o) => ({
-          option: o,
-          hard: hardFor(o),
-          soft: optionSoftProblem(o.style, o.text) ?? (o.style === "helpful" ? logLensProblem(o.text, recentReplyTexts) : null),
-        }));
+        const hardFor = (option: DraftOption): { reason: string | null; f2: CheckResult } => {
+          const guard = checkReplyGuardrails(option.text, false)?.reason ?? null;
+          const fact = factCheck(option.text, guard);
+          const reason =
+            guard ??
+            fact.reason ??
+            replyTagProblem(option.text, allowedTags) ??
+            (candidate.usesLink ? "declares a link; cold replies never include one" : null) ??
+            (mustOmitFillbook && namesFillbook(option.text)
+              ? recovery.active
+                ? "names Fillbook while recovery mode is on -- leave the product out entirely"
+                : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
+              : null) ??
+            (!postInvitesFillbook && namesFillbook(option.text) ? "names Fillbook in a cold reply -- the post did not ask about it, so leave the product out" : null);
+          return { reason, f2: fact.result };
+        };
+        const softFor = (option: DraftOption): { reason: string | null; f1: CheckResult; otherSoft: boolean } => {
+          const other = optionSoftProblem(option.style, option.text);
+          if (other || option.style !== "helpful") return { reason: other, f1: "not_run", otherSoft: other !== null };
+          const lens = logLensProblem(option.text, recentReplyTexts);
+          return { reason: lens, f1: lens ? "hit" : "pass", otherSoft: false };
+        };
+        const checked = options.map((o) => ({ option: o, hardCheck: hardFor(o), softCheck: softFor(o) }));
+        checkLog.addAttempt(
+          candidate,
+          true,
+          checked.map(
+            (c): OptionCheck => ({
+              style: c.option.style === "sharp" ? "sharp" : "helpful",
+              f1: c.softCheck.f1,
+              f2: c.hardCheck.f2,
+              otherHard: c.hardCheck.reason !== null && c.hardCheck.f2 !== "hit",
+              otherSoft: c.softCheck.otherSoft,
+            }),
+          ),
+        );
+        const verdicts = checked.map((c) => ({ option: c.option, hard: c.hardCheck.reason, soft: c.softCheck.reason }));
         const label = (o: DraftOption) => (o.style === "sharp" ? "The sharp option" : "The helpful option");
         const badHard = verdicts.find((v) => v.hard);
         if (badHard) {
@@ -446,27 +483,33 @@ async function draftCandidateCore(
       // unexplained link, and unverified performance/customer claims
       // regardless of what the model's own mentionsFillbook/usesLink flags
       // say. A hard violation is never persisted or shown to the owner.
-      return {
-        hard:
-          checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ??
-          unsupportedFactProblem(candidate.reply, row.postText) ??
-          replyTagProblem(candidate.reply, allowedTags) ??
-          (mustOmitFillbook && namesFillbook(candidate.reply)
-            ? recovery.active
-              ? "names Fillbook while recovery mode is on -- leave the product out entirely"
-              : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
-            : null),
-        soft: (checkReplySoftStyle(candidate.reply) ?? checkShowcaseShown(candidate.reply, candidate.showcase))?.reason ?? null,
-      };
+      const guard = checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ?? null;
+      const fact = factCheck(candidate.reply, guard);
+      const hard =
+        guard ??
+        fact.reason ??
+        replyTagProblem(candidate.reply, allowedTags) ??
+        (mustOmitFillbook && namesFillbook(candidate.reply)
+          ? recovery.active
+            ? "names Fillbook while recovery mode is on -- leave the product out entirely"
+            : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
+          : null);
+      const soft = (checkReplySoftStyle(candidate.reply) ?? checkShowcaseShown(candidate.reply, candidate.showcase))?.reason ?? null;
+      checkLog.addAttempt(candidate, true, [{ style: "single", f1: "not_run", f2: fact.result, otherHard: hard !== null && fact.result !== "hit", otherSoft: soft !== null }]);
+      return { hard, soft };
     },
   }).catch(async (err) => {
     if (err instanceof ProspectingIrrelevantSignal) {
-      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON });
+      const record = checkLog.build("irrelevant_at_draft");
+      logReplyChecks(record, id);
+      await repo.updateStatus(id, "not_relevant", { skipReason: SCREENED_OUT_AT_DRAFT_REASON, breakdownPatch: replyChecksPatch(record) });
       throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");
     }
     throw err;
   });
   if (!accepted && !bestPartial) {
+    // Logged only: a rejected draft leaves the row untouched (draftScreenedOutPost promises the Maybe row is not changed on failure).
+    logReplyChecks(checkLog.build("rejected_hard"), id);
     throw new ProspectingActionError(`Draft rejected -- ${hardReason}. Try drafting again.`);
   }
   const draft = accepted ?? bestPartial!.candidate;
@@ -497,13 +540,22 @@ async function draftCandidateCore(
       : draft.reply,
   );
 
+  const shownRecord = accepted
+    ? checkLog.build("shown_clean", accepted)
+    : checkLog.build("shown_one_option", bestPartial!.candidate, [bestPartial!.option.style === "sharp" ? "sharp" : "helpful"]);
+  const checkRecord = accepted && shownRecord.shownWithSoft ? { ...shownRecord, disposition: "shown_soft_flag" as const } : shownRecord;
+  logReplyChecks(checkRecord, id);
+
   // draftReply is always the first option's text so older app builds (which only know draftReply) keep working.
   await repo.updateStatus(id, "ready", {
     draftReply: options ? options[0]!.text : finalReply,
     ...(options ? { draftOptions: options } : {}),
     replyMentionsFillbook: options ? options.some((o) => namesFillbook(o.text)) : namesFillbook(finalReply),
     replyUsedLink: draft.usesLink,
-    ...(ownerOverride ? { breakdownPatch: { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } } : {}),
+    breakdownPatch: {
+      ...replyChecksPatch(checkRecord),
+      ...(ownerOverride ? { [OWNER_OVERRIDE_KEY]: "true", [OWNER_OVERRIDE_AT_KEY]: new Date().toISOString() } : {}),
+    },
   });
 
   const updated = await repo.getById(id);
@@ -581,13 +633,16 @@ export async function markProspectingRepliedOnce(
   const now = nowDate.toISOString();
   // Record which style was actually posted: no finalReply means the app posted the draft as it was (the first option).
   const postedText = finalReply && finalReply.trim() ? finalReply : row.draftReply;
+  const postedFlag = postedText ? namesFillbook(postedText) : null;
   const moved = await repo.updateStatus(id, "replied", {
     repliedAt: now,
     postedStyle: matchPostedStyle(postedText, row.draftOptions, row.draftReply),
     finalReply: finalReply && finalReply !== row.draftReply ? finalReply : undefined,
     // F5 (2026-11-21 audit): the flag follows the text that was actually posted, after any edit, never a stale or model-set flag.
-    replyMentionsFillbook: postedText ? namesFillbook(postedText) : (mentionsFillbook ?? row.replyMentionsFillbook ?? undefined),
+    replyMentionsFillbook: postedFlag ?? (mentionsFillbook ?? row.replyMentionsFillbook ?? undefined),
     replyUsedLink: usedLink ?? row.replyUsedLink ?? undefined,
+    // APP-DEFECT-1128: whether F5 had to change the stored flag ("hit"), kept it ("pass"), or had no text to read ("not_run").
+    breakdownPatch: { [REPLY_CHECK_F5_KEY]: f5Result(postedText, row.replyMentionsFillbook, postedFlag ?? false) },
     onlyFrom: REPLIABLE_STATUSES,
   });
   if (moved === false) {
